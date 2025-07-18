@@ -29,20 +29,46 @@ def load_config(config_path: Path | None) -> tuple[list[str], list[str]]:
             
     return ignore_patterns, include_patterns
 
-def read_file_content(file_path: Path) -> str | None:
-    """Reads a file's content, trying UTF-8 then latin-1 encoding."""
+def is_binary(file_path: Path) -> bool:
+    """
+    Checks if a file is likely binary by reading a chunk and looking for null bytes.
+    This is a common and effective heuristic.
+    """
     try:
-        # Avoid reading very large files
+        with file_path.open('rb') as f:
+            chunk = f.read(1024)  # Read the first 1KB
+        return b'\x00' in chunk
+    except IOError:
+        return True # If we can't read it, treat it as problematic
+
+def read_file_content(file_path: Path) -> str | None:
+    """
+    Reads a file's content, skipping binary files and large files.
+    Tries UTF-8 then latin-1 encoding for text files.
+    """
+    try:
+        # 1. Check for large files first
         if file_path.stat().st_size > 5 * 1024 * 1024: # 5 MB limit
             print(f"[SKIP] {file_path.as_posix()} (file too large)", file=sys.stderr)
             return None
+            
+        # 2. Check for binary files using the null-byte heuristic
+        if is_binary(file_path):
+            print(f"[SKIP] {file_path.as_posix()} (likely binary)", file=sys.stderr)
+            return None
+
+        # 3. If it seems like a text file, read it
         return file_path.read_text(encoding="utf-8")
-    except (IOError, UnicodeDecodeError):
+    except UnicodeDecodeError:
         try:
+            # Fallback for other text encodings that are not UTF-8
             return file_path.read_text(encoding="latin-1")
         except (IOError, UnicodeDecodeError) as e:
             print(f"Error: Could not read file {file_path}: {e}. Skipping.", file=sys.stderr)
             return None
+    except IOError as e:
+        print(f"Error: Could not read file {file_path}: {e}. Skipping.", file=sys.stderr)
+        return None
 
 def write_pm_format(output_stream, relative_path: Path, content: str):
     """Writes a single file's data in the Plus/Minus format."""
@@ -85,9 +111,9 @@ def serialize(
                     if not any(fnmatch(relative_path.as_posix(), pattern) for pattern in include_patterns):
                         continue # Skip if not in the explicit include list
                 
-                print(f"[KEEP] {relative_path.as_posix()}", file=sys.stderr)
                 content = read_file_content(item)
                 if content is not None:
+                    print(f"[KEEP] {relative_path.as_posix()}", file=sys.stderr)
                     write_pm_format(output_stream, relative_path, content)
 
     walk(project_root)

@@ -8,11 +8,12 @@ The script uses a custom "Plus/Minus" format that is both human-readable and eas
 
 - **Plus/Minus Format**: A clean, readable format that wraps each file's content with clear start and end markers.
 - **Data Integrity**: The closing marker for each file includes an MD5 checksum to verify content integrity.
+- **Binary File Detection**: Automatically detects and skips binary files (e.g., images, executables, archives) to keep the output clean and text-focused.
 - **Configuration File**: Uses a `.pm_encoder_config.json` file to define default include and exclude patterns.
 - **CLI Overrides**: Command-line flags (`--include`, `--exclude`) allow for flexible, on-the-fly filtering that can override or extend the configuration file settings.
 - **Robust Filtering**: Uses glob patterns for powerful matching of files and directories.
 - **Directory Pruning**: Efficiently skips entire directories (like `target/` or `node_modules/`) that match ignore patterns.
-- **Safe & Efficient**: Skips binary files and very large files to keep the output manageable and text-focused.
+- **Large File Skipping**: Avoids including files over a certain size (default: 5MB) to keep the output manageable.
 - **Standard I/O**: Writes to standard output by default, allowing it to be piped to other commands (e.g., clipboards).
 
 ## The Plus/Minus Format
@@ -162,3 +163,4 @@ You can control the default behavior of the script by placing a `.pm_encoder_con
     "LICENSE"
   ]
 }
+```
