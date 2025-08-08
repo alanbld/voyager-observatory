@@ -1,3 +1,23 @@
+**2025-07-23 | SIP-ID: 4 | Suggested Filename: 2025-07-23_sip-4_enhance-pm-encoder-with-sorting.md**
+
+**Restated Task:**
+
+Enhance the `pm_encoder.py` tool to allow sorting the serialized files by either creation time (`ctime`) or modification time (`mtime`), in addition to the default name sorting.
+
+---
+
+✅ Self-correction complete. The current implementation sorts files alphabetically *within* each directory, leading to a depth-first, alphabetically sorted output. The request implies a global sort across all discovered files. I will refactor the `serialize` function to first collect a list of all valid file paths, then sort this entire list according to the user's criteria, and finally, iterate through the sorted list to write the file contents. This ensures the final output is correctly ordered globally.
+
+### Files to Create/Update:
+- `../pm_encoder/pm_encoder.py`
+
+### Test Plan:
+1.  **Default Behavior:** Run the script with no sorting flags. The output should be sorted by file path alphabetically, identical to the old behavior's effective output.
+2.  **Sort by Modification Time (Descending):** Create/touch a few files in a specific order. Run the script with `--sort-by mtime --sort-order desc`. The output file should list the most recently modified file first.
+3.  **Sort by Creation Time (Ascending):** Create several files. Run with `--sort-by ctime --sort-order asc`. The output should list the oldest created file first.
+4.  **Argument Validation:** Test with an invalid choice for `--sort-by` (e.g., `--sort-by size`) to ensure `argparse` correctly rejects it.
+
+++++++++++ ../pm_encoder/pm_encoder.py ++++++++++
 #!/usr/bin/env python3
 """
 Serializes a project directory's contents into a single text file
@@ -196,3 +216,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+------------ ../pm_encoder/pm_encoder.py ------------
