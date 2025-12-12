@@ -39,6 +39,17 @@ class LanguageAnalyzer:
             dict with keys: language, classes, functions, imports, entry_points,
             config_keys, documentation, markers, category, critical_sections
         """
+        lines = content.split('\n')
+        return self.analyze_lines(lines, file_path)
+
+    def analyze_lines(self, lines: List[str], file_path: Path) -> Dict[str, Any]:
+        """
+        Analyze pre-split lines (performance optimization).
+
+        Returns:
+            dict with keys: language, classes, functions, imports, entry_points,
+            config_keys, documentation, markers, category, critical_sections
+        """
         return {
             "language": self.LANGUAGE_NAME,
             "classes": [],
@@ -63,9 +74,9 @@ class LanguageAnalyzer:
         total_lines = len(lines)
 
         if total_lines <= max_lines:
-            return [(1, total_lines)], self.analyze(content, None)
+            return [(1, total_lines)], self.analyze_lines(lines, None)
 
-        analysis = self.analyze(content, None)
+        analysis = self.analyze_lines(lines, None)
 
         # Default strategy: keep first 40% and last 10%
         keep_first = int(max_lines * 0.4)
@@ -85,9 +96,8 @@ class PythonAnalyzer(LanguageAnalyzer):
     SUPPORTED_EXTENSIONS = ['.py', '.pyw']
     LANGUAGE_NAME = "Python"
 
-    def analyze(self, content: str, file_path: Path) -> Dict[str, Any]:
-        lines = content.split('\n')
-
+    def analyze_lines(self, lines: List[str], file_path: Path) -> Dict[str, Any]:
+        """Analyze pre-split lines (performance optimization)."""
         classes = []
         functions = []
         imports = []
@@ -99,6 +109,10 @@ class PythonAnalyzer(LanguageAnalyzer):
         func_pattern = re.compile(r'^\s*def\s+(\w+)')
         import_pattern = re.compile(r'^\s*(?:from\s+(\S+)\s+)?import\s+(.+)')
         marker_pattern = re.compile(r'#\s*(TODO|FIXME|XXX|HACK|NOTE):?\s*(.+)', re.IGNORECASE)
+
+        # Check for docstrings by joining lines
+        content = '\n'.join(lines)
+        has_docstrings = '"""' in content or "'''" in content
 
         for i, line in enumerate(lines, 1):
             # Classes
@@ -138,7 +152,7 @@ class PythonAnalyzer(LanguageAnalyzer):
             "imports": list(set([imp.split()[1] for imp in imports[:10]])),  # Unique, first 10
             "entry_points": [ep[0] for ep in entry_points],
             "config_keys": [],
-            "documentation": ["docstrings"] if '"""' in content or "'''" in content else [],
+            "documentation": ["docstrings"] if has_docstrings else [],
             "markers": [f"{m[0]} (line {m[2]})" for m in markers[:5]],
             "category": category,
             "critical_sections": [(ep[1], ep[1] + 20) for ep in entry_points]
@@ -149,9 +163,9 @@ class PythonAnalyzer(LanguageAnalyzer):
         total_lines = len(lines)
 
         if total_lines <= max_lines:
-            return [(1, total_lines)], self.analyze(content, None)
+            return [(1, total_lines)], self.analyze_lines(lines, None)
 
-        analysis = self.analyze(content, None)
+        analysis = self.analyze_lines(lines, None)
 
         # Python-specific strategy: preserve imports, class/function signatures, entry points
         keep_first = int(max_lines * 0.5)  # More for imports and setup
@@ -178,9 +192,8 @@ class JavaScriptAnalyzer(LanguageAnalyzer):
     SUPPORTED_EXTENSIONS = ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs']
     LANGUAGE_NAME = "JavaScript/TypeScript"
 
-    def analyze(self, content: str, file_path: Path) -> Dict[str, Any]:
-        lines = content.split('\n')
-
+    def analyze_lines(self, lines: List[str], file_path: Path) -> Dict[str, Any]:
+        """Analyze pre-split lines (performance optimization)."""
         classes = []
         functions = []
         imports = []
@@ -192,6 +205,11 @@ class JavaScriptAnalyzer(LanguageAnalyzer):
         arrow_func_pattern = re.compile(r'^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>')
         import_pattern = re.compile(r'^\s*import\s+.*?from\s+[\'"]([^\'"]+)[\'"]')
         export_pattern = re.compile(r'^\s*export\s+(?:default\s+)?(.+)')
+
+        # Check for JSDoc and export default
+        content = '\n'.join(lines)
+        has_jsdoc = '/**' in content
+        has_export_default = 'export default' in content
 
         for line in lines:
             if match := class_pattern.match(line):
@@ -211,7 +229,7 @@ class JavaScriptAnalyzer(LanguageAnalyzer):
         category = "library"
         if file_path and ('test' in str(file_path).lower() or 'spec' in str(file_path).lower()):
             category = "test"
-        elif exports or 'export default' in content:
+        elif exports or has_export_default:
             category = "module"
 
         return {
@@ -221,7 +239,7 @@ class JavaScriptAnalyzer(LanguageAnalyzer):
             "imports": imports[:10],
             "entry_points": exports[:5],
             "config_keys": [],
-            "documentation": ["JSDoc"] if '/**' in content else [],
+            "documentation": ["JSDoc"] if has_jsdoc else [],
             "markers": [],
             "category": category,
             "critical_sections": []
@@ -232,9 +250,9 @@ class JavaScriptAnalyzer(LanguageAnalyzer):
         total_lines = len(lines)
 
         if total_lines <= max_lines:
-            return [(1, total_lines)], self.analyze(content, None)
+            return [(1, total_lines)], self.analyze_lines(lines, None)
 
-        analysis = self.analyze(content, None)
+        analysis = self.analyze_lines(lines, None)
 
         # Keep imports at top and exports at bottom
         keep_first = int(max_lines * 0.45)
@@ -254,9 +272,8 @@ class ShellAnalyzer(LanguageAnalyzer):
     SUPPORTED_EXTENSIONS = ['.sh', '.bash', '.zsh', '.fish']
     LANGUAGE_NAME = "Shell"
 
-    def analyze(self, content: str, file_path: Path) -> Dict[str, Any]:
-        lines = content.split('\n')
-
+    def analyze_lines(self, lines: List[str], file_path: Path) -> Dict[str, Any]:
+        """Analyze pre-split lines (performance optimization)."""
         functions = []
         sourced = []
         shebang = None
@@ -294,9 +311,8 @@ class MarkdownAnalyzer(LanguageAnalyzer):
     SUPPORTED_EXTENSIONS = ['.md', '.markdown']
     LANGUAGE_NAME = "Markdown"
 
-    def analyze(self, content: str, file_path: Path) -> Dict[str, Any]:
-        lines = content.split('\n')
-
+    def analyze_lines(self, lines: List[str], file_path: Path) -> Dict[str, Any]:
+        """Analyze pre-split lines (performance optimization)."""
         headers = []
         code_blocks = []
         links = []
@@ -340,9 +356,9 @@ class MarkdownAnalyzer(LanguageAnalyzer):
         total_lines = len(lines)
 
         if total_lines <= max_lines:
-            return [(1, total_lines)], self.analyze(content, None)
+            return [(1, total_lines)], self.analyze_lines(lines, None)
 
-        analysis = self.analyze(content, None)
+        analysis = self.analyze_lines(lines, None)
 
         # Markdown: keep all headers and first paragraph of each section
         ranges = []
@@ -368,28 +384,35 @@ class JSONAnalyzer(LanguageAnalyzer):
     SUPPORTED_EXTENSIONS = ['.json']
     LANGUAGE_NAME = "JSON"
 
-    def analyze(self, content: str, file_path: Path) -> Dict[str, Any]:
+    def analyze_lines(self, lines: List[str], file_path: Path) -> Dict[str, Any]:
+        """Analyze pre-split lines (performance optimization)."""
+        content = '\n'.join(lines)
+
         try:
             data = json.loads(content)
 
             def count_keys(obj, depth=0, max_depth=0):
-                if isinstance(obj, dict):
-                    count = len(obj)
-                    max_d = depth
-                    for v in obj.values():
-                        nested_count, nested_depth = count_keys(v, depth + 1, max_depth)
-                        count += nested_count
-                        max_d = max(max_d, nested_depth)
-                    return count, max_d
-                elif isinstance(obj, list):
-                    count = 0
-                    max_d = depth
-                    for item in obj:
-                        nested_count, nested_depth = count_keys(item, depth, max_depth)
-                        count += nested_count
-                        max_d = max(max_d, nested_depth)
-                    return count, max_d
-                return 0, depth
+                try:
+                    if isinstance(obj, dict):
+                        count = len(obj)
+                        max_d = depth
+                        for v in obj.values():
+                            nested_count, nested_depth = count_keys(v, depth + 1, max_depth)
+                            count += nested_count
+                            max_d = max(max_d, nested_depth)
+                        return count, max_d
+                    elif isinstance(obj, list):
+                        count = 0
+                        max_d = depth
+                        for item in obj:
+                            nested_count, nested_depth = count_keys(item, depth, max_depth)
+                            count += nested_count
+                            max_d = max(max_d, nested_depth)
+                        return count, max_d
+                    return 0, depth
+                except RecursionError:
+                    # Handle deeply nested JSON structures
+                    return 0, depth
 
             total_keys, max_depth = count_keys(data)
             top_keys = list(data.keys())[:20] if isinstance(data, dict) else []
@@ -411,17 +434,17 @@ class JSONAnalyzer(LanguageAnalyzer):
                     "is_array": isinstance(data, list)
                 }
             }
-        except json.JSONDecodeError:
-            return super().analyze(content, file_path)
+        except (json.JSONDecodeError, RecursionError):
+            return super().analyze_lines(lines, file_path)
 
     def get_truncate_ranges(self, content: str, max_lines: int) -> Tuple[List[Tuple[int, int]], Dict[str, Any]]:
         lines = content.split('\n')
         total_lines = len(lines)
 
         if total_lines <= max_lines:
-            return [(1, total_lines)], self.analyze(content, None)
+            return [(1, total_lines)], self.analyze_lines(lines, None)
 
-        analysis = self.analyze(content, None)
+        analysis = self.analyze_lines(lines, None)
 
         # JSON: show structure by keeping top-level and sampling nested
         # Keep first 60% and last 10% to preserve structure
@@ -442,9 +465,8 @@ class YAMLAnalyzer(LanguageAnalyzer):
     SUPPORTED_EXTENSIONS = ['.yaml', '.yml']
     LANGUAGE_NAME = "YAML"
 
-    def analyze(self, content: str, file_path: Path) -> Dict[str, Any]:
-        lines = content.split('\n')
-
+    def analyze_lines(self, lines: List[str], file_path: Path) -> Dict[str, Any]:
+        """Analyze pre-split lines (performance optimization)."""
         keys = []
         key_pattern = re.compile(r'^(\s*)([a-zA-Z_][\w-]*):')
 
