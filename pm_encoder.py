@@ -5,7 +5,7 @@ using the Plus/Minus format, with robust directory pruning,
 filtering, and sorting capabilities.
 """
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 __author__ = "pm_encoder contributors"
 __license__ = "MIT"
 
@@ -901,6 +901,7 @@ class LensManager:
         "architecture": {
             "description": "High-level structure, interfaces, configuration",
             "truncate_mode": "structure",
+            "truncate": 2000,  # Safety limit for non-code files
             "exclude": ["tests/**", "test/**", "docs/**", "doc/**", "assets/**", "*.log", "__pycache__"],
             "include": ["*.py", "*.js", "*.ts", "*.jsx", "*.tsx", "*.json", "*.toml", "*.yaml", "*.yml", "Dockerfile", "*.md"],
             "sort_by": "name",
@@ -959,8 +960,19 @@ class LensManager:
 
         # Merge lens config over base config
         merged = base_config.copy()
+
+        # Map lens keys to expected keys and merge
         for key, value in lens_def.items():
-            if key != "description":
+            if key == "description":
+                continue
+            elif key == "include":
+                # Lens "include" overrides base "include_patterns"
+                merged["include_patterns"] = value
+            elif key == "exclude":
+                # Lens "exclude" extends base "ignore_patterns"
+                merged["ignore_patterns"] = list(set(merged.get("ignore_patterns", []) + value))
+            else:
+                # Direct mapping for other keys (truncate, truncate_mode, sort_by, etc.)
                 merged[key] = value
 
         return merged
@@ -1216,8 +1228,8 @@ def serialize(
             was_truncated = False
             analysis = {}
 
-            # Apply truncation if enabled
-            if truncate_lines > 0:
+            # Apply truncation if enabled (numeric limit OR structure mode)
+            if truncate_lines > 0 or truncate_mode == 'structure':
                 # Check if file should be excluded from truncation
                 should_truncate = not any(
                     fnmatch(relative_path.as_posix(), pattern)

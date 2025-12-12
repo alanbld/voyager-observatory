@@ -5,6 +5,38 @@ All notable changes to pm_encoder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2025-12-12
+
+### Fixed - Critical Logic Bugs
+- **Structure mode triggering**: Fixed bug where structure mode wouldn't trigger unless `--truncate N` was specified
+  - Changed condition from `if truncate_lines > 0:` to `if truncate_lines > 0 or truncate_mode == 'structure':`
+  - Now `--truncate-mode structure` works correctly without requiring numeric line limit
+  - **Impact**: Users can now use `--lens architecture` or `--truncate-mode structure` without setting `--truncate`
+- **Lens precedence mapping**: Fixed bug in `apply_lens()` where lens "include"/"exclude" keys weren't properly mapped to "include_patterns"/"ignore_patterns"
+  - Lens "include" now correctly overrides base "include_patterns"
+  - Lens "exclude" now correctly extends base "ignore_patterns"
+  - **Impact**: Custom and built-in lenses now work as documented
+
+### Added - Comprehensive Test Suite
+- **tests/test_pm_encoder.py**: 9 comprehensive tests using standard library only (unittest, tempfile, shutil)
+  - `test_structure_mode_trigger`: Verifies structure mode works with truncate=0 (the bug fix)
+  - `test_lens_precedence`: Verifies layered precedence (CLI > Lens > Config > Defaults)
+  - `test_python_structure`: Verifies Python signature extraction (keeps signatures, removes bodies)
+  - `test_js_structure`: Verifies JavaScript structure extraction
+  - `test_json_fallback`: Verifies JSON files fall back to smart mode (no structure support)
+  - `test_meta_injection`: Verifies .pm_encoder_meta file is injected when using lenses
+  - `test_ignore_patterns`: Verifies .git and __pycache__ are properly ignored
+  - `test_all_lenses_exist`: Verifies all 4 built-in lenses exist
+  - `test_architecture_lens_has_safety_limit`: Verifies architecture lens has truncate: 2000 safety limit
+- **Test Results**: ✅ 9/9 tests passing, 0 failures, 0 errors
+
+### Changed
+- **architecture lens**: Added `truncate: 2000` safety limit for non-code files
+- **Version bumped** to 1.2.1
+
+### Why This Release Matters
+v1.2.1 fixes critical bugs that prevented structure mode from working as designed in v1.2.0. The comprehensive test suite ensures these bugs won't regress and validates all core functionality. This is a **recommended upgrade** for all v1.2.0 users.
+
 ## [1.2.0] - 2025-12-12
 
 ### Added - Context Lenses System
