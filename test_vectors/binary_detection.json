@@ -1,0 +1,35 @@
+{
+  "name": "binary_detection",
+  "description": "Mixed binary and text files - validates binary file skipping",
+  "version": "0.2.0",
+  "input": {
+    "files": {
+      "image.bin": "[BINARY: \\x00\\x01\\x02\\x03\\xff\\xfe\\xfd\\xfc\\x00\\x00]",
+      "readme.txt": "This is a regular text file.\nNo null bytes here!\n"
+    },
+    "config": {}
+  },
+  "expected": {
+    "format": "plus_minus",
+    "files_included": [
+      "readme.txt"
+    ],
+    "files_skipped": [
+      "image.bin"
+    ],
+    "contains": [
+      "++++++++++ readme.txt ++++++++++",
+      "This is a regular text file.",
+      "---------- readme.txt 7dd636889b159038c70d351862867d25 readme.txt ----------"
+    ],
+    "not_contains": [
+      "image.bin"
+    ],
+    "full_output": "++++++++++ readme.txt ++++++++++\nThis is a regular text file.\nNo null bytes here!\n---------- readme.txt 7dd636889b159038c70d351862867d25 readme.txt ----------\n"
+  },
+  "metadata": {
+    "created_by": "generate_vectors.py",
+    "python_version": "1.3.1",
+    "purpose": "Rust v0.2.0 binary detection validation"
+  }
+}

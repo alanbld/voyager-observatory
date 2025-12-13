@@ -1,22 +1,32 @@
 {
-  "name": "basic_file_serialization",
-  "description": "Single file with simple content",
-  "version": "1.0",
+  "name": "basic_serialization",
+  "description": "Single Rust file with complete content - validates Plus/Minus format and MD5 checksum",
+  "version": "0.2.0",
   "input": {
     "files": {
-      "README.md": "# Hello\n\nThis is a test.\n"
+      "sample.rs": "// Sample Rust file for testing serialization\nuse std::collections::HashMap;\n\n/// A simple example struct\npub struct Config {\n    pub name: String,\n    pub values: HashMap<String, i32>,\n}\n\nimpl Config {\n    /// Creates a new Config instance\n    pub fn new(name: &str) -> Self {\n        Config {\n            name: name.to_string(),\n            values: HashMap::new(),\n        }\n    }\n\n    /// Adds a value to the config\n    pub fn add_value(&mut self, key: String, value: i32) {\n        self.values.insert(key, value);\n    }\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn test_config_creation() {\n        let config = Config::new(\"test\");\n        assert_eq!(config.name, \"test\");\n        assert_eq!(config.values.len(), 0);\n    }\n}\n"
     },
-    "config": {}
+    "config": {
+      "sort_by": "name",
+      "sort_order": "asc"
+    }
   },
   "expected": {
     "format": "plus_minus",
+    "files_count": 1,
     "contains": [
-      "++++++++++ README.md ++++++++++",
-      "# Hello",
-      "This is a test.",
-      "---------- README.md"
+      "++++++++++ sample.rs ++++++++++",
+      "// Sample Rust file for testing serialization",
+      "use std::collections::HashMap;",
+      "pub struct Config {",
+      "---------- sample.rs ddc53f0ab310fae51bcd9894d7426287 sample.rs ----------"
     ],
-    "checksum_present": true,
-    "notes": "Output must include MD5 checksum in closing marker"
+    "checksum": "ddc53f0ab310fae51bcd9894d7426287",
+    "full_output": "++++++++++ sample.rs ++++++++++\n// Sample Rust file for testing serialization\nuse std::collections::HashMap;\n\n/// A simple example struct\npub struct Config {\n    pub name: String,\n    pub values: HashMap<String, i32>,\n}\n\nimpl Config {\n    /// Creates a new Config instance\n    pub fn new(name: &str) -> Self {\n        Config {\n            name: name.to_string(),\n            values: HashMap::new(),\n        }\n    }\n\n    /// Adds a value to the config\n    pub fn add_value(&mut self, key: String, value: i32) {\n        self.values.insert(key, value);\n    }\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn test_config_creation() {\n        let config = Config::new(\"test\");\n        assert_eq!(config.name, \"test\");\n        assert_eq!(config.values.len(), 0);\n    }\n}\n---------- sample.rs ddc53f0ab310fae51bcd9894d7426287 sample.rs ----------\n"
+  },
+  "metadata": {
+    "created_by": "generate_vectors.py",
+    "python_version": "1.3.1",
+    "purpose": "Rust v0.2.0 core serialization validation"
   }
 }
