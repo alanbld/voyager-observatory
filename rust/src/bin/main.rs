@@ -18,9 +18,6 @@ use std::env;
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    // Print version banner
-    println!("pm_encoder-rs v{}", pm_encoder::version());
-
     // Check for arguments
     if args.len() > 1 {
         let path = &args[1];
@@ -28,7 +25,8 @@ fn main() {
         // Call the library function
         match pm_encoder::serialize_project(path) {
             Ok(output) => {
-                println!("{}", output);
+                // Write output to stdout without extra newline
+                print!("{}", output);
                 std::process::exit(0);
             }
             Err(e) => {
@@ -38,11 +36,12 @@ fn main() {
         }
     } else {
         // Show usage
-        println!("Usage: pm_encoder <path>");
-        println!();
-        println!("Examples:");
-        println!("  pm_encoder .              # Serialize current directory");
-        println!("  pm_encoder /path/to/repo  # Serialize specified directory");
+        eprintln!("pm_encoder-rs v{}", pm_encoder::version());
+        eprintln!("Usage: pm_encoder <path>");
+        eprintln!();
+        eprintln!("Examples:");
+        eprintln!("  pm_encoder .              # Serialize current directory");
+        eprintln!("  pm_encoder /path/to/repo  # Serialize specified directory");
         std::process::exit(1);
     }
 }
