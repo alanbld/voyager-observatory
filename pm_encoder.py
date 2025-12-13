@@ -5,7 +5,7 @@ using the Plus/Minus format, with robust directory pruning,
 filtering, and sorting capabilities.
 """
 
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 __author__ = "pm_encoder contributors"
 __license__ = "MIT"
 
@@ -19,6 +19,14 @@ from pathlib import Path
 from fnmatch import fnmatch
 from typing import Optional, Tuple, List, Dict, Any
 from collections import defaultdict
+
+# Handle SIGPIPE gracefully for Unix pipe compatibility (e.g., ./pm_encoder.py . | head)
+# This prevents BrokenPipeError tracebacks when output is piped and closed early
+import signal
+try:
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+except AttributeError:
+    pass  # Windows compatibility (SIGPIPE doesn't exist on Windows)
 
 
 # ============================================================================
@@ -1743,5 +1751,5 @@ Examples:
         if args.output is not sys.stdout:
             args.output.close()
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

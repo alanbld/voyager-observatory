@@ -22,9 +22,9 @@ coverage: ## Run tests with coverage report
 	@python3 -m coverage html
 	@echo "HTML coverage report generated in htmlcov/"
 
-coverage-check: ## Check if coverage meets 98% threshold
+coverage-check: ## Check if coverage meets 95% threshold
 	@python3 -m coverage run -m unittest discover -s tests -p 'test_*.py' 2>&1 > /dev/null
-	@python3 -m coverage report --fail-under=94 --include="pm_encoder.py"
+	@python3 -m coverage report --fail-under=95 --include="pm_encoder.py"
 
 docs: ## Regenerate auto-synchronized documentation
 	@echo "Regenerating documentation..."
