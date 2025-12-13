@@ -53,6 +53,7 @@ See `rust/README.md` for details on the Rust architecture and future WASM/Python
 
 For AI-assisted development and comprehensive project context:
 - **[Knowledge Base](docs/KNOWLEDGE_BASE.md)** - Single source of truth for AI sessions (architecture, decisions, roadmap)
+- **[The Twins Architecture](docs/THE_TWINS_ARCHITECTURE.md)** - Dual-engine design philosophy and roadmap
 - **[Blueprint](docs/BLUEPRINT.md)** - Strategic vision and feature planning
 - **[The Turing Audit](docs/THE_TURING_AUDIT.md)** - Multi-AI development story
 - **[Testing Guide](TESTING.md)** - Test infrastructure and coverage details

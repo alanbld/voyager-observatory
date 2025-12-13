@@ -165,6 +165,7 @@ Context: [serialized|partial|minimal]
 - `rust/` - Rust engine
 - `tests/` - Test suite
 - `docs/BLUEPRINT.md` - Strategic reference
+- `docs/THE_TWINS_ARCHITECTURE.md` - Dual-engine design philosophy
 - `.pm_encoder_config.json` - Shared config
 - `test_vectors/` - Shared contract
 
@@ -188,7 +189,7 @@ When sharing pm_encoder context with AI:
 | Bug fix | Relevant file + test |
 | New feature | Main file + BLUEPRINT + backlog |
 | Rust development | rust/ + test vectors + pm_encoder.py (reference) |
-| Architecture discussion | KNOWLEDGE_BASE + BLUEPRINT |
+| Architecture discussion | KNOWLEDGE_BASE + THE_TWINS_ARCHITECTURE + BLUEPRINT |
 | Documentation | README + story + audit |
 
 **Meta-application:** Use pm_encoder to serialize pm_encoder context:
