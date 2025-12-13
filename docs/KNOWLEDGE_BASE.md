@@ -166,6 +166,7 @@ Context: [serialized|partial|minimal]
 - `tests/` - Test suite
 - `docs/BLUEPRINT.md` - Strategic reference
 - `docs/THE_TWINS_ARCHITECTURE.md` - Dual-engine design philosophy
+- `docs/RUST_GROWTH_STRATEGY.md` - Rust implementation roadmap
 - `.pm_encoder_config.json` - Shared config
 - `test_vectors/` - Shared contract
 
@@ -188,7 +189,7 @@ When sharing pm_encoder context with AI:
 |------|---------------------|
 | Bug fix | Relevant file + test |
 | New feature | Main file + BLUEPRINT + backlog |
-| Rust development | rust/ + test vectors + pm_encoder.py (reference) |
+| Rust development | RUST_GROWTH_STRATEGY + rust/ + test_vectors/ + pm_encoder.py (reference) |
 | Architecture discussion | KNOWLEDGE_BASE + THE_TWINS_ARCHITECTURE + BLUEPRINT |
 | Documentation | README + story + audit |
 
