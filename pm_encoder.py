@@ -5,7 +5,7 @@ using the Plus/Minus format, with robust directory pruning,
 filtering, and sorting capabilities.
 """
 
-__version__ = "1.3.1"
+__version__ = "1.3.3"
 __author__ = "pm_encoder contributors"
 __license__ = "MIT"
 
@@ -1582,87 +1582,124 @@ The plugin should intelligently truncate {language_name} files while preserving:
     print(prompt)
 
 
-def init_prompt(project_root: Path, lens_name: str = "architecture"):
+def detect_project_commands(project_root: Path) -> List[str]:
     """
-    Generate CLAUDE.md file for Claude Code CLI integration.
+    Scan project directory for common build/test files and return appropriate commands.
+
+    Args:
+        project_root: Path to project directory
+
+    Returns:
+        List of detected commands
+    """
+    commands = []
+
+    if (project_root / "Cargo.toml").exists():
+        commands.extend(["cargo build", "cargo test"])
+
+    if (project_root / "package.json").exists():
+        commands.extend(["npm test", "npm start"])
+
+    if (project_root / "Makefile").exists():
+        commands.extend(["make", "make test"])
+
+    if (project_root / "requirements.txt").exists():
+        commands.append("pip install -r requirements.txt")
+
+    return commands
+
+
+def init_prompt(project_root: Path, lens_name: str = "architecture", target: str = "claude"):
+    """
+    Generate instruction file and context file for AI CLI integration.
+
+    v1.3.3: Splits instructions from code context.
+    - Instruction file (CLAUDE.md or GEMINI_INSTRUCTIONS.txt): Commands, structure, NO code
+    - Context file (CONTEXT.txt): Serialized codebase
 
     Args:
         project_root: Path to project directory
         lens_name: Name of lens to use (default: architecture)
+        target: Target AI (claude or gemini, default: claude)
     """
     # Get project name from directory
     project_name = project_root.resolve().name
 
-    # Generate a temporary output file for the serialized content
-    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', encoding='utf-8') as tmp:
-        tmp_path = tmp.name
+    # Step 1: Generate CONTEXT.txt (serialized code)
+    context_path = project_root / "CONTEXT.txt"
+    with open(context_path, 'w', encoding='utf-8') as context_file:
+        # Load config
+        config_path = project_root / ".pm_encoder_config.json"
+        ignore_patterns, include_patterns, custom_lenses = load_config(config_path)
 
-    try:
-        # Serialize the project using the specified lens
-        with open(tmp_path, 'w', encoding='utf-8') as output_file:
-            # Load config
-            config_path = project_root / ".pm_encoder_config.json"
-            ignore_patterns, include_patterns, custom_lenses = load_config(config_path)
+        # Initialize lens manager
+        lens_manager = LensManager(custom_lenses)
 
-            # Initialize lens manager
-            lens_manager = LensManager(custom_lenses)
+        # Apply lens
+        base_config = {
+            "ignore_patterns": ignore_patterns,
+            "include_patterns": include_patterns,
+            "sort_by": "name",
+            "sort_order": "asc",
+            "truncate": 0,
+            "truncate_mode": "structure",
+            "truncate_exclude": [],
+        }
 
-            # Apply lens
-            base_config = {
-                "ignore_patterns": ignore_patterns,
-                "include_patterns": include_patterns,
-                "sort_by": "name",
-                "sort_order": "asc",
-                "truncate": 0,
-                "truncate_mode": "structure",
-                "truncate_exclude": [],
-            }
+        try:
+            lens_config = lens_manager.apply_lens(lens_name, base_config)
+            include_patterns = lens_config["include_patterns"]
+            ignore_patterns = lens_config["ignore_patterns"]
+            sort_by = lens_config["sort_by"]
+            sort_order = lens_config["sort_order"]
+            truncate = lens_config.get("truncate", 0)
+            truncate_mode = lens_config.get("truncate_mode", "structure")
+            truncate_exclude = lens_config.get("truncate_exclude", [])
+        except ValueError:
+            # Lens not found, use defaults
+            print(f"Warning: Lens '{lens_name}' not found, using defaults", file=sys.stderr)
+            sort_by = "name"
+            sort_order = "asc"
+            truncate = 0
+            truncate_mode = "structure"
+            truncate_exclude = []
 
-            try:
-                lens_config = lens_manager.apply_lens(lens_name, base_config)
-                include_patterns = lens_config["include_patterns"]
-                ignore_patterns = lens_config["ignore_patterns"]
-                sort_by = lens_config["sort_by"]
-                sort_order = lens_config["sort_order"]
-                truncate = lens_config.get("truncate", 0)
-                truncate_mode = lens_config.get("truncate_mode", "structure")
-                truncate_exclude = lens_config.get("truncate_exclude", [])
-            except ValueError:
-                # Lens not found, use defaults
-                print(f"Warning: Lens '{lens_name}' not found, using defaults", file=sys.stderr)
-                sort_by = "name"
-                sort_order = "asc"
-                truncate = 0
-                truncate_mode = "structure"
-                truncate_exclude = []
+        # Serialize to CONTEXT.txt
+        serialize(
+            project_root,
+            context_file,
+            ignore_patterns,
+            include_patterns,
+            sort_by,
+            sort_order,
+            truncate_lines=truncate,
+            truncate_mode=truncate_mode,
+            truncate_summary=True,
+            truncate_exclude=truncate_exclude,
+            show_stats=False,
+            language_plugins_dir=None,
+            lens_manager=lens_manager,
+        )
 
-            # Serialize
-            serialize(
-                project_root,
-                output_file,
-                ignore_patterns,
-                include_patterns,
-                sort_by,
-                sort_order,
-                truncate_lines=truncate,
-                truncate_mode=truncate_mode,
-                truncate_summary=True,
-                truncate_exclude=truncate_exclude,
-                show_stats=False,
-                language_plugins_dir=None,
-                lens_manager=lens_manager,
-            )
+    # Step 2: Detect project commands
+    commands = detect_project_commands(project_root)
 
-        # Read the serialized content
-        with open(tmp_path, 'r', encoding='utf-8') as f:
-            serialized_content = f.read()
+    # Step 3: Generate target-specific instruction file
+    if target == "claude":
+        # Generate CLAUDE.md (markdown format)
+        instruction_path = project_root / "CLAUDE.md"
 
-    finally:
-        # Clean up temp file
-        os.unlink(tmp_path)
+        commands_section = ""
+        if commands:
+            commands_list = "\n".join(f"- `{cmd}`" for cmd in commands)
+            commands_section = f"""## Commands
 
-    # Generate CLAUDE.md content
-    claude_md_content = f"""# {project_name}
+Common commands detected for this project:
+{commands_list}
+
+"""
+
+        instruction_content = f"""# {project_name}
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -1674,30 +1711,76 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is the project context serialized using the `{lens_name}` lens for optimal AI understanding.
 
-## Project Structure
+{commands_section}## Project Structure
 
-```
-{serialized_content}
-```
+For the complete codebase context, see `CONTEXT.txt` in this directory.
 
 ---
 
-**Regenerate this file:**
+**Regenerate these files:**
 ```bash
-./pm_encoder.py . --init-prompt --init-lens {lens_name}
+./pm_encoder.py . --init-prompt --init-lens {lens_name} --target claude
 ```
 
 *Generated by pm_encoder v{__version__} using the '{lens_name}' lens*
 """
 
-    # Write CLAUDE.md to project root
-    claude_md_path = project_root / "CLAUDE.md"
-    with open(claude_md_path, 'w', encoding='utf-8') as f:
-        f.write(claude_md_content)
+        with open(instruction_path, 'w', encoding='utf-8') as f:
+            f.write(instruction_content)
 
-    print(f"✅ Created {claude_md_path}", file=sys.stderr)
+        print(f"✅ Generated {instruction_path}", file=sys.stderr)
+
+    elif target == "gemini":
+        # Generate GEMINI_INSTRUCTIONS.txt (plain text format)
+        instruction_path = project_root / "GEMINI_INSTRUCTIONS.txt"
+
+        commands_section = ""
+        if commands:
+            commands_list = "\n".join(f"  - {cmd}" for cmd in commands)
+            commands_section = f"""
+Common commands for this project:
+{commands_list}
+
+"""
+
+        instruction_content = f"""SYSTEM INSTRUCTIONS FOR {project_name}
+
+You are an expert developer working on the {project_name} project.
+
+PROJECT OVERVIEW:
+This project has been serialized using pm_encoder with the '{lens_name}' lens for optimal AI understanding.
+{commands_section}
+CODEBASE CONTEXT:
+The complete project codebase is available in CONTEXT.txt in this same directory.
+Read CONTEXT.txt to understand the project structure, implementation details, and code patterns.
+
+WORKFLOW:
+1. Read CONTEXT.txt to understand the codebase
+2. Use the detected commands above to build, test, and run the project
+3. Make changes as requested by the user
+4. Test your changes thoroughly
+
+---
+Generated by pm_encoder v{__version__} using the '{lens_name}' lens
+Regenerate with: ./pm_encoder.py . --init-prompt --init-lens {lens_name} --target gemini
+"""
+
+        with open(instruction_path, 'w', encoding='utf-8') as f:
+            f.write(instruction_content)
+
+        print(f"✅ Generated {instruction_path}", file=sys.stderr)
+
+    else:
+        print(f"Error: Unknown target '{target}'. Use 'claude' or 'gemini'.", file=sys.stderr)
+        sys.exit(1)
+
+    # Report both files
+    print(f"✅ Generated {context_path}", file=sys.stderr)
     print(f"   Lens: {lens_name}", file=sys.stderr)
-    print(f"   Size: {len(claude_md_content)} bytes", file=sys.stderr)
+    context_size = context_path.stat().st_size
+    print(f"   Context size: {context_size} bytes", file=sys.stderr)
+    if commands:
+        print(f"   Detected commands: {len(commands)}", file=sys.stderr)
 
 
 def main():
@@ -1733,9 +1816,11 @@ Examples:
     parser.add_argument("--plugin-prompt", type=str, metavar="LANGUAGE",
                         help="Generate an AI prompt to create a plugin for LANGUAGE and exit")
     parser.add_argument("--init-prompt", action="store_true",
-                        help="Generate CLAUDE.md for Claude Code CLI integration and exit")
+                        help="Generate instruction file and CONTEXT.txt for AI CLI integration and exit")
     parser.add_argument("--init-lens", type=str, metavar="LENS", default="architecture",
                         help="Lens to use with --init-prompt (default: architecture)")
+    parser.add_argument("--target", type=str, choices=["claude", "gemini"], default="claude",
+                        help="Target AI for --init-prompt: 'claude' (CLAUDE.md) or 'gemini' (GEMINI_INSTRUCTIONS.txt) (default: claude)")
 
     parser.add_argument("--version", action="version", version=f"pm_encoder {__version__}")
     parser.add_argument("project_root", type=Path, nargs='?', help="The root directory of the project to serialize.")
@@ -1793,7 +1878,7 @@ Examples:
 
     # Handle --init-prompt (requires project_root)
     if args.init_prompt:
-        init_prompt(args.project_root, args.init_lens)
+        init_prompt(args.project_root, args.init_lens, args.target)
         return
 
     ignore_patterns, include_patterns, custom_lenses = load_config(args.config)
