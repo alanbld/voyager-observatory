@@ -1,0 +1,17 @@
+[package]
+name = "pm_encoder"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance context serializer (Rust Engine)"
+license = "MIT"
+
+[lib]
+name = "pm_encoder"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pm_encoder"
+path = "src/bin/main.rs"
+
+[dependencies]
+# Zero dependencies for the skeleton

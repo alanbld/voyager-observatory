@@ -41,3 +41,7 @@ ehthumbs.db
 
 # Zone identifiers (Windows/WSL)
 *:Zone.Identifier
+
+# Rust
+rust/target/
+Cargo.lock

@@ -23,6 +23,32 @@ The script uses a custom "Plus/Minus" format that is both human-readable and eas
 - **🆕 Plugin System** (v1.1+): Extensible architecture for community-contributed language analyzers.
 - **🆕 Token Optimization** (v1.1+): Detailed statistics on size and token reduction.
 
+## Project Structure
+
+This repository contains **two implementations** of pm_encoder:
+
+### Python Implementation (Current Production)
+
+- **Location:** `pm_encoder.py` (root directory)
+- **Version:** 1.3.1
+- **Status:** Production-ready with 95% test coverage
+- **Best for:** Python ecosystem integration, rapid feature development
+- **Dependencies:** None (Python 3.6+ stdlib only)
+
+### Rust Implementation (v2.0 Foundation)
+
+- **Location:** `rust/` directory
+- **Version:** 0.1.0 (skeleton)
+- **Status:** Architecture foundation
+- **Best for:** High-performance, WASM/Python bindings, large codebases
+- **Architecture:** Library-first pattern (`lib.rs` + `bin/main.rs`)
+
+The Rust implementation is designed with a **Library-First** architecture:
+- `rust/src/lib.rs` - Pure logic, reusable by CLI/WASM/PyO3
+- `rust/src/bin/main.rs` - Thin CLI wrapper
+
+See `rust/README.md` for details on the Rust architecture and future WASM/Python binding plans.
+
 ## The Plus/Minus Format
 
 The script outputs files in the following format:
