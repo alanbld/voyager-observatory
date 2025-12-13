@@ -1,44 +1,35 @@
-// Sample Rust Module
-
-use std::io::{self, Write};
+// Sample Rust file for testing serialization
 use std::collections::HashMap;
 
-/// Configuration struct
+/// A simple example struct
 pub struct Config {
-    name: String,
-    values: HashMap<String, i32>,
+    pub name: String,
+    pub values: HashMap<String, i32>,
 }
 
 impl Config {
-    pub fn new(name: String) -> Self {
+    /// Creates a new Config instance
+    pub fn new(name: &str) -> Self {
         Config {
-            name,
+            name: name.to_string(),
             values: HashMap::new(),
         }
     }
 
-    pub fn set(&mut self, key: String, val: i32) {
-        self.values.insert(key, val);
-    }
-
-    pub fn get(&self, key: &str) -> Option<&i32> {
-        self.values.get(key)
+    /// Adds a value to the config
+    pub fn add_value(&mut self, key: String, value: i32) {
+        self.values.insert(key, value);
     }
 }
 
-pub trait Processable {
-    fn process(&self) -> Result<(), String>;
-    fn validate(&self) -> bool;
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-pub async fn async_handler(data: Vec<u8>) -> Result<(), io::Error> {
-    let processed: Vec<u8> = data.iter().map(|x| x * 2).collect();
-    io::stdout().write_all(&processed)?;
-    Ok(())
-}
-
-fn main() {
-    let mut config = Config::new("app".to_string());
-    config.set("port".to_string(), 8080);
-    println!("Config ready");
+    #[test]
+    fn test_config_creation() {
+        let config = Config::new("test");
+        assert_eq!(config.name, "test");
+        assert_eq!(config.values.len(), 0);
+    }
 }

@@ -1,0 +1,40 @@
+{
+  "name": "large_file_skip",
+  "description": "Mixed large (>5MB) and small files - validates size-based skipping",
+  "version": "0.2.0",
+  "input": {
+    "files": {
+      "large_data.txt": "[LARGE FILE: 5508890 bytes, ~60000 lines]",
+      "small.txt": "This is a small file.\nIt will be included in the output.\n"
+    },
+    "config": {
+      "max_file_size": 5242880
+    }
+  },
+  "expected": {
+    "format": "plus_minus",
+    "files_included": [
+      "small.txt"
+    ],
+    "files_skipped": [
+      "large_data.txt"
+    ],
+    "skip_reason": "file_too_large",
+    "contains": [
+      "++++++++++ small.txt ++++++++++",
+      "This is a small file.",
+      "---------- small.txt 79bc35e9b17336747b64d48e8063a7cc small.txt ----------"
+    ],
+    "not_contains": [
+      "large_data.txt",
+      "Line 00000:"
+    ],
+    "full_output": "++++++++++ small.txt ++++++++++\nThis is a small file.\nIt will be included in the output.\n---------- small.txt 79bc35e9b17336747b64d48e8063a7cc small.txt ----------\n"
+  },
+  "metadata": {
+    "created_by": "generate_vectors.py",
+    "python_version": "1.3.1",
+    "purpose": "Rust v0.2.0 large file handling validation",
+    "large_file_size_bytes": 5508890
+  }
+}
