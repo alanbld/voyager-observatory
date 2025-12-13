@@ -1,0 +1,26 @@
+{
+  "name": "test-project",
+  "version": "1.0.0",
+  "description": "Sample JSON with various structures",
+  "nested": {
+    "level1": {
+      "level2": {
+        "level3": {
+          "data": "deep nesting"
+        }
+      }
+    }
+  },
+  "arrays": [
+    "item1",
+    "item2",
+    {
+      "nested": "object"
+    }
+  ],
+  "numbers": [1, 2, 3, 4, 5],
+  "boolean": true,
+  "null_value": null,
+  "unicode": "Hello 世界 🌍",
+  "special_chars": "line1\nline2\ttab"
+}

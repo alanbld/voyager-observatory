@@ -1,0 +1,46 @@
+---
+# Sample YAML with various structures
+
+name: test-config
+version: 1.0.0
+
+database:
+  host: localhost
+  port: 5432
+  credentials:
+    username: admin
+    password: secret
+
+features:
+  - authentication
+  - authorization
+  - logging
+  - monitoring
+
+environments:
+  development:
+    debug: true
+    log_level: DEBUG
+  production:
+    debug: false
+    log_level: ERROR
+
+# Multiline strings
+description: |
+  This is a multiline
+  string in YAML
+  with preserved newlines
+
+# Anchors and aliases
+defaults: &defaults
+  timeout: 30
+  retries: 3
+
+service_a:
+  <<: *defaults
+  name: ServiceA
+
+service_b:
+  <<: *defaults
+  name: ServiceB
+  timeout: 60
