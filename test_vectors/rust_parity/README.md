@@ -20,11 +20,13 @@ Byte-identical output = parity achieved ✅
 
 | Category | Vectors | Rust Passing | Parity |
 |----------|---------|--------------|--------|
-| Config | 5 | 0 | 0% |
+| Config | 5 | 4 | 80% |
 | Serialization | 0 | 0 | - |
 | Analyzer | 0 | 0 | - |
 | Truncation | 0 | 0 | - |
 | Lens | 0 | 0 | - |
+
+**Note:** Config parity is 80% (4/5). Test `config_02_cli_override` requires CLI argument parsing (planned for v0.4.0).
 
 ## Usage
 
@@ -52,7 +54,7 @@ python scripts/validate_test_vector.py test_vectors/rust_parity/vector.json
 ## Roadmap
 
 - [x] Infrastructure created
-- [ ] Config vectors (5)
+- [x] Config vectors (5) - **80% passing (v0.3.0)**
 - [ ] Serialization vectors (5)
 - [ ] Analyzer vectors (10)
 - [ ] Truncation vectors (5)

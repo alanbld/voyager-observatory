@@ -28,5 +28,5 @@
     }
   },
   "python_validated": true,
-  "rust_status": "pending"
+  "rust_status": "passing"
 }

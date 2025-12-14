@@ -65,48 +65,211 @@ fn load_vector(name: &str) -> TestVector {
 // ============================================================================
 
 #[test]
-#[ignore] // Will enable once vector is created
 fn test_config_01_file_loading() {
     let vector = load_vector("config_01_file_loading");
     assert!(vector.python_validated, "Vector not validated by Python");
 
-    // TODO: Implement config loading
-    // let config = pm_encoder::load_config(...);
-    // assert_eq!(config.ignore_patterns, vector.expected...);
+    // Create temp directory with test files
+    let temp_dir = std::env::temp_dir().join(format!("pm_encoder_test_{}", vector.name));
+    let _ = fs::remove_dir_all(&temp_dir); // Clean up if exists
+    fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
 
-    panic!("Not yet implemented");
+    // Write test files
+    for (file_path, content) in &vector.input.files {
+        let full_path = temp_dir.join(file_path);
+        if let Some(parent) = full_path.parent() {
+            fs::create_dir_all(parent).expect("Failed to create parent dir");
+        }
+        fs::write(&full_path, content).expect("Failed to write test file");
+    }
+
+    // Run serialization
+    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
+        .expect("Serialization failed");
+
+    // Check that expected files are included
+    for file in &vector.expected.files_included {
+        assert!(
+            output.contains(&format!("++++++++++ {} ++++++++++", file)),
+            "Output should contain file: {}",
+            file
+        );
+    }
+
+    // Check that expected files are excluded
+    for file in &vector.expected.files_excluded {
+        assert!(
+            !output.contains(&format!("++++++++++ {} ++++++++++", file)),
+            "Output should NOT contain file: {}",
+            file
+        );
+    }
+
+    // Check for specific content strings
+    for content_str in &vector.expected.output_contains {
+        assert!(
+            output.contains(content_str),
+            "Output should contain: {}",
+            content_str
+        );
+    }
+
+    // Clean up
+    let _ = fs::remove_dir_all(&temp_dir);
 }
 
 #[test]
-#[ignore]
+#[ignore] // Requires CLI parsing
 fn test_config_02_cli_override() {
     let vector = load_vector("config_02_cli_override");
     assert!(vector.python_validated);
-    panic!("Not yet implemented");
+    // TODO: Implement CLI argument parsing
+    // This test requires --include CLI flag support
+    panic!("Not yet implemented - requires CLI parsing");
 }
 
 #[test]
-#[ignore]
 fn test_config_03_ignore_patterns() {
     let vector = load_vector("config_03_ignore_patterns");
-    assert!(vector.python_validated);
-    panic!("Not yet implemented");
+    assert!(vector.python_validated, "Vector not validated by Python");
+
+    // Create temp directory with test files
+    let temp_dir = std::env::temp_dir().join(format!("pm_encoder_test_{}", vector.name));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
+
+    // Write test files
+    for (file_path, content) in &vector.input.files {
+        let full_path = temp_dir.join(file_path);
+        if let Some(parent) = full_path.parent() {
+            fs::create_dir_all(parent).expect("Failed to create parent dir");
+        }
+        fs::write(&full_path, content).expect("Failed to write test file");
+    }
+
+    // Run serialization
+    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
+        .expect("Serialization failed");
+
+    // Check that expected files are included
+    for file in &vector.expected.files_included {
+        assert!(
+            output.contains(&format!("++++++++++ {} ++++++++++", file)),
+            "Output should contain file: {}",
+            file
+        );
+    }
+
+    // Check that expected files are excluded
+    for file in &vector.expected.files_excluded {
+        assert!(
+            !output.contains(&format!("++++++++++ {} ++++++++++", file)),
+            "Output should NOT contain file: {}",
+            file
+        );
+    }
+
+    // Clean up
+    let _ = fs::remove_dir_all(&temp_dir);
 }
 
 #[test]
-#[ignore]
 fn test_config_04_include_patterns() {
     let vector = load_vector("config_04_include_patterns");
-    assert!(vector.python_validated);
-    panic!("Not yet implemented");
+    assert!(vector.python_validated, "Vector not validated by Python");
+
+    // Create temp directory with test files
+    let temp_dir = std::env::temp_dir().join(format!("pm_encoder_test_{}", vector.name));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
+
+    // Write test files
+    for (file_path, content) in &vector.input.files {
+        let full_path = temp_dir.join(file_path);
+        if let Some(parent) = full_path.parent() {
+            fs::create_dir_all(parent).expect("Failed to create parent dir");
+        }
+        fs::write(&full_path, content).expect("Failed to write test file");
+    }
+
+    // Run serialization
+    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
+        .expect("Serialization failed");
+
+    // Check that expected files are included
+    for file in &vector.expected.files_included {
+        assert!(
+            output.contains(&format!("++++++++++ {} ++++++++++", file)),
+            "Output should contain file: {}",
+            file
+        );
+    }
+
+    // Check that expected files are excluded
+    for file in &vector.expected.files_excluded {
+        assert!(
+            !output.contains(&format!("++++++++++ {} ++++++++++", file)),
+            "Output should NOT contain file: {}",
+            file
+        );
+    }
+
+    // Clean up
+    let _ = fs::remove_dir_all(&temp_dir);
 }
 
 #[test]
-#[ignore]
 fn test_config_05_pattern_precedence() {
     let vector = load_vector("config_05_pattern_precedence");
-    assert!(vector.python_validated);
-    panic!("Not yet implemented");
+    assert!(vector.python_validated, "Vector not validated by Python");
+
+    // Create temp directory with test files
+    let temp_dir = std::env::temp_dir().join(format!("pm_encoder_test_{}", vector.name));
+    let _ = fs::remove_dir_all(&temp_dir);
+    fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
+
+    // Write test files
+    for (file_path, content) in &vector.input.files {
+        let full_path = temp_dir.join(file_path);
+        if let Some(parent) = full_path.parent() {
+            fs::create_dir_all(parent).expect("Failed to create parent dir");
+        }
+        fs::write(&full_path, content).expect("Failed to write test file");
+    }
+
+    // Run serialization
+    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
+        .expect("Serialization failed");
+
+    // Check that expected files are included
+    for file in &vector.expected.files_included {
+        assert!(
+            output.contains(&format!("++++++++++ {} ++++++++++", file)),
+            "Output should contain file: {}",
+            file
+        );
+    }
+
+    // Check that expected files are excluded
+    for file in &vector.expected.files_excluded {
+        assert!(
+            !output.contains(&format!("++++++++++ {} ++++++++++", file)),
+            "Output should NOT contain file: {}",
+            file
+        );
+    }
+
+    // Check for specific content strings
+    for content_str in &vector.expected.output_contains {
+        assert!(
+            output.contains(content_str),
+            "Output should contain: {}",
+            content_str
+        );
+    }
+
+    // Clean up
+    let _ = fs::remove_dir_all(&temp_dir);
 }
 
 // Test that we can load the schema itself
