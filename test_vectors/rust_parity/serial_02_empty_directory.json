@@ -1,0 +1,23 @@
+{
+  "name": "serial_02_empty_directory",
+  "description": "Handle empty directory gracefully (no files to serialize)",
+  "category": "serialization",
+  "input": {
+    "files": {},
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": [],
+    "files_excluded": [],
+    "output_contains": [],
+    "output_exact": "",
+    "metadata": {
+      "file_count": 0,
+      "empty_output": true
+    }
+  },
+  "python_validated": true,
+  "rust_status": "passing"
+}

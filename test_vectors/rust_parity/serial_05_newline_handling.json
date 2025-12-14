@@ -1,0 +1,43 @@
+{
+  "name": "serial_05_newline_handling",
+  "description": "Ensure content with/without trailing newlines is handled correctly",
+  "category": "serialization",
+  "input": {
+    "files": {
+      "with_newline.txt": "content\n",
+      "without_newline.txt": "content",
+      "multiple_newlines.txt": "line1\nline2\nline3\n",
+      "empty.txt": ""
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": [
+      "empty.txt",
+      "multiple_newlines.txt",
+      "with_newline.txt",
+      "without_newline.txt"
+    ],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ empty.txt ++++++++++",
+      "++++++++++ multiple_newlines.txt ++++++++++",
+      "line1",
+      "line2",
+      "line3",
+      "++++++++++ with_newline.txt ++++++++++",
+      "content",
+      "++++++++++ without_newline.txt ++++++++++",
+      "content"
+    ],
+    "metadata": {
+      "file_count": 4,
+      "newline_handling": "preserve",
+      "empty_file_included": true
+    }
+  },
+  "python_validated": true,
+  "rust_status": "passing"
+}

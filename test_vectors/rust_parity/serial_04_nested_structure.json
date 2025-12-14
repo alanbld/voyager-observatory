@@ -1,0 +1,52 @@
+{
+  "name": "serial_04_nested_structure",
+  "description": "Handle deeply nested directory structures",
+  "category": "serialization",
+  "input": {
+    "files": {
+      "root.txt": "root level",
+      "src/main.rs": "fn main() {}",
+      "src/lib.rs": "pub mod foo;",
+      "src/utils/helper.rs": "pub fn help() {}",
+      "tests/integration.rs": "#[test] fn it_works() {}",
+      "docs/README.md": "# Documentation"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": [
+      "docs/README.md",
+      "root.txt",
+      "src/lib.rs",
+      "src/main.rs",
+      "src/utils/helper.rs",
+      "tests/integration.rs"
+    ],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ docs/README.md ++++++++++",
+      "++++++++++ root.txt ++++++++++",
+      "++++++++++ src/lib.rs ++++++++++",
+      "++++++++++ src/main.rs ++++++++++",
+      "++++++++++ src/utils/helper.rs ++++++++++",
+      "++++++++++ tests/integration.rs ++++++++++"
+    ],
+    "sort_order": [
+      "docs/README.md",
+      "root.txt",
+      "src/lib.rs",
+      "src/main.rs",
+      "src/utils/helper.rs",
+      "tests/integration.rs"
+    ],
+    "metadata": {
+      "file_count": 6,
+      "max_depth": 3,
+      "alphabetical_sort": true
+    }
+  },
+  "python_validated": true,
+  "rust_status": "passing"
+}

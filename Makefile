@@ -147,3 +147,12 @@ check-env: ## Check development environment status
 	else \
 		echo "  ⚠️  No virtual environment. Run 'make bootstrap' to create one."; \
 	fi
+
+track-metrics: ## Record daily research metrics
+	@echo "📊 Recording daily metrics..."
+	@$(PYTHON) scripts/track_metrics.py
+
+research-snapshot: coverage track-metrics ## Generate coverage and record metrics
+	@echo "🔬 Research snapshot complete!"
+	@echo "   - Coverage report: htmlcov/index.html"
+	@echo "   - Daily metrics: research/data/daily_snapshots.csv"
