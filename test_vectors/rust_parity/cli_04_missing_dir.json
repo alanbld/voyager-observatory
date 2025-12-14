@@ -1,0 +1,25 @@
+{
+  "name": "cli_04_missing_dir",
+  "description": "Verify non-existent directory produces appropriate error",
+  "category": "cli",
+  "input": {
+    "cli_args": [
+      "/nonexistent/path/that/does/not/exist"
+    ]
+  },
+  "expected": {
+    "exit_code_nonzero": true,
+    "stderr_contains_any": [
+      "error",
+      "not exist",
+      "not found",
+      "no such",
+      "invalid"
+    ],
+    "reference_stderr": "Error: Project root '/nonexistent/path/that/does/not/exist' is not a valid directory.\n"
+  },
+  "validation_mode": "error",
+  "notes": "Must fail gracefully for non-existent paths",
+  "python_validated": true,
+  "rust_status": "pending"
+}

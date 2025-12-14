@@ -243,6 +243,23 @@ lazy_static! {
             .with_class_pattern(Regex::new(r"^#{1,6}\s+(.+)").unwrap())  // Headers as "classes"
             .with_documentation_pattern(Regex::new(r"^#{1,6}\s").unwrap())
     };
+
+    /// JSON analyzer configuration
+    static ref JSON_CONFIG: AnalyzerConfig = {
+        AnalyzerConfig::new("JSON", vec![".json"])
+            // Match top-level keys like "name": or "version":
+            .with_class_pattern(Regex::new(r#"^\s{0,2}"(\w+)":\s*"#).unwrap())
+            .with_documentation_pattern(Regex::new(r#"^\s*\{"#).unwrap())
+    };
+
+    /// YAML analyzer configuration
+    static ref YAML_CONFIG: AnalyzerConfig = {
+        AnalyzerConfig::new("YAML", vec![".yml", ".yaml"])
+            // Match top-level keys (no leading whitespace)
+            .with_class_pattern(Regex::new(r"^(\w[\w-]*):\s*").unwrap())
+            .with_documentation_pattern(Regex::new(r"^#").unwrap())
+            .with_marker_pattern(Regex::new(r"#\s*(TODO|FIXME|XXX|HACK|NOTE):?\s*(.+)").unwrap())
+    };
 }
 
 /// Factory function to create a Python analyzer
@@ -263,6 +280,16 @@ pub fn create_shell_analyzer() -> GenericAnalyzer {
 /// Factory function to create a Markdown analyzer
 pub fn create_markdown_analyzer() -> GenericAnalyzer {
     GenericAnalyzer::new(MARKDOWN_CONFIG.clone())
+}
+
+/// Factory function to create a JSON analyzer
+pub fn create_json_analyzer() -> GenericAnalyzer {
+    GenericAnalyzer::new(JSON_CONFIG.clone())
+}
+
+/// Factory function to create a YAML analyzer
+pub fn create_yaml_analyzer() -> GenericAnalyzer {
+    GenericAnalyzer::new(YAML_CONFIG.clone())
 }
 
 #[cfg(test)]

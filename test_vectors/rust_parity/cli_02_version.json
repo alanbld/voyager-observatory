@@ -1,0 +1,23 @@
+{
+  "name": "cli_02_version",
+  "description": "Verify --version outputs version in correct format",
+  "category": "cli",
+  "input": {
+    "cli_args": [
+      "--version"
+    ]
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout_regex": "pm_encoder \\d+\\.\\d+\\.\\d+",
+    "stdout_contains": [
+      "pm_encoder"
+    ],
+    "stderr": "",
+    "reference_output": "pm_encoder 1.5.0"
+  },
+  "validation_mode": "regex",
+  "notes": "Version format must be 'pm_encoder X.Y.Z'",
+  "python_validated": true,
+  "rust_status": "pending"
+}

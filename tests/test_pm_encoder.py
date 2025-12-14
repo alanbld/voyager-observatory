@@ -350,7 +350,7 @@ class TestLenses(unittest.TestCase):
         # Verify .pm_encoder_meta is present
         self.assertIn("++++++++++ .pm_encoder_meta ++++++++++", result)
         self.assertIn('Context generated with lens: "architecture"', result)
-        self.assertIn("Focus: High-level structure, interfaces, configuration", result)
+        self.assertIn("Focus: High-level code structure and configuration", result)
         self.assertIn("pm_encoder version:", result)
 
     def test_lens_precedence(self):

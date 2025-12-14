@@ -18,10 +18,14 @@
 use std::fs;
 use std::io::Read;
 use std::path::Path;
+use std::time::SystemTime;
 use serde::{Deserialize, Serialize};
 use globset::Glob;
 
 pub mod analyzers;
+pub mod lenses;
+
+pub use lenses::{LensManager, LensConfig, AppliedLens};
 
 /// A file entry with its content and metadata
 #[derive(Debug, Clone)]
@@ -32,6 +36,10 @@ pub struct FileEntry {
     pub content: String,
     /// MD5 checksum of the content
     pub md5: String,
+    /// Modification time (seconds since epoch)
+    pub mtime: u64,
+    /// Creation time (seconds since epoch, falls back to mtime on some systems)
+    pub ctime: u64,
 }
 
 /// Configuration loaded from .pm_encoder_config.json
@@ -54,30 +62,68 @@ impl Default for Config {
     }
 }
 
-/// Configuration for the encoder
+/// Configuration for the encoder (expanded for CLI parity)
+#[derive(Debug, Clone)]
 pub struct EncoderConfig {
-    /// Enable truncation of large files
-    pub truncate: bool,
+    /// Patterns to ignore (e.g., ["*.pyc", ".git"])
+    pub ignore_patterns: Vec<String>,
+    /// Patterns to include (overrides ignore)
+    pub include_patterns: Vec<String>,
+    /// Sort by: "name", "mtime", or "ctime"
+    pub sort_by: String,
+    /// Sort order: "asc" or "desc"
+    pub sort_order: String,
+    /// Maximum lines before truncation (0 = no truncation)
+    pub truncate_lines: usize,
+    /// Truncation mode: "simple", "smart", or "structure"
+    pub truncate_mode: String,
     /// Maximum file size in bytes (default: 5MB)
     pub max_file_size: u64,
-    // Future fields:
-    // pub max_lines: usize,
-    // pub truncate_mode: TruncateMode,
-    // pub sort_by: SortBy,
 }
 
 impl Default for EncoderConfig {
     fn default() -> Self {
         Self {
-            truncate: false,
+            ignore_patterns: vec![
+                ".git".to_string(),
+                "__pycache__".to_string(),
+                "*.pyc".to_string(),
+                "node_modules".to_string(),
+                "target".to_string(),
+            ],
+            include_patterns: vec![],
+            sort_by: "name".to_string(),
+            sort_order: "asc".to_string(),
+            truncate_lines: 0,
+            truncate_mode: "simple".to_string(),
             max_file_size: 5 * 1024 * 1024, // 5MB
         }
     }
 }
 
+impl EncoderConfig {
+    /// Load configuration from a JSON file
+    pub fn from_file(path: &std::path::Path) -> Result<Self, String> {
+        let content = fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read config file: {}", e))?;
+
+        let config: Config = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse config file: {}", e))?;
+
+        Ok(Self {
+            ignore_patterns: config.ignore_patterns,
+            include_patterns: config.include_patterns,
+            ..Default::default()
+        })
+    }
+}
+
+/// Version of the pm_encoder library
+pub const VERSION: &str = "0.4.0";
+
 /// Returns the version of the pm_encoder library
 pub fn version() -> &'static str {
-    "0.3.0"
+    VERSION
 }
 
 /// Load configuration from .pm_encoder_config.json
@@ -325,6 +371,20 @@ fn walk_recursive(
                 continue;
             }
 
+            // Extract timestamps
+            let mtime = metadata.modified()
+                .ok()
+                .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+
+            // ctime: On Unix, use created(). Falls back to mtime if unavailable.
+            let ctime = metadata.created()
+                .ok()
+                .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(mtime);
+
             // Read file content
             let mut file = fs::File::open(&path).map_err(|e| format!("Failed to open file: {}", e))?;
             let mut buffer = Vec::new();
@@ -347,11 +407,52 @@ fn walk_recursive(
                 path: path_str.to_string(),
                 content,
                 md5,
+                mtime,
+                ctime,
             });
         }
     }
 
     Ok(())
+}
+
+/// Truncate content to a maximum number of lines (simple mode)
+///
+/// # Arguments
+///
+/// * `content` - The content to truncate
+/// * `max_lines` - Maximum number of lines to keep
+/// * `file_path` - File path for the truncation marker
+///
+/// # Returns
+///
+/// * `(truncated_content, was_truncated)` - The truncated content and whether truncation occurred
+pub fn truncate_simple(content: &str, max_lines: usize, file_path: &str) -> (String, bool) {
+    let lines: Vec<&str> = content.lines().collect();
+    let total_lines = lines.len();
+
+    if max_lines == 0 || total_lines <= max_lines {
+        return (content.to_string(), false);
+    }
+
+    // Keep first N lines
+    let kept_lines: Vec<&str> = lines.into_iter().take(max_lines).collect();
+    let mut truncated = kept_lines.join("\n");
+
+    // Add truncation marker (matching Python format)
+    let reduced_pct = (total_lines - max_lines) * 100 / total_lines;
+    let marker = format!(
+        "\n\n{}\nTRUNCATED at line {}/{} ({}% reduced)\nTo get full content: --include \"{}\" --truncate 0\n{}\n",
+        "=".repeat(70),
+        max_lines,
+        total_lines,
+        reduced_pct,
+        file_path,
+        "=".repeat(70)
+    );
+    truncated.push_str(&marker);
+
+    (truncated, true)
 }
 
 /// Serialize a file entry into Plus/Minus format
@@ -364,13 +465,279 @@ fn walk_recursive(
 ///
 /// * Serialized string in Plus/Minus format
 pub fn serialize_file(entry: &FileEntry) -> String {
+    serialize_file_with_truncation(entry, 0, "simple")
+}
+
+/// Truncate content using smart mode (language-aware)
+///
+/// Smart mode uses language analyzers to identify important sections
+/// and keeps them while truncating less important parts.
+pub fn truncate_smart(content: &str, max_lines: usize, file_path: &str) -> (String, bool) {
+    let lines: Vec<&str> = content.lines().collect();
+    let total_lines = lines.len();
+
+    if max_lines == 0 || total_lines <= max_lines {
+        return (content.to_string(), false);
+    }
+
+    // Try to get an analyzer for this file type
+    if let Some(analyzer) = analyzers::get_analyzer_for_file(file_path) {
+        let analysis = analyzer.analyze(content, file_path);
+
+        // Collect important line ranges (imports, class/function definitions)
+        let mut important_lines: Vec<usize> = Vec::new();
+
+        // Always keep first few lines (often contain shebang, docstring, imports)
+        for i in 1..=10.min(total_lines) {
+            important_lines.push(i);
+        }
+
+        // Add lines around class/function definitions
+        for (i, line) in lines.iter().enumerate() {
+            let line_num = i + 1;
+            // Check if this line starts a class or function
+            if line.trim_start().starts_with("class ")
+                || line.trim_start().starts_with("def ")
+                || line.trim_start().starts_with("fn ")
+                || line.trim_start().starts_with("pub fn ")
+                || line.trim_start().starts_with("function ")
+                || line.trim_start().starts_with("const ")
+                || line.trim_start().starts_with("struct ")
+                || line.trim_start().starts_with("impl ")
+                || line.trim_start().starts_with("enum ")
+            {
+                // Add this line and a few lines after (signature + docstring)
+                for j in line_num..=(line_num + 5).min(total_lines) {
+                    important_lines.push(j);
+                }
+            }
+        }
+
+        // Add critical sections from analysis
+        for (start, end) in &analysis.critical_sections {
+            for line_num in *start..=*end {
+                important_lines.push(line_num);
+            }
+        }
+
+        // Deduplicate and sort
+        important_lines.sort();
+        important_lines.dedup();
+
+        // If we have more important lines than max_lines, fall back to simple
+        if important_lines.len() > max_lines {
+            return truncate_simple(content, max_lines, file_path);
+        }
+
+        // Build output with kept lines and gap markers
+        let mut result = String::new();
+        let mut last_line = 0;
+
+        for &line_num in &important_lines {
+            // Add gap marker if there's a gap
+            if line_num > last_line + 1 && last_line > 0 {
+                let gap_size = line_num - last_line - 1;
+                result.push_str(&format!("\n... [{} lines omitted] ...\n\n", gap_size));
+            }
+
+            if line_num <= total_lines {
+                result.push_str(lines[line_num - 1]);
+                result.push('\n');
+            }
+            last_line = line_num;
+        }
+
+        // Add final truncation marker
+        let kept_count = important_lines.len();
+        let omitted = total_lines - kept_count;
+        if omitted > 0 {
+            result.push_str(&format!(
+                "\n{}\nSMART TRUNCATED: kept {}/{} lines ({}% reduced)\nLanguage: {} | Category: {}\n{}\n",
+                "=".repeat(70),
+                kept_count,
+                total_lines,
+                omitted * 100 / total_lines,
+                analysis.language,
+                analysis.category,
+                "=".repeat(70)
+            ));
+        }
+
+        return (result, true);
+    }
+
+    // Fall back to simple truncation if no analyzer available
+    truncate_simple(content, max_lines, file_path)
+}
+
+/// Truncate content using structure mode (signatures only)
+///
+/// Structure mode extracts only class/function signatures, removing all bodies.
+pub fn truncate_structure(content: &str, file_path: &str) -> (String, bool) {
+    let lines: Vec<&str> = content.lines().collect();
+    let total_lines = lines.len();
+
+    if total_lines == 0 {
+        return (content.to_string(), false);
+    }
+
+    // Try to get an analyzer for this file type
+    if let Some(analyzer) = analyzers::get_analyzer_for_file(file_path) {
+        let analysis = analyzer.analyze(content, file_path);
+
+        // Collect signature lines (class/function definitions)
+        let mut signature_lines: Vec<usize> = Vec::new();
+
+        // Always keep imports/headers (first few lines)
+        for i in 1..=5.min(total_lines) {
+            if lines[i-1].trim().starts_with("import ")
+                || lines[i-1].trim().starts_with("from ")
+                || lines[i-1].trim().starts_with("use ")
+                || lines[i-1].trim().starts_with("#!")
+                || lines[i-1].trim().starts_with("//!")
+            {
+                signature_lines.push(i);
+            }
+        }
+
+        // Find all class/function definition lines
+        for (i, line) in lines.iter().enumerate() {
+            let line_num = i + 1;
+            let trimmed = line.trim_start();
+
+            if trimmed.starts_with("class ")
+                || trimmed.starts_with("def ")
+                || trimmed.starts_with("fn ")
+                || trimmed.starts_with("pub fn ")
+                || trimmed.starts_with("async fn ")
+                || trimmed.starts_with("function ")
+                || trimmed.starts_with("struct ")
+                || trimmed.starts_with("pub struct ")
+                || trimmed.starts_with("enum ")
+                || trimmed.starts_with("pub enum ")
+                || trimmed.starts_with("impl ")
+                || trimmed.starts_with("trait ")
+                || trimmed.starts_with("pub trait ")
+                || trimmed.starts_with("const ")
+                || trimmed.starts_with("pub const ")
+            {
+                signature_lines.push(line_num);
+                // Also grab docstring/decorators above
+                if line_num > 1 {
+                    let prev = lines[line_num - 2].trim();
+                    if prev.starts_with("@")
+                        || prev.starts_with("///")
+                        || prev.starts_with("#[")
+                        || prev.starts_with("\"\"\"")
+                    {
+                        signature_lines.push(line_num - 1);
+                    }
+                }
+            }
+        }
+
+        // Deduplicate and sort
+        signature_lines.sort();
+        signature_lines.dedup();
+
+        if signature_lines.is_empty() {
+            // No structure found, return first 20 lines
+            let kept: Vec<&str> = lines.iter().take(20).copied().collect();
+            let mut result = kept.join("\n");
+            if total_lines > 20 {
+                result.push_str(&format!(
+                    "\n\n{}\nSTRUCTURE MODE: No signatures found, showing first 20/{} lines\n{}\n",
+                    "=".repeat(70),
+                    total_lines,
+                    "=".repeat(70)
+                ));
+            }
+            return (result, total_lines > 20);
+        }
+
+        // Build output with signature lines only
+        let mut result = String::new();
+        for &line_num in &signature_lines {
+            if line_num <= total_lines {
+                result.push_str(lines[line_num - 1]);
+                result.push('\n');
+            }
+        }
+
+        // Add structure marker
+        let kept_count = signature_lines.len();
+        result.push_str(&format!(
+            "\n{}\nSTRUCTURE MODE: {} signatures extracted from {} lines\nLanguage: {} | Classes: {} | Functions: {}\n{}\n",
+            "=".repeat(70),
+            kept_count,
+            total_lines,
+            analysis.language,
+            analysis.classes.len(),
+            analysis.functions.len(),
+            "=".repeat(70)
+        ));
+
+        return (result, true);
+    }
+
+    // Fall back to first 30 lines if no analyzer
+    let kept: Vec<&str> = lines.iter().take(30).copied().collect();
+    let mut result = kept.join("\n");
+    if total_lines > 30 {
+        result.push_str(&format!(
+            "\n\n{}\nSTRUCTURE MODE: Unknown language, showing first 30/{} lines\n{}\n",
+            "=".repeat(70),
+            total_lines,
+            "=".repeat(70)
+        ));
+    }
+    (result, total_lines > 30)
+}
+
+/// Serialize a file entry with optional truncation
+///
+/// # Arguments
+///
+/// * `entry` - The file entry to serialize
+/// * `truncate_lines` - Maximum lines (0 = no truncation)
+/// * `truncate_mode` - Truncation mode ("simple", "smart", "structure")
+///
+/// # Returns
+///
+/// * Serialized string in Plus/Minus format
+pub fn serialize_file_with_truncation(
+    entry: &FileEntry,
+    truncate_lines: usize,
+    truncate_mode: &str,
+) -> String {
     let mut output = String::new();
 
     // Header: ++++++++++ filename ++++++++++
     output.push_str(&format!("++++++++++ {} ++++++++++\n", entry.path));
 
+    // Apply truncation if needed
+    let content = if truncate_lines > 0 {
+        match truncate_mode {
+            "simple" => {
+                let (truncated, _) = truncate_simple(&entry.content, truncate_lines, &entry.path);
+                truncated
+            }
+            "smart" => {
+                let (truncated, _) = truncate_smart(&entry.content, truncate_lines, &entry.path);
+                truncated
+            }
+            "structure" => {
+                let (truncated, _) = truncate_structure(&entry.content, &entry.path);
+                truncated
+            }
+            _ => entry.content.clone(),
+        }
+    } else {
+        entry.content.clone()
+    };
+
     // Content
-    output.push_str(&entry.content);
+    output.push_str(&content);
 
     // Ensure content ends with newline
     if !output.ends_with('\n') {
@@ -387,6 +754,9 @@ pub fn serialize_file(entry: &FileEntry) -> String {
 }
 
 /// Serialize a project directory into the Plus/Minus format
+///
+/// This function automatically loads configuration from `.pm_encoder_config.json`
+/// if it exists in the root directory.
 ///
 /// # Arguments
 ///
@@ -406,7 +776,13 @@ pub fn serialize_file(entry: &FileEntry) -> String {
 /// assert!(result.is_ok());
 /// ```
 pub fn serialize_project(root: &str) -> Result<String, String> {
-    let config = EncoderConfig::default();
+    // Try to load config from the project directory
+    let config_path = Path::new(root).join(".pm_encoder_config.json");
+    let config = if config_path.exists() {
+        EncoderConfig::from_file(&config_path).unwrap_or_default()
+    } else {
+        EncoderConfig::default()
+    };
     serialize_project_with_config(root, &config)
 }
 
@@ -425,25 +801,54 @@ pub fn serialize_project_with_config(
     root: &str,
     config: &EncoderConfig,
 ) -> Result<String, String> {
-    // Load .pm_encoder_config.json if it exists
-    let file_config = load_config(root)?;
-
-    // Walk directory and collect file entries
+    // Walk directory and collect file entries using EncoderConfig patterns
     let entries = walk_directory(
         root,
-        &file_config.ignore_patterns,
-        &file_config.include_patterns,
+        &config.ignore_patterns,
+        &config.include_patterns,
         config.max_file_size,
     )?;
 
-    // Sort entries by path name (ascending)
+    // Sort entries based on config
     let mut sorted_entries = entries;
-    sorted_entries.sort_by(|a, b| a.path.cmp(&b.path));
+    let is_desc = config.sort_order == "desc";
 
-    // Serialize each file entry
+    match config.sort_by.as_str() {
+        "name" => {
+            if is_desc {
+                sorted_entries.sort_by(|a, b| b.path.cmp(&a.path));
+            } else {
+                sorted_entries.sort_by(|a, b| a.path.cmp(&b.path));
+            }
+        }
+        "mtime" => {
+            if is_desc {
+                sorted_entries.sort_by(|a, b| b.mtime.cmp(&a.mtime));
+            } else {
+                sorted_entries.sort_by(|a, b| a.mtime.cmp(&b.mtime));
+            }
+        }
+        "ctime" => {
+            if is_desc {
+                sorted_entries.sort_by(|a, b| b.ctime.cmp(&a.ctime));
+            } else {
+                sorted_entries.sort_by(|a, b| a.ctime.cmp(&b.ctime));
+            }
+        }
+        // Default to name sorting
+        _ => {
+            sorted_entries.sort_by(|a, b| a.path.cmp(&b.path));
+        }
+    }
+
+    // Serialize each file entry with optional truncation
     let mut output = String::new();
     for entry in sorted_entries {
-        output.push_str(&serialize_file(&entry));
+        output.push_str(&serialize_file_with_truncation(
+            &entry,
+            config.truncate_lines,
+            &config.truncate_mode,
+        ));
     }
 
     Ok(output)
@@ -455,7 +860,7 @@ mod tests {
 
     #[test]
     fn test_version() {
-        assert_eq!(version(), "0.3.0");
+        assert_eq!(version(), "0.4.0");
     }
 
     #[test]
@@ -470,8 +875,9 @@ mod tests {
     #[test]
     fn test_serialize_with_config() {
         let config = EncoderConfig {
-            truncate: true,
+            truncate_lines: 100,
             max_file_size: 1024,
+            ..Default::default()
         };
         let result = serialize_project_with_config(".", &config);
         assert!(result.is_ok());
@@ -480,7 +886,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = EncoderConfig::default();
-        assert_eq!(config.truncate, false);
+        assert_eq!(config.truncate_lines, 0);
         assert_eq!(config.max_file_size, 5 * 1024 * 1024);
     }
 
@@ -504,5 +910,30 @@ mod tests {
     fn test_size_check() {
         assert!(is_too_large(10_000_000, 5_000_000)); // 10MB > 5MB
         assert!(!is_too_large(1_000_000, 5_000_000)); // 1MB < 5MB
+    }
+
+    #[test]
+    fn test_truncate_simple() {
+        let content = "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10";
+
+        // No truncation when limit is 0
+        let (result, truncated) = truncate_simple(content, 0, "test.txt");
+        assert!(!truncated);
+        assert_eq!(result, content);
+
+        // No truncation when content is smaller than limit
+        let (result, truncated) = truncate_simple(content, 20, "test.txt");
+        assert!(!truncated);
+        assert_eq!(result, content);
+
+        // Truncation when content exceeds limit
+        let (result, truncated) = truncate_simple(content, 3, "test.txt");
+        assert!(truncated);
+        assert!(result.contains("line1"));
+        assert!(result.contains("line2"));
+        assert!(result.contains("line3"));
+        assert!(!result.contains("line4"));
+        assert!(result.contains("TRUNCATED at line 3/10"));
+        assert!(result.contains("70% reduced"));
     }
 }

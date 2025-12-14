@@ -1,0 +1,28 @@
+{
+  "name": "cli_03_invalid_arg",
+  "description": "Verify unknown flags produce error with non-zero exit code",
+  "category": "cli",
+  "input": {
+    "cli_args": [
+      "--this-flag-does-not-exist"
+    ]
+  },
+  "expected": {
+    "exit_code_nonzero": true,
+    "stderr_contains": [
+      "error",
+      "unrecognized"
+    ],
+    "stderr_contains_any": [
+      "invalid",
+      "unknown",
+      "unrecognized",
+      "unexpected"
+    ],
+    "reference_stderr": "usage: pm_encoder.py [-h] [--create-plugin LANGUAGE]\n                     [--plugin-prompt LANGUAGE] [--init-prompt]\n                     [--init-lens LENS] [--target {claude,gemini}] [--version]\n                     [-o OUTPUT] [-c CONFIG] [--include [INCLUDE ...]]\n                     [--exclude [EXCLUDE ...]] [--sort-by {name,mtime,ctime}]\n                     [--sort-order {asc,desc}] [--truncate N]\n                     [--truncate-mode {simple,smart,structure}]\n                     [--truncate-summary] [--no-truncate-summary]\n                     [--truncate-exclude [TRUNCATE_EXCLUDE ...]]\n                     [--truncate-stats] [--language-plugins DIR] [--lens NAME]\n                     [project_root]\npm_encoder.py: error: unrecognized arguments: --this-flag-does-not-exist\n"
+  },
+  "validation_mode": "error",
+  "notes": "Error message wording may differ, but must indicate invalid argument",
+  "python_validated": true,
+  "rust_status": "pending"
+}

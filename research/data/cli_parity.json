@@ -1,0 +1,229 @@
+{
+  "version_ok": true,
+  "version_msg": "pm_encoder 0.4.0",
+  "metrics": {
+    "total_flags": 22,
+    "flags_implemented": 22,
+    "interface_parity_percent": 100.0,
+    "by_category": {
+      "core": {
+        "total": 3,
+        "passed": 3,
+        "percent": 100.0
+      },
+      "filtering": {
+        "total": 2,
+        "passed": 2,
+        "percent": 100.0
+      },
+      "sorting": {
+        "total": 2,
+        "passed": 2,
+        "percent": 100.0
+      },
+      "truncation": {
+        "total": 6,
+        "passed": 6,
+        "percent": 100.0
+      },
+      "lenses": {
+        "total": 1,
+        "passed": 1,
+        "percent": 100.0
+      },
+      "plugins": {
+        "total": 3,
+        "passed": 3,
+        "percent": 100.0
+      },
+      "init": {
+        "total": 3,
+        "passed": 3,
+        "percent": 100.0
+      },
+      "meta": {
+        "total": 2,
+        "passed": 2,
+        "percent": 100.0
+      }
+    },
+    "by_priority": {
+      "critical": {
+        "total": 4,
+        "passed": 4,
+        "percent": 100.0
+      },
+      "high": {
+        "total": 5,
+        "passed": 5,
+        "percent": 100.0
+      },
+      "medium": {
+        "total": 3,
+        "passed": 3,
+        "percent": 100.0
+      },
+      "low": {
+        "total": 9,
+        "passed": 9,
+        "percent": 100.0
+      }
+    }
+  },
+  "results": [
+    {
+      "name": "--help",
+      "category": "meta",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--create-plugin",
+      "category": "plugins",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--plugin-prompt",
+      "category": "plugins",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--init-prompt",
+      "category": "init",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--init-lens",
+      "category": "init",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--target",
+      "category": "init",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--version",
+      "category": "meta",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "project_root",
+      "category": "core",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--output",
+      "category": "core",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--config",
+      "category": "core",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--include",
+      "category": "filtering",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--exclude",
+      "category": "filtering",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--sort-by",
+      "category": "sorting",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--sort-order",
+      "category": "sorting",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--truncate",
+      "category": "truncation",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--truncate-mode",
+      "category": "truncation",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--truncate-summary",
+      "category": "truncation",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--no-truncate-summary",
+      "category": "truncation",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--truncate-exclude",
+      "category": "truncation",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--truncate-stats",
+      "category": "truncation",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--language-plugins",
+      "category": "plugins",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    },
+    {
+      "name": "--lens",
+      "category": "lenses",
+      "passed": true,
+      "flag_exists": true,
+      "in_help": true
+    }
+  ]
+}

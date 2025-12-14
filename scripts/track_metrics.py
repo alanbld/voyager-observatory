@@ -6,6 +6,7 @@ Collects:
 - Python test coverage (from coverage.xml)
 - Rust test coverage (from tarpaulin output)
 - Test vector parity (from test vector JSON files)
+- Interface parity (CLI contract compliance)
 - Lines of code (both engines)
 - Velocity (rolling 7-day average)
 
@@ -207,6 +208,59 @@ def get_rust_loc() -> int:
     return total
 
 
+def get_interface_parity() -> float:
+    """
+    Get CLI interface parity percentage by running verify_cli_parity.py.
+
+    Returns:
+        Interface parity percentage (0-100)
+    """
+    root = get_project_root()
+    validator_script = root / "scripts" / "verify_cli_parity.py"
+    contract_file = root / "test_vectors" / "cli_contract.json"
+
+    if not validator_script.exists():
+        print("⚠️  verify_cli_parity.py not found.")
+        return 0.0
+
+    if not contract_file.exists():
+        print("⚠️  cli_contract.json not found. Run generate_cli_contract.py first.")
+        return 0.0
+
+    try:
+        # Run the validator and capture output
+        result = subprocess.run(
+            ["python3", str(validator_script), "--json"],
+            capture_output=True,
+            text=True,
+            cwd=root,
+            timeout=60
+        )
+
+        # Parse JSON output from research/data/cli_parity.json
+        parity_file = root / "research" / "data" / "cli_parity.json"
+        if parity_file.exists():
+            with open(parity_file) as f:
+                data = json.load(f)
+                return data.get("metrics", {}).get("interface_parity_percent", 0.0)
+
+        # Fallback: parse from stdout
+        for line in result.stdout.split('\n'):
+            if "Interface Parity:" in line:
+                # Extract percentage from "Interface Parity: 50.0%"
+                pct = line.split(':')[1].strip().rstrip('%')
+                return float(pct)
+
+        return 0.0
+
+    except subprocess.TimeoutExpired:
+        print("⚠️  Interface parity check timed out")
+        return 0.0
+    except Exception as e:
+        print(f"⚠️  Error checking interface parity: {e}")
+        return 0.0
+
+
 def calculate_velocity(csv_file: Path, days: int = 7) -> float:
     """
     Calculate rolling average of vectors passing per day.
@@ -260,6 +314,7 @@ def append_snapshot() -> None:
     python_cov = get_python_coverage()
     rust_cov = get_rust_coverage()
     vectors_total, vectors_passing, parity_pct = get_test_vector_parity()
+    interface_parity = get_interface_parity()
     python_loc = get_python_loc()
     rust_loc = get_rust_loc()
     velocity = calculate_velocity(csv_file)
@@ -270,6 +325,7 @@ def append_snapshot() -> None:
         'python_coverage': python_cov,
         'rust_coverage': rust_cov,
         'parity_pct': parity_pct,
+        'interface_parity': interface_parity,
         'python_loc': python_loc,
         'rust_loc': rust_loc,
         'vectors_total': vectors_total,
@@ -294,7 +350,8 @@ def append_snapshot() -> None:
     # Append row
     with open(csv_file, 'a', newline='') as f:
         fieldnames = ['date', 'python_coverage', 'rust_coverage', 'parity_pct',
-                     'python_loc', 'rust_loc', 'vectors_total', 'vectors_passing', 'velocity']
+                     'interface_parity', 'python_loc', 'rust_loc',
+                     'vectors_total', 'vectors_passing', 'velocity']
         writer = csv.DictWriter(f, fieldnames=fieldnames)
 
         if write_header:
@@ -307,7 +364,8 @@ def append_snapshot() -> None:
     print(f"   Date: {today}")
     print(f"   Python Coverage: {python_cov}%")
     print(f"   Rust Coverage: {rust_cov}%")
-    print(f"   Parity: {parity_pct}% ({vectors_passing}/{vectors_total} vectors)")
+    print(f"   Logic Parity: {parity_pct}% ({vectors_passing}/{vectors_total} vectors)")
+    print(f"   Interface Parity: {interface_parity}% (CLI contract)")
     print(f"   Python LOC: {python_loc}")
     print(f"   Rust LOC: {rust_loc}")
     print(f"   Velocity: {velocity} vectors/day (7-day avg)")

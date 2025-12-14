@@ -15,7 +15,12 @@
     "*.tmp",
     "node_modules",
     "recordings.db*",
-    "compare_output"
+    "compare_output",
+    "htmlcov",
+    ".coverage",
+    "coverage.xml",
+    "cobertura.xml",
+    ".llm_archive"
   ],
   "include_patterns": [
     "*.rs",
@@ -24,12 +29,59 @@
     "*.py",
     "*.sh",
     "*.json",
-    "*.xml",
-    "*.txt",
     "Dockerfile",
     "LICENSE"
   ],
   "lenses": {
+    "architecture": {
+      "description": "High-level code structure and configuration (optimized)",
+      "include": [
+        "*.py",
+        "*.rs",
+        "*.js",
+        "*.ts",
+        "*.json",
+        "*.toml",
+        "*.yaml",
+        "*.yml",
+        "Dockerfile",
+        "Makefile",
+        "README.md"
+      ],
+      "exclude": [
+        "tests/**",
+        "test/**",
+        "docs/**",
+        "htmlcov/**",
+        "coverage.xml",
+        ".coverage",
+        "*.html",
+        "*.css",
+        "*.txt",
+        "CONTEXT.txt",
+        "test_vectors/**",
+        "research/**",
+        "LLM/**",
+        ".llm_archive/**",
+        "target/**",
+        "examples/**",
+        "scripts/**",
+        "TUTORIAL.md",
+        "TESTING.md",
+        "PLUGIN_GUIDE.md",
+        "QA_INFRASTRUCTURE.md",
+        "SYSTEM_INSTRUCTIONS.md",
+        "CONTRIBUTING.md",
+        "RUST_ROADMAP.md",
+        "CHANGELOG.md",
+        ".github/**",
+        ".claude/**"
+      ],
+      "truncate_mode": "structure",
+      "truncate": 2000,
+      "sort_by": "name",
+      "sort_order": "asc"
+    },
     "docs": {
       "description": "Documentation and guides for pm_encoder",
       "include": [

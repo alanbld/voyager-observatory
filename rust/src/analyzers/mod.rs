@@ -3,7 +3,11 @@ pub mod rust_analyzer;
 pub mod generic;
 
 pub use rust_analyzer::RustAnalyzer;
-pub use generic::{GenericAnalyzer, AnalyzerConfig, create_python_analyzer, create_javascript_analyzer, create_shell_analyzer, create_markdown_analyzer};
+pub use generic::{
+    GenericAnalyzer, AnalyzerConfig,
+    create_python_analyzer, create_javascript_analyzer, create_shell_analyzer,
+    create_markdown_analyzer, create_json_analyzer, create_yaml_analyzer
+};
 
 /// Result of file analysis containing extracted metadata
 #[derive(Debug, Clone)]
@@ -18,6 +22,8 @@ pub struct AnalysisResult {
     pub markers: Vec<String>,
     pub category: String,
     pub critical_sections: Vec<(usize, usize)>,
+    /// Structure ranges for truncation (1-indexed line numbers)
+    pub structure_ranges: Vec<(usize, usize)>,
 }
 
 impl AnalysisResult {
@@ -34,7 +40,25 @@ impl AnalysisResult {
             markers: Vec::new(),
             category: "library".to_string(),
             critical_sections: Vec::new(),
+            structure_ranges: Vec::new(),
         }
+    }
+}
+
+/// Get the appropriate analyzer for a file based on its extension
+pub fn get_analyzer_for_file(file_path: &str) -> Option<Box<dyn LanguageAnalyzer>> {
+    let path = std::path::Path::new(file_path);
+    let ext = path.extension()?.to_str()?;
+
+    match ext {
+        "py" | "pyw" => Some(Box::new(create_python_analyzer())),
+        "js" | "jsx" | "ts" | "tsx" | "mjs" => Some(Box::new(create_javascript_analyzer())),
+        "sh" | "bash" | "zsh" => Some(Box::new(create_shell_analyzer())),
+        "rs" => Some(Box::new(RustAnalyzer::new())),
+        "md" | "markdown" => Some(Box::new(create_markdown_analyzer())),
+        "json" => Some(Box::new(create_json_analyzer())),
+        "yml" | "yaml" => Some(Box::new(create_yaml_analyzer())),
+        _ => None,
     }
 }
 

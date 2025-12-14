@@ -1,0 +1,44 @@
+{
+  "name": "cli_01_help",
+  "description": "Verify --help outputs usage information with all flags",
+  "category": "cli",
+  "input": {
+    "cli_args": [
+      "--help"
+    ]
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout_contains": [
+      "--help",
+      "--version",
+      "-o",
+      "--output",
+      "-c",
+      "--config",
+      "--include",
+      "--exclude",
+      "--sort-by",
+      "--sort-order",
+      "--truncate",
+      "--truncate-mode",
+      "--lens",
+      "PROJECT_ROOT"
+    ],
+    "stdout_contains_any": [
+      "Plus/Minus format",
+      "output file",
+      "configuration file",
+      "glob patterns",
+      "sort",
+      "truncate",
+      "lens"
+    ],
+    "stderr": "",
+    "reference_output": "usage: pm_encoder.py [-h] [--create-plugin LANGUAGE]\n                     [--plugin-prompt LANGUAGE] [--init-prompt]\n                     [--init-lens LENS] [--target {claude,gemini}] [--version]\n                     [-o OUTPUT] [-c CONFIG] [--include [INCLUDE ...]]\n                     [--exclude [EXCLUDE ...]] [--sort-by {name,mtime,ctime}]\n                     [--sort-order {asc,desc}] [--truncate N]\n                     [--truncate-mode {simple,smart,structure}]\n                     [--truncate-summary] [--no-truncate-summary]\n                     [--truncate-exclude [TRUNCATE_EXCLUDE ...]]\n                     [--truncate-stats] [--language-plugins DIR] [--lens NAME]\n                     [project_root]\n\nSerialize project files into the Plus/Minus format with intelligent truncation.\n\npositional arguments:\n  project_root          The root directory of the project to serialize.\n\noptional arguments:\n  -h, --help            show this help message and exit\n  --create-plugin LANGUAGE\n                        Generate a plugin template for LANGUAGE and exit\n  --plugin-prompt LANGUAGE\n                        Generate an AI prompt to create a plugin for LANGUAGE and exit\n  --init-prompt         Generate instruction file and CONTEXT.txt for AI CLI integration and exit\n  --init-lens LENS      Lens to use with --init-prompt (default: architecture)\n  --target {claude,gemini}\n                        Target AI for --init-prompt: 'claude' (CLAUDE.md) or 'gemini' (GEMINI_INSTRUCTIONS.txt) (default: claude)\n  --version             show program's version number and exit\n  -o OUTPUT, --output OUTPUT\n                        Output file path. Defaults to standard output.\n  -c CONFIG, --config CONFIG\n                        Path to a JSON configuration file for ignore/include patterns.\n                        Defaults to ./.pm_encoder_config.json\n  --include [INCLUDE ...]\n                        One or more glob patterns for files to include. Overrides config includes.\n  --exclude [EXCLUDE ...]\n                        One or more glob patterns for files/dirs to exclude. Adds to config excludes.\n  --sort-by {name,mtime,ctime}\n                        Sort files by 'name' (default), 'mtime' (modification time), or 'ctime' (creation time).\n  --sort-order {asc,desc}\n                        Sort order: 'asc' (ascending, default) or 'desc' (descending).\n  --truncate N          Truncate files exceeding N lines (default: 0 = no truncation)\n  --truncate-mode {simple,smart,structure}\n                        Truncation strategy: 'simple' (keep first N lines), 'smart' (language-aware), or 'structure' (signatures only)\n  --truncate-summary    Include analysis summary in truncation marker (default: True)\n  --no-truncate-summary\n                        Disable truncation summary\n  --truncate-exclude [TRUNCATE_EXCLUDE ...]\n                        Never truncate files matching these patterns\n  --truncate-stats      Show detailed truncation statistics report\n  --language-plugins DIR\n                        Custom language analyzer plugins directory\n  --lens NAME           Apply a context lens (architecture|debug|security|onboarding|custom)\n\nExamples:\n  # Basic serialization\n  ./pm_encoder.py . -o output.txt\n\n  # With smart truncation (500 lines per file)\n  ./pm_encoder.py . --truncate 500 --truncate-mode smart -o output.txt\n\n  # Truncate with stats\n  ./pm_encoder.py . --truncate 300 --truncate-stats\n\n  # Exclude certain files from truncation\n  ./pm_encoder.py . --truncate 500 --truncate-exclude \"*.md\" \"LICENSE\"\n\n  # Create a plugin template\n  ./pm_encoder.py --create-plugin rust\n\n  # Generate AI prompt for plugin creation\n  ./pm_encoder.py --plugin-prompt kotlin\n        \n"
+  },
+  "validation_mode": "semantic",
+  "notes": "Help text format may differ (argparse vs clap), but must contain same flags",
+  "python_validated": true,
+  "rust_status": "pending"
+}

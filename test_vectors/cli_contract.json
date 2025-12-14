@@ -1,0 +1,503 @@
+{
+  "schema_version": "1.0",
+  "tool_name": "pm_encoder",
+  "reference_version": "1.5.0",
+  "description": "CLI contract for pm_encoder - defines expected interface",
+  "generated_by": "generate_cli_contract.py",
+  "arguments": [
+    {
+      "name": "--help",
+      "short": "-h",
+      "type": "bool",
+      "required": false,
+      "default": null,
+      "choices": null,
+      "help_contains": [
+        "help",
+        "message"
+      ],
+      "category": "meta",
+      "rust_status": "implemented"
+    },
+    {
+      "name": "--create-plugin",
+      "short": null,
+      "type": "str",
+      "required": false,
+      "default": null,
+      "choices": null,
+      "help_contains": [
+        "generate",
+        "plugin",
+        "template",
+        "language",
+        "exit"
+      ],
+      "metavar": "LANGUAGE",
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "plugins"
+    },
+    {
+      "name": "--plugin-prompt",
+      "short": null,
+      "type": "str",
+      "required": false,
+      "default": null,
+      "choices": null,
+      "help_contains": [
+        "generate",
+        "prompt",
+        "create",
+        "plugin",
+        "language"
+      ],
+      "metavar": "LANGUAGE",
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "plugins"
+    },
+    {
+      "name": "--init-prompt",
+      "short": null,
+      "type": "bool",
+      "required": false,
+      "default": "False",
+      "choices": null,
+      "help_contains": [
+        "generate",
+        "instruction",
+        "file",
+        "context.txt",
+        "cli"
+      ],
+      "metavar": null,
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "init"
+    },
+    {
+      "name": "--init-lens",
+      "short": null,
+      "type": "str",
+      "required": false,
+      "default": "architecture",
+      "choices": null,
+      "help_contains": [
+        "lens",
+        "use",
+        "with",
+        "--init-prompt",
+        "default:"
+      ],
+      "metavar": "LENS",
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "init"
+    },
+    {
+      "name": "--target",
+      "short": null,
+      "type": "str",
+      "required": false,
+      "default": "claude",
+      "choices": [
+        "claude",
+        "gemini"
+      ],
+      "help_contains": [
+        "target",
+        "--init-prompt:",
+        "'claude'",
+        "claude.md",
+        "'gemini'"
+      ],
+      "metavar": null,
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "init"
+    },
+    {
+      "name": "--version",
+      "short": null,
+      "type": "version",
+      "required": false,
+      "default": "==SUPPRESS==",
+      "choices": null,
+      "help_contains": [
+        "show",
+        "program's",
+        "version",
+        "number",
+        "exit"
+      ],
+      "metavar": null,
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "meta"
+    },
+    {
+      "name": "project_root",
+      "short": null,
+      "type": "path",
+      "required": false,
+      "default": null,
+      "choices": null,
+      "help_contains": [
+        "root",
+        "directory",
+        "project",
+        "serialize"
+      ],
+      "metavar": null,
+      "nargs": "?",
+      "rust_status": "pending",
+      "category": "core"
+    },
+    {
+      "name": "--output",
+      "short": "-o",
+      "type": "str",
+      "required": false,
+      "default": "-",
+      "choices": null,
+      "help_contains": [
+        "output",
+        "file",
+        "path",
+        "defaults",
+        "standard"
+      ],
+      "metavar": null,
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "core"
+    },
+    {
+      "name": "--config",
+      "short": "-c",
+      "type": "str",
+      "required": false,
+      "default": ".pm_encoder_config.json",
+      "choices": null,
+      "help_contains": [
+        "path",
+        "json",
+        "configuration",
+        "file",
+        "ignore/include"
+      ],
+      "metavar": null,
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "core"
+    },
+    {
+      "name": "--include",
+      "short": null,
+      "type": "list",
+      "required": false,
+      "default": "[]",
+      "choices": null,
+      "help_contains": [
+        "one",
+        "more",
+        "glob",
+        "patterns",
+        "files"
+      ],
+      "metavar": null,
+      "nargs": "*",
+      "rust_status": "pending",
+      "category": "filtering"
+    },
+    {
+      "name": "--exclude",
+      "short": null,
+      "type": "list",
+      "required": false,
+      "default": "[]",
+      "choices": null,
+      "help_contains": [
+        "one",
+        "more",
+        "glob",
+        "patterns",
+        "files/dirs"
+      ],
+      "metavar": null,
+      "nargs": "*",
+      "rust_status": "pending",
+      "category": "filtering"
+    },
+    {
+      "name": "--sort-by",
+      "short": null,
+      "type": "str",
+      "required": false,
+      "default": "name",
+      "choices": [
+        "name",
+        "mtime",
+        "ctime"
+      ],
+      "help_contains": [
+        "sort",
+        "files",
+        "'name'",
+        "default",
+        "'mtime'"
+      ],
+      "metavar": null,
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "sorting"
+    },
+    {
+      "name": "--sort-order",
+      "short": null,
+      "type": "str",
+      "required": false,
+      "default": "asc",
+      "choices": [
+        "asc",
+        "desc"
+      ],
+      "help_contains": [
+        "sort",
+        "order:",
+        "'asc'",
+        "ascending",
+        "default"
+      ],
+      "metavar": null,
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "sorting"
+    },
+    {
+      "name": "--truncate",
+      "short": null,
+      "type": "int",
+      "required": false,
+      "default": "0",
+      "choices": null,
+      "help_contains": [
+        "truncate",
+        "files",
+        "exceeding",
+        "lines",
+        "default:"
+      ],
+      "metavar": "N",
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "truncation"
+    },
+    {
+      "name": "--truncate-mode",
+      "short": null,
+      "type": "str",
+      "required": false,
+      "default": "simple",
+      "choices": [
+        "simple",
+        "smart",
+        "structure"
+      ],
+      "help_contains": [
+        "truncation",
+        "strategy:",
+        "'simple'",
+        "keep",
+        "first"
+      ],
+      "metavar": null,
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "truncation"
+    },
+    {
+      "name": "--truncate-summary",
+      "short": null,
+      "type": "bool",
+      "required": false,
+      "default": "True",
+      "choices": null,
+      "help_contains": [
+        "include",
+        "analysis",
+        "summary",
+        "truncation",
+        "marker"
+      ],
+      "metavar": null,
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "truncation"
+    },
+    {
+      "name": "--no-truncate-summary",
+      "short": null,
+      "type": "bool",
+      "required": false,
+      "default": "True",
+      "choices": null,
+      "help_contains": [
+        "disable",
+        "truncation",
+        "summary"
+      ],
+      "metavar": null,
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "truncation"
+    },
+    {
+      "name": "--truncate-exclude",
+      "short": null,
+      "type": "list",
+      "required": false,
+      "default": "[]",
+      "choices": null,
+      "help_contains": [
+        "never",
+        "truncate",
+        "files",
+        "matching",
+        "these"
+      ],
+      "metavar": null,
+      "nargs": "*",
+      "rust_status": "pending",
+      "category": "truncation"
+    },
+    {
+      "name": "--truncate-stats",
+      "short": null,
+      "type": "bool",
+      "required": false,
+      "default": "False",
+      "choices": null,
+      "help_contains": [
+        "show",
+        "detailed",
+        "truncation",
+        "statistics",
+        "report"
+      ],
+      "metavar": null,
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "truncation"
+    },
+    {
+      "name": "--language-plugins",
+      "short": null,
+      "type": "str",
+      "required": false,
+      "default": null,
+      "choices": null,
+      "help_contains": [
+        "custom",
+        "language",
+        "analyzer",
+        "plugins",
+        "directory"
+      ],
+      "metavar": "DIR",
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "plugins"
+    },
+    {
+      "name": "--lens",
+      "short": null,
+      "type": "str",
+      "required": false,
+      "default": null,
+      "choices": null,
+      "help_contains": [
+        "apply",
+        "context",
+        "lens",
+        "architecture|debug|security|onboarding|custom"
+      ],
+      "metavar": "NAME",
+      "nargs": null,
+      "rust_status": "pending",
+      "category": "lenses"
+    }
+  ],
+  "categories": {
+    "core": [
+      "project_root",
+      "--output",
+      "--config"
+    ],
+    "filtering": [
+      "--include",
+      "--exclude"
+    ],
+    "sorting": [
+      "--sort-by",
+      "--sort-order"
+    ],
+    "truncation": [
+      "--truncate",
+      "--truncate-mode",
+      "--truncate-summary",
+      "--no-truncate-summary",
+      "--truncate-exclude",
+      "--truncate-stats"
+    ],
+    "lenses": [
+      "--lens"
+    ],
+    "plugins": [
+      "--language-plugins",
+      "--create-plugin",
+      "--plugin-prompt"
+    ],
+    "init": [
+      "--init-prompt",
+      "--init-lens",
+      "--target"
+    ],
+    "meta": [
+      "--help",
+      "--version"
+    ]
+  },
+  "rust_priority": {
+    "critical": [
+      "--help",
+      "--version",
+      "project_root",
+      "--output"
+    ],
+    "high": [
+      "--config",
+      "--include",
+      "--exclude",
+      "--sort-by",
+      "--sort-order"
+    ],
+    "medium": [
+      "--truncate",
+      "--truncate-mode",
+      "--lens"
+    ],
+    "low": [
+      "--truncate-summary",
+      "--truncate-exclude",
+      "--truncate-stats",
+      "--language-plugins",
+      "--create-plugin",
+      "--plugin-prompt",
+      "--init-prompt",
+      "--init-lens",
+      "--target"
+    ]
+  }
+}

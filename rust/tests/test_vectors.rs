@@ -924,6 +924,208 @@ fn test_analyzer_10_structure_preservation() {
 }
 
 // ============================================================================
+// CLI Tests (4 vectors) - Interface Parity
+// ============================================================================
+
+use std::process::Command;
+
+/// CLI test vector structure (different from serialization vectors)
+#[derive(Debug, Deserialize)]
+struct CliTestVector {
+    name: String,
+    description: String,
+    category: String,
+    input: CliTestInput,
+    expected: CliTestExpected,
+    validation_mode: String,
+    #[serde(default)]
+    notes: String,
+    python_validated: bool,
+    rust_status: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct CliTestInput {
+    cli_args: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CliTestExpected {
+    #[serde(default)]
+    exit_code: Option<i32>,
+    #[serde(default)]
+    exit_code_nonzero: Option<bool>,
+    #[serde(default)]
+    stdout_contains: Vec<String>,
+    #[serde(default)]
+    stdout_contains_any: Vec<String>,
+    #[serde(default)]
+    stdout_regex: Option<String>,
+    #[serde(default)]
+    stderr: Option<String>,
+    #[serde(default)]
+    stderr_contains: Vec<String>,
+    #[serde(default)]
+    stderr_contains_any: Vec<String>,
+    #[serde(default)]
+    reference_output: Option<String>,
+    #[serde(default)]
+    reference_stderr: Option<String>,
+}
+
+/// Load a CLI test vector from JSON file
+fn load_cli_vector(name: &str) -> CliTestVector {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.pop(); // Go up to repo root
+    path.push("test_vectors");
+    path.push("rust_parity");
+    path.push(format!("{}.json", name));
+
+    let content = fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("Failed to load CLI test vector {}: {}", name, e));
+
+    serde_json::from_str(&content)
+        .unwrap_or_else(|e| panic!("Failed to parse CLI test vector {}: {}", name, e))
+}
+
+/// Run the pm_encoder binary with given arguments
+fn run_cli(args: &[String]) -> std::process::Output {
+    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    path.push("target");
+    path.push("debug");
+    path.push("pm_encoder");
+
+    Command::new(&path)
+        .args(args)
+        .output()
+        .expect("Failed to execute pm_encoder binary")
+}
+
+#[test]
+fn test_cli_01_help() {
+    let vector = load_cli_vector("cli_01_help");
+    assert!(vector.python_validated, "Vector not validated by Python");
+
+    let output = run_cli(&vector.input.cli_args);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Check exit code
+    if let Some(expected_code) = vector.expected.exit_code {
+        assert_eq!(
+            output.status.code().unwrap_or(-1),
+            expected_code,
+            "Exit code mismatch"
+        );
+    }
+
+    // Check that required flags are present (semantic validation)
+    for flag in &vector.expected.stdout_contains {
+        assert!(
+            stdout.contains(flag),
+            "Help output should contain flag: '{}'",
+            flag
+        );
+    }
+
+    // Check that at least one description is present
+    if !vector.expected.stdout_contains_any.is_empty() {
+        let has_any = vector.expected.stdout_contains_any.iter()
+            .any(|desc| stdout.to_lowercase().contains(&desc.to_lowercase()));
+        assert!(
+            has_any,
+            "Help output should contain at least one of: {:?}",
+            vector.expected.stdout_contains_any
+        );
+    }
+}
+
+#[test]
+fn test_cli_02_version() {
+    let vector = load_cli_vector("cli_02_version");
+    assert!(vector.python_validated, "Vector not validated by Python");
+
+    let output = run_cli(&vector.input.cli_args);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Check exit code
+    if let Some(expected_code) = vector.expected.exit_code {
+        assert_eq!(
+            output.status.code().unwrap_or(-1),
+            expected_code,
+            "Exit code mismatch"
+        );
+    }
+
+    // Check version format using regex
+    if let Some(regex_pattern) = &vector.expected.stdout_regex {
+        let re = regex::Regex::new(regex_pattern).expect("Invalid regex in test vector");
+        assert!(
+            re.is_match(&stdout),
+            "Version output '{}' should match pattern '{}'",
+            stdout.trim(),
+            regex_pattern
+        );
+    }
+}
+
+#[test]
+fn test_cli_03_invalid_arg() {
+    let vector = load_cli_vector("cli_03_invalid_arg");
+    assert!(vector.python_validated, "Vector not validated by Python");
+
+    let output = run_cli(&vector.input.cli_args);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Check for non-zero exit code
+    if vector.expected.exit_code_nonzero == Some(true) {
+        assert!(
+            !output.status.success(),
+            "Command should fail with non-zero exit code"
+        );
+    }
+
+    // Check that error message contains expected terms
+    if !vector.expected.stderr_contains_any.is_empty() {
+        let has_any = vector.expected.stderr_contains_any.iter()
+            .any(|term| stderr.to_lowercase().contains(&term.to_lowercase()));
+        assert!(
+            has_any,
+            "Error output '{}' should contain at least one of: {:?}",
+            stderr,
+            vector.expected.stderr_contains_any
+        );
+    }
+}
+
+#[test]
+fn test_cli_04_missing_dir() {
+    let vector = load_cli_vector("cli_04_missing_dir");
+    assert!(vector.python_validated, "Vector not validated by Python");
+
+    let output = run_cli(&vector.input.cli_args);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Check for non-zero exit code
+    if vector.expected.exit_code_nonzero == Some(true) {
+        assert!(
+            !output.status.success(),
+            "Command should fail with non-zero exit code for missing directory"
+        );
+    }
+
+    // Check that error message indicates the problem
+    if !vector.expected.stderr_contains_any.is_empty() {
+        let has_any = vector.expected.stderr_contains_any.iter()
+            .any(|term| stderr.to_lowercase().contains(&term.to_lowercase()));
+        assert!(
+            has_any,
+            "Error output '{}' should indicate missing directory",
+            stderr
+        );
+    }
+}
+
+// ============================================================================
 // Infrastructure Tests
 // ============================================================================
 

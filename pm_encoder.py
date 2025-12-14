@@ -1040,11 +1040,42 @@ class LensManager:
     # Built-in lenses
     BUILT_IN_LENSES = {
         "architecture": {
-            "description": "High-level structure, interfaces, configuration",
+            "description": "High-level code structure and configuration",
             "truncate_mode": "structure",
             "truncate": 2000,  # Safety limit for non-code files
-            "exclude": ["tests/**", "test/**", "docs/**", "doc/**", "assets/**", "*.log", "__pycache__"],
-            "include": ["*.py", "*.js", "*.ts", "*.jsx", "*.tsx", "*.rs", "*.json", "*.toml", "*.yaml", "*.yml", "Dockerfile", "*.md"],
+            "exclude": [
+                # Test directories
+                "tests/**", "test/**",
+                # Documentation directories (use docs lens instead)
+                "docs/**", "doc/**",
+                # Assets and logs
+                "assets/**", "*.log", "__pycache__",
+                # Coverage reports and data
+                "htmlcov/**", "coverage.xml", ".coverage", "cobertura.xml",
+                # Generated web files
+                "*.html", "*.css", "*.map",
+                # Context files (prevent recursion)
+                "CONTEXT.txt", "*.txt",
+                # Test data files
+                "test_vectors/**",
+                # Research and LLM conversation data
+                "research/**", "LLM/**", ".llm_archive/**",
+                # Build artifacts (redundant with global, but explicit)
+                "target/**", "dist/**", "build/**",
+                # Scripts (operational, not architecture)
+                "scripts/**",
+                # Documentation files (use docs lens instead)
+                "TUTORIAL.md", "TESTING.md", "PLUGIN_GUIDE.md",
+                "QA_INFRASTRUCTURE.md", "SYSTEM_INSTRUCTIONS.md",
+                "CONTRIBUTING.md", "RUST_ROADMAP.md", "CHANGELOG.md",
+                # Examples
+                "examples/**",
+                # CI/CD workflows
+                ".github/**",
+                # Editor/IDE settings
+                ".claude/**", ".vscode/**", ".idea/**"
+            ],
+            "include": ["*.py", "*.js", "*.ts", "*.jsx", "*.tsx", "*.rs", "*.json", "*.toml", "*.yaml", "*.yml", "Dockerfile", "Makefile", "README.md"],
             "sort_by": "name",
             "sort_order": "asc"
         },
@@ -1331,23 +1362,31 @@ def serialize(
         for item in sorted_items:
             relative_path = item.relative_to(project_root)
 
+            # Check ignore patterns FIRST (they take precedence over includes)
+            # This supports lens excludes like "docs/**", "tests/**" etc.
+            is_ignored = any(fnmatch(part, pattern) for part in relative_path.parts for pattern in ignore_patterns)
+            # Also check full path patterns for glob-style excludes (e.g., "docs/**", "test_vectors/**")
+            is_path_ignored = any(
+                fnmatch(relative_path.as_posix(), pattern) or
+                fnmatch(relative_path.as_posix() + "/", pattern.rstrip("*"))
+                for pattern in ignore_patterns
+            )
+
+            if is_ignored or is_path_ignored:
+                if item.is_dir():
+                    print(f"[SKIP DIR] {relative_path.as_posix()} (matches ignore pattern)", file=sys.stderr)
+                # Skip files and dirs that match ignore patterns
+                continue
+
             # Check if this path is explicitly included
             is_explicitly_included = include_patterns and any(
                 fnmatch(relative_path.as_posix(), pattern) for pattern in include_patterns
             )
 
-            # For files: if explicitly included, add to files_to_process regardless of ignore patterns
+            # For files: if explicitly included, add to files_to_process
             if item.is_file() and is_explicitly_included:
                 files_to_process.append(item)
                 print(f"[KEEP] {relative_path.as_posix()} (explicitly included)", file=sys.stderr)
-                continue
-
-            # Check ignore patterns (only applies if not explicitly included)
-            is_ignored = any(fnmatch(part, pattern) for part in relative_path.parts for pattern in ignore_patterns)
-            if is_ignored:
-                if item.is_dir():
-                    print(f"[SKIP DIR] {relative_path.as_posix()} (matches ignore pattern)", file=sys.stderr)
-                # For files, skip silently if ignored
                 continue
 
             # Process directories and remaining files
