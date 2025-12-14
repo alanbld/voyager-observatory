@@ -513,3 +513,143 @@ Every change to pm_encoder ripples through the AI collaboration ecosystem. Devel
 **Last Updated**: 2025-12-12  
 **Maintainer**: Review and update as pm_encoder evolves  
 **Feedback**: Use pm_encoder's own output to share context when discussing improvements to these instructions
+
+---
+
+## Research Framework Integration
+
+### The Twins Comparative Study
+
+pm_encoder is now part of an active software engineering research project comparing Python (reference) and Rust (parity) implementations using test vector-driven development.
+
+**Key principle:** Every development session contributes to empirical research on language trade-offs and TDD effectiveness.
+
+### Research-Aware Development Workflow
+
+When working on pm_encoder, AI assistants should:
+
+1. **Track Metrics** (After significant changes)
+   ```bash
+   make track-metrics
+   ```
+   This captures daily snapshot for research.
+
+2. **Test Vectors First** (For Rust development)
+   - Extract behavior from Python tests
+   - Create test vector JSON
+   - Implement Rust to pass vector
+   - Never skip the test vector step
+
+3. **Document Findings** (When discovering insights)
+   - Bug taxonomy: Log with appropriate tags
+   - Performance observations: Note in commit messages
+   - Velocity data: Automatic from snapshots
+
+### Research Context Files
+
+**Essential reading:**
+- `research/RESEARCH_FRAMEWORK.md` - KB-optimized overview (uploaded to Claude KB)
+- `test_vectors/rust_parity/README.md` - Test vector status
+
+**Full methodology:**
+- `research/METHODOLOGY.md` - Complete research design
+- `research/README.md` - Project overview
+
+### The Test Vector Contract
+
+**Core principle:** Python defines behavior. Rust must reproduce exactly.
+
+```
+Python Test → Extract Vector → Rust Test → Implementation
+     ↓              ↓              ↓            ↓
+  Validated    Specification   RED phase   GREEN phase
+```
+
+**Never write Rust features without test vectors first.** This measures TDD acceleration (hypothesis: 3-4x faster).
+
+### Research Session Protocol
+
+When starting a pm_encoder development session:
+
+```markdown
+Session: YYYY-MM-DD | pm_encoder-{context} | Turn: N
+Context: serialized
+
+[At session start, note research status:]
+Current parity: X% (Y/30 vectors)
+Timeline: Z days ahead/behind schedule
+Phase: 1|2|3|4
+
+[During development:]
+- Document any bugs with taxonomy
+- Note implementation time for features
+- Track test vector creation vs implementation time
+
+[At session end:]
+- Run `make track-metrics` if significant progress
+- Update research findings if insights discovered
+```
+
+### Multi-AI Research Coordination
+
+The Twins involves multiple AI systems:
+
+| AI | Role | Research Contribution |
+|----|------|----------------------|
+| Claude.ai (Opus/Sonnet) | Architect | Strategic decisions, methodology validation |
+| AI Studio (Gemini) | Analyst | Performance analysis, statistical insights |
+| Claude Code Server | Implementer | Code generation, test execution, metrics collection |
+
+**Handoff protocol:** Each AI documents decisions and updates research context.
+
+### Research Milestones
+
+Current targets (as of 2025-12-14):
+
+| Phase | Target Date | Vectors | Parity | Status |
+|-------|-------------|---------|--------|--------|
+| Phase 1 | Dec 14, 2025 | 9/30 | 30% | ✅ COMPLETE |
+| Phase 2 | Dec 28, 2025 | 20/30 | 67% | 🔄 IN PROGRESS |
+| Phase 3 | Jan 31, 2026 | 27/30 | 90% | 📋 PLANNED |
+| Phase 4 | Mar 31, 2026 | 30/30 | 100% | 📋 PLANNED |
+
+**Current status: 13 days ahead of schedule** ⚡
+
+### Key Research Questions
+
+1. **RQ1:** Do test parity % and coverage % converge to ~95%?
+2. **RQ2:** Does TDD accelerate cross-language parity by 3-4x?
+3. **RQ3:** What's the LOC ratio at full parity? (Currently: Rust is 19% of Python!)
+4. **RQ4:** Do static types reduce test burden vs dynamic types?
+
+### Research-Aware Commit Messages
+
+Include research context when relevant:
+
+```bash
+git commit -m "feat: Python analyzer complete
+
+Parity impact: +3.3% (10 → 11 vectors)
+Implementation time: 2 hours
+Test vector creation: 30 minutes
+Ratio: 4x faster than traditional estimate
+
+Research notes:
+- Pattern matching simplified implementation
+- Type safety caught 2 edge cases at compile time
+- Total Rust LOC now 650 (still <25% of Python)
+"
+```
+
+### Research Ethics
+
+1. **No cherry-picking:** Report all data, including negative results
+2. **Full transparency:** All code, data, methodology public
+3. **Honest limitations:** Document what we can't conclude
+4. **Reproducibility:** Everything versioned and documented
+
+---
+
+**Publication target:** ICSE 2027 (International Conference on Software Engineering)  
+**Data license:** CC-BY-4.0  
+**Code license:** MIT
