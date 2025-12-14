@@ -1,0 +1,31 @@
+{
+  "name": "analyzer_06_rust_struct",
+  "description": "Verify Rust struct and enum detection",
+  "category": "analyzer",
+  "input": {
+    "files": {
+      "types.rs": "pub struct User {\n    pub name: String,\n    pub email: String,\n}\n\nstruct Config {\n    port: u16,\n}\n\nenum Status {\n    Active,\n    Inactive,\n}\n"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["types.rs"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ types.rs ++++++++++",
+      "pub struct User",
+      "struct Config",
+      "enum Status"
+    ],
+    "metadata": {
+      "file_count": 1,
+      "language": "Rust",
+      "structs_detected": ["User", "Config"],
+      "enums_detected": ["Status"]
+    }
+  },
+  "python_validated": false,
+  "rust_status": "pending"
+}

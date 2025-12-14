@@ -1,0 +1,32 @@
+{
+  "name": "analyzer_07_rust_function",
+  "description": "Verify Rust function detection and main entry point",
+  "category": "analyzer",
+  "input": {
+    "files": {
+      "main.rs": "fn calculate(x: i32, y: i32) -> i32 {\n    x + y\n}\n\npub fn process_data(data: &str) -> String {\n    data.to_uppercase()\n}\n\nfn main() {\n    println!(\"Hello, world!\");\n}\n"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["main.rs"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ main.rs ++++++++++",
+      "fn calculate",
+      "pub fn process_data",
+      "fn main()"
+    ],
+    "metadata": {
+      "file_count": 1,
+      "language": "Rust",
+      "functions_detected": ["calculate", "process_data", "main"],
+      "entry_points": ["main"],
+      "category": "application"
+    }
+  },
+  "python_validated": false,
+  "rust_status": "pending"
+}

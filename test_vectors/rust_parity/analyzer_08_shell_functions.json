@@ -1,0 +1,32 @@
+{
+  "name": "analyzer_08_shell_functions",
+  "description": "Verify Shell function detection and shebang identification",
+  "category": "analyzer",
+  "input": {
+    "files": {
+      "deploy.sh": "#!/bin/bash\n\nfunction setup_env() {\n    export PATH=$PATH:/usr/local/bin\n}\n\ndeploy() {\n    echo \"Deploying...\"\n    setup_env\n}\n\ncleanup() {\n    rm -rf /tmp/deploy\n}\n"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["deploy.sh"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ deploy.sh ++++++++++",
+      "#!/bin/bash",
+      "function setup_env",
+      "deploy()",
+      "cleanup()"
+    ],
+    "metadata": {
+      "file_count": 1,
+      "language": "Shell",
+      "functions_detected": ["setup_env", "deploy", "cleanup"],
+      "has_shebang": true
+    }
+  },
+  "python_validated": false,
+  "rust_status": "pending"
+}

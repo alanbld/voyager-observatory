@@ -1,0 +1,32 @@
+{
+  "name": "analyzer_02_python_function",
+  "description": "Verify Python function detection and entry point identification",
+  "category": "analyzer",
+  "input": {
+    "files": {
+      "utils.py": "def calculate_total(items):\n    return sum(items)\n\ndef format_output(data):\n    \"\"\"Format data for display.\"\"\"\n    return str(data)\n\nif __name__ == '__main__':\n    print(calculate_total([1, 2, 3]))\n"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["utils.py"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ utils.py ++++++++++",
+      "def calculate_total",
+      "def format_output",
+      "if __name__ == '__main__':"
+    ],
+    "metadata": {
+      "file_count": 1,
+      "language": "Python",
+      "functions_detected": ["calculate_total", "format_output"],
+      "entry_points": ["__main__ block"],
+      "category": "application"
+    }
+  },
+  "python_validated": false,
+  "rust_status": "pending"
+}

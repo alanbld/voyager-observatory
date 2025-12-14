@@ -1,0 +1,34 @@
+{
+  "name": "serial_01_basic_sorting",
+  "description": "Verify files are sorted alphabetically by path (ascending)",
+  "category": "serialization",
+  "input": {
+    "files": {
+      "zebra.txt": "last alphabetically",
+      "alpha.txt": "first alphabetically",
+      "beta.txt": "second alphabetically",
+      "dir/charlie.txt": "nested file"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["alpha.txt", "beta.txt", "dir/charlie.txt", "zebra.txt"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ alpha.txt ++++++++++",
+      "++++++++++ beta.txt ++++++++++",
+      "++++++++++ dir/charlie.txt ++++++++++",
+      "++++++++++ zebra.txt ++++++++++"
+    ],
+    "sort_order": ["alpha.txt", "beta.txt", "dir/charlie.txt", "zebra.txt"],
+    "metadata": {
+      "file_count": 4,
+      "sort_mode": "name_ascending",
+      "verified_order": true
+    }
+  },
+  "python_validated": true,
+  "rust_status": "passing"
+}

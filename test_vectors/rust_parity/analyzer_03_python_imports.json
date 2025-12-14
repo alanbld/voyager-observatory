@@ -1,0 +1,33 @@
+{
+  "name": "analyzer_03_python_imports",
+  "description": "Verify Python import detection (both 'import' and 'from...import')",
+  "category": "analyzer",
+  "input": {
+    "files": {
+      "app.py": "import os\nimport sys\nfrom pathlib import Path\nfrom typing import Dict, List\nimport json\n\ndef main():\n    pass\n"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["app.py"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ app.py ++++++++++",
+      "import os",
+      "import sys",
+      "from pathlib import Path",
+      "from typing import Dict, List",
+      "import json"
+    ],
+    "metadata": {
+      "file_count": 1,
+      "language": "Python",
+      "imports_detected": ["os", "sys", "Path", "json"],
+      "functions_detected": ["main"]
+    }
+  },
+  "python_validated": false,
+  "rust_status": "pending"
+}

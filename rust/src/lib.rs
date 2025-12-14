@@ -18,6 +18,8 @@
 use std::fs;
 use std::io::Read;
 use std::path::Path;
+use serde::{Deserialize, Serialize};
+use globset::Glob;
 
 /// A file entry with its content and metadata
 #[derive(Debug, Clone)]
@@ -28,6 +30,26 @@ pub struct FileEntry {
     pub content: String,
     /// MD5 checksum of the content
     pub md5: String,
+}
+
+/// Configuration loaded from .pm_encoder_config.json
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Config {
+    /// Patterns to ignore (e.g., ["*.pyc", ".git"])
+    #[serde(default)]
+    pub ignore_patterns: Vec<String>,
+    /// Patterns to include (overrides ignore)
+    #[serde(default)]
+    pub include_patterns: Vec<String>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            ignore_patterns: vec![],
+            include_patterns: vec![],
+        }
+    }
 }
 
 /// Configuration for the encoder
@@ -53,7 +75,34 @@ impl Default for EncoderConfig {
 
 /// Returns the version of the pm_encoder library
 pub fn version() -> &'static str {
-    "0.2.0"
+    "0.3.0"
+}
+
+/// Load configuration from .pm_encoder_config.json
+///
+/// # Arguments
+///
+/// * `root` - Root directory to search for config file
+///
+/// # Returns
+///
+/// * `Ok(Config)` - Loaded configuration, or default if file doesn't exist
+/// * `Err(String)` - Error message if config file exists but is malformed
+pub fn load_config(root: &str) -> Result<Config, String> {
+    let config_path = Path::new(root).join(".pm_encoder_config.json");
+
+    if !config_path.exists() {
+        // No config file, return default
+        return Ok(Config::default());
+    }
+
+    let content = fs::read_to_string(&config_path)
+        .map_err(|e| format!("Failed to read config file: {}", e))?;
+
+    let config: Config = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse config file: {}", e))?;
+
+    Ok(config)
 }
 
 /// Calculate MD5 checksum of content
@@ -100,13 +149,104 @@ pub fn is_too_large(size: u64, limit: u64) -> bool {
     size > limit
 }
 
+/// Check if a path matches any of the given glob patterns
+///
+/// # Arguments
+///
+/// * `path` - Path to check (relative path)
+/// * `patterns` - List of glob patterns
+///
+/// # Returns
+///
+/// * `true` if path matches any pattern, `false` otherwise
+fn matches_patterns(path: &str, patterns: &[String]) -> bool {
+    for pattern_str in patterns {
+        // Try to compile the pattern
+        if let Ok(glob) = Glob::new(pattern_str) {
+            let matcher = glob.compile_matcher();
+
+            // Match against the full path
+            if matcher.is_match(path) {
+                return true;
+            }
+
+            // Also check if any path component or parent path matches
+            // This handles patterns like ".git" matching ".git/config"
+            let parts: Vec<&str> = path.split('/').collect();
+            for i in 0..parts.len() {
+                let component = parts[i];
+                // Check individual component
+                if matcher.is_match(component) {
+                    return true;
+                }
+                // Check partial paths (e.g., ".git" for ".git/config")
+                if i > 0 {
+                    let partial = parts[..=i].join("/");
+                    if matcher.is_match(&partial) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Determine if a file should be included based on ignore/include patterns
+///
+/// # Arguments
+///
+/// * `path` - Relative path to check
+/// * `ignore_patterns` - Patterns to ignore
+/// * `include_patterns` - Patterns to include (overrides ignore)
+///
+/// # Returns
+///
+/// * `true` if file should be included, `false` otherwise
+///
+/// # Logic
+///
+/// - If include_patterns is non-empty and ignore_patterns is empty:
+///   → Whitelist mode: only include files matching include_patterns
+/// - If both include_patterns and ignore_patterns are non-empty:
+///   → Precedence mode: include_patterns override ignore_patterns,
+///     but files matching neither follow ignore rules
+/// - If only ignore_patterns is non-empty:
+///   → Blacklist mode: exclude files matching ignore_patterns
+fn should_include_file(
+    path: &str,
+    ignore_patterns: &[String],
+    include_patterns: &[String],
+) -> bool {
+    let has_include = !include_patterns.is_empty();
+    let has_ignore = !ignore_patterns.is_empty();
+
+    // Case 1: Only include patterns (whitelist mode)
+    if has_include && !has_ignore {
+        return matches_patterns(path, include_patterns);
+    }
+
+    // Case 2: Both include and ignore patterns (precedence mode)
+    if has_include && has_ignore {
+        // Include patterns take precedence
+        if matches_patterns(path, include_patterns) {
+            return true;
+        }
+        // Otherwise apply ignore patterns
+        return !matches_patterns(path, ignore_patterns);
+    }
+
+    // Case 3: Only ignore patterns (blacklist mode)
+    !matches_patterns(path, ignore_patterns)
+}
+
 /// Walk directory and collect file entries
 ///
 /// # Arguments
 ///
 /// * `root` - Root directory path
-/// * `include` - Include patterns (empty = all files)
-/// * `exclude` - Exclude patterns
+/// * `ignore_patterns` - Patterns to ignore
+/// * `include_patterns` - Patterns to include (overrides ignore)
 /// * `max_size` - Maximum file size in bytes
 ///
 /// # Returns
@@ -115,8 +255,8 @@ pub fn is_too_large(size: u64, limit: u64) -> bool {
 /// * `Err(String)` - Error message if walk fails
 pub fn walk_directory(
     root: &str,
-    _include: &[&str],
-    _exclude: &[&str],
+    ignore_patterns: &[String],
+    include_patterns: &[String],
     max_size: u64,
 ) -> Result<Vec<FileEntry>, String> {
     let root_path = Path::new(root);
@@ -125,7 +265,14 @@ pub fn walk_directory(
     }
 
     let mut entries = Vec::new();
-    walk_recursive(root_path, root_path, &mut entries, max_size)?;
+    walk_recursive(
+        root_path,
+        root_path,
+        &mut entries,
+        max_size,
+        ignore_patterns,
+        include_patterns,
+    )?;
 
     Ok(entries)
 }
@@ -136,6 +283,8 @@ fn walk_recursive(
     root: &Path,
     entries: &mut Vec<FileEntry>,
     max_size: u64,
+    ignore_patterns: &[String],
+    include_patterns: &[String],
 ) -> Result<(), String> {
     if !current.is_dir() {
         return Ok(());
@@ -147,17 +296,24 @@ fn walk_recursive(
         let entry = entry_result.map_err(|e| format!("Failed to read entry: {}", e))?;
         let path = entry.path();
 
-        // Skip hidden files and common ignore patterns
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            if name.starts_with('.') {
+        if path.is_dir() {
+            // For directories, always recurse (don't filter by patterns yet)
+            // because files inside might match even if the directory doesn't
+            walk_recursive(&path, root, entries, max_size, ignore_patterns, include_patterns)?;
+        } else if path.is_file() {
+            // Calculate relative path for pattern matching
+            let rel_path = path
+                .strip_prefix(root)
+                .map_err(|e| format!("Failed to get relative path: {}", e))?;
+
+            let path_str = rel_path
+                .to_str()
+                .ok_or_else(|| format!("Path is not valid UTF-8: {}", rel_path.display()))?;
+
+            // Check if this file should be included based on patterns
+            if !should_include_file(path_str, ignore_patterns, include_patterns) {
                 continue;
             }
-        }
-
-        if path.is_dir() {
-            // Recursively walk subdirectories
-            walk_recursive(&path, root, entries, max_size)?;
-        } else if path.is_file() {
             // Get file metadata
             let metadata = fs::metadata(&path).map_err(|e| format!("Failed to read metadata: {}", e))?;
             let file_size = metadata.len();
@@ -182,21 +338,11 @@ fn walk_recursive(
             let content = String::from_utf8(buffer)
                 .map_err(|_| format!("File is not valid UTF-8: {}", path.display()))?;
 
-            // Calculate relative path
-            let rel_path = path
-                .strip_prefix(root)
-                .map_err(|e| format!("Failed to get relative path: {}", e))?;
-
-            let path_str = rel_path
-                .to_str()
-                .ok_or_else(|| format!("Path is not valid UTF-8: {}", rel_path.display()))?
-                .to_string();
-
             // Calculate MD5
             let md5 = calculate_md5(&content);
 
             entries.push(FileEntry {
-                path: path_str,
+                path: path_str.to_string(),
                 content,
                 md5,
             });
@@ -277,8 +423,16 @@ pub fn serialize_project_with_config(
     root: &str,
     config: &EncoderConfig,
 ) -> Result<String, String> {
+    // Load .pm_encoder_config.json if it exists
+    let file_config = load_config(root)?;
+
     // Walk directory and collect file entries
-    let entries = walk_directory(root, &[], &[], config.max_file_size)?;
+    let entries = walk_directory(
+        root,
+        &file_config.ignore_patterns,
+        &file_config.include_patterns,
+        config.max_file_size,
+    )?;
 
     // Sort entries by path name (ascending)
     let mut sorted_entries = entries;
@@ -299,7 +453,7 @@ mod tests {
 
     #[test]
     fn test_version() {
-        assert_eq!(version(), "0.2.0");
+        assert_eq!(version(), "0.3.0");
     }
 
     #[test]

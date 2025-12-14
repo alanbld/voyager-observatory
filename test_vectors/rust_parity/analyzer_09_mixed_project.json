@@ -1,0 +1,38 @@
+{
+  "name": "analyzer_09_mixed_project",
+  "description": "Verify multi-language project with multiple analyzers",
+  "category": "analyzer",
+  "input": {
+    "files": {
+      "app.py": "import flask\n\nclass API:\n    pass\n",
+      "server.js": "const express = require('express');\n\nfunction startServer() {\n    console.log('Starting...');\n}\n",
+      "lib.rs": "pub struct Config {}\n\nfn main() {}\n",
+      "README.md": "# Project\n\nMixed language project.\n"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["README.md", "app.py", "lib.rs", "server.js"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ README.md ++++++++++",
+      "# Project",
+      "++++++++++ app.py ++++++++++",
+      "import flask",
+      "class API",
+      "++++++++++ lib.rs ++++++++++",
+      "pub struct Config",
+      "++++++++++ server.js ++++++++++",
+      "const express"
+    ],
+    "metadata": {
+      "file_count": 4,
+      "languages": ["Python", "JavaScript", "Rust", "Markdown"],
+      "multi_language": true
+    }
+  },
+  "python_validated": false,
+  "rust_status": "pending"
+}

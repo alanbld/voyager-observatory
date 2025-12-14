@@ -1,0 +1,31 @@
+{
+  "name": "serial_03_single_file",
+  "description": "Serialize single file correctly",
+  "category": "serialization",
+  "input": {
+    "files": {
+      "README.md": "# Hello World\n\nThis is a test."
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["README.md"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ README.md ++++++++++",
+      "# Hello World",
+      "This is a test.",
+      "---------- README.md"
+    ],
+    "metadata": {
+      "file_count": 1,
+      "has_header": true,
+      "has_footer": true,
+      "content_preserved": true
+    }
+  },
+  "python_validated": true,
+  "rust_status": "passing"
+}

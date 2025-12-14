@@ -1,0 +1,30 @@
+{
+  "name": "analyzer_04_javascript_function",
+  "description": "Verify JavaScript function detection (function, arrow, async)",
+  "category": "analyzer",
+  "input": {
+    "files": {
+      "api.js": "function fetchData(url) {\n    return fetch(url);\n}\n\nconst processData = (data) => {\n    return data.map(item => item.value);\n};\n\nasync function saveData(data) {\n    await db.save(data);\n}\n"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["api.js"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ api.js ++++++++++",
+      "function fetchData",
+      "const processData",
+      "async function saveData"
+    ],
+    "metadata": {
+      "file_count": 1,
+      "language": "JavaScript",
+      "functions_detected": ["fetchData", "processData", "saveData"]
+    }
+  },
+  "python_validated": false,
+  "rust_status": "pending"
+}

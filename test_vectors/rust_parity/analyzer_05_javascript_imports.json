@@ -1,0 +1,31 @@
+{
+  "name": "analyzer_05_javascript_imports",
+  "description": "Verify JavaScript import and require detection",
+  "category": "analyzer",
+  "input": {
+    "files": {
+      "index.js": "const express = require('express');\nconst { Router } = require('express');\nimport React from 'react';\nimport { useState, useEffect } from 'react';\n\nconst app = express();\n"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["index.js"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ index.js ++++++++++",
+      "const express = require('express')",
+      "const { Router } = require('express')",
+      "import React from 'react'",
+      "import { useState, useEffect } from 'react'"
+    ],
+    "metadata": {
+      "file_count": 1,
+      "language": "JavaScript",
+      "imports_detected": ["express", "Router", "React", "useState", "useEffect"]
+    }
+  },
+  "python_validated": false,
+  "rust_status": "pending"
+}

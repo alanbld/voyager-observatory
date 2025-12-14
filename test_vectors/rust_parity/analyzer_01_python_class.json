@@ -1,0 +1,32 @@
+{
+  "name": "analyzer_01_python_class",
+  "description": "Verify Python class detection and extraction",
+  "category": "analyzer",
+  "input": {
+    "files": {
+      "models.py": "class User:\n    def __init__(self, name):\n        self.name = name\n\nclass Product:\n    pass\n\nclass Order:\n    \"\"\"Order management.\"\"\"\n    def process(self):\n        pass\n"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["models.py"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ models.py ++++++++++",
+      "class User:",
+      "class Product:",
+      "class Order:"
+    ],
+    "metadata": {
+      "file_count": 1,
+      "language": "Python",
+      "classes_detected": ["User", "Product", "Order"],
+      "has_docstrings": true,
+      "category": "library"
+    }
+  },
+  "python_validated": false,
+  "rust_status": "pending"
+}

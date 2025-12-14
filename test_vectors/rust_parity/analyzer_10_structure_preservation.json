@@ -1,0 +1,40 @@
+{
+  "name": "analyzer_10_structure_preservation",
+  "description": "Verify analyzer preserves code structure and relationships",
+  "category": "analyzer",
+  "input": {
+    "files": {
+      "service.py": "\"\"\"User service module.\"\"\"\n\nimport logging\nfrom typing import Optional\n\nlogger = logging.getLogger(__name__)\n\nclass UserService:\n    \"\"\"Manages user operations.\"\"\"\n    \n    def __init__(self, db):\n        self.db = db\n    \n    def create_user(self, name: str) -> Optional[int]:\n        \"\"\"Create a new user.\"\"\"\n        # TODO: Add validation\n        logger.info(f\"Creating user: {name}\")\n        return self.db.insert(name)\n    \n    def delete_user(self, user_id: int) -> bool:\n        \"\"\"Delete a user.\"\"\"\n        return self.db.delete(user_id)\n"
+    },
+    "config": {},
+    "cli_args": []
+  },
+  "expected": {
+    "output_format": "plus_minus",
+    "files_included": ["service.py"],
+    "files_excluded": [],
+    "output_contains": [
+      "++++++++++ service.py ++++++++++",
+      "\"\"\"User service module.\"\"\"",
+      "import logging",
+      "from typing import Optional",
+      "class UserService:",
+      "def __init__",
+      "def create_user",
+      "def delete_user",
+      "# TODO: Add validation"
+    ],
+    "metadata": {
+      "file_count": 1,
+      "language": "Python",
+      "classes_detected": ["UserService"],
+      "functions_detected": ["__init__", "create_user", "delete_user"],
+      "imports_detected": ["logging", "Optional"],
+      "has_docstrings": true,
+      "markers_detected": ["TODO"],
+      "category": "library"
+    }
+  },
+  "python_validated": false,
+  "rust_status": "pending"
+}
