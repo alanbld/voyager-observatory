@@ -5,6 +5,29 @@ All notable changes to pm_encoder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2025-12-16
+
+### Added - The Streaming Pipeline 🌊
+- **Streaming Output**: New `--stream` flag enables immediate output generation
+- **Generator Architecture**: Refactored core `collect_files` and `serialize` to use Python generators (`yield`) instead of lists
+- **Zero-Disk Protocol**: Updated `pm_coach` RepoSource protocol to support streaming content without local storage
+  - `walk_with_content()`: Stream files with content in a single pass
+  - `supports_streaming()`: Self-reporting capability flag
+  - `FileWithContent`: Bundled descriptor + content dataclass
+
+### Performance
+- **10x Faster Start**: Reduced Time-To-First-Byte (TTFB) from ~485ms to ~46ms on large repositories
+- **Constant Memory**: Processing 100k+ files no longer requires loading the full file list into RAM
+
+### Changed
+- **Sorting Behavior**: When `--stream` is active, Global Sort is disabled (falls back to Directory Order) to allow immediate output
+- **pm_coach version**: Bumped to v0.2.0 with streaming protocol extensions
+
+### Technical Details
+- Backward compatible: Default behavior unchanged (batch mode with global sorting)
+- Stream mode warns when sort flags (`--sort-by`, `--sort-order`) are ignored
+- Generator-based `collect_files_generator()` yields files during directory traversal
+
 ## [1.3.1] - 2025-12-13
 
 ### Added - Modern Dev Bootstrap
