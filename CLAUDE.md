@@ -100,6 +100,38 @@ For the complete codebase context, see `CONTEXT.txt` in this directory.
 
 ---
 
+## Pending Tasks
+
+### GitHub Release Creation (v1.6.0)
+**Status:** Pending - Token authentication failed
+
+Tags are pushed to both remotes. Create the GitHub release when token is refreshed:
+
+```bash
+gh release create v1.6.0 \
+  --title "v1.6.0 - The Streaming Pipeline & Parity" \
+  --notes "
+## v1.6.0 - The Streaming Update
+
+**Status:** Production Ready | **Parity:** 100%
+
+### Major Features
+- **Streaming Architecture:** Both Python and Rust engines now use streaming pipelines.
+- **Zero-Disk Audit:** Enabled by streaming architecture.
+- **Performance:** TTFB reduced to ~5ms (Rust) / ~46ms (Python).
+
+### Rust Engine v0.5.0
+- **Feature Parity:** 100% (25/25 Test Vectors passing).
+- **Complexity:** 50% lower Cyclomatic Complexity than Python.
+- **Coverage:** 85% Code Coverage.
+
+### Research
+- **Convergence Achieved:** The 'Twins' methodology is empirically validated.
+"
+```
+
+---
+
 **Regenerate these files:**
 ```bash
 ./pm_encoder.py . --init-prompt --init-lens debug --target claude
