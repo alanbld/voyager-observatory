@@ -130,6 +130,48 @@ class RepoSource(Protocol):
         """
         ...
 
+    # Streaming extensions (v1.6.0+)
+
+    def walk_with_content(self) -> Iterator[tuple]:
+        """Stream files with content - true zero-copy streaming.
+
+        Yields:
+            (FileDescriptor, content: str) tuples
+
+        This is the streaming-first method for v1.7.0+ sources that can
+        provide content without separate I/O (e.g., GitHub API, tarballs).
+
+        Default implementation falls back to walk() + get_content().
+        """
+        ...
+
+    def supports_streaming(self) -> bool:
+        """Return True if this source supports true streaming.
+
+        True streaming means walk_with_content() doesn't require
+        two separate I/O operations per file.
+
+        - ClonedRepoSource: False (must read file after stat)
+        - GitHubAPISource: True (content in API response)
+        - TarballSource: True (content during extraction)
+        """
+        ...
+
+
+@dataclass
+class FileWithContent:
+    """File descriptor bundled with content - for streaming sources."""
+    descriptor: FileDescriptor
+    content: str
+
+    @property
+    def path(self) -> str:
+        return self.descriptor.path
+
+    @property
+    def size(self) -> int:
+        return self.descriptor.size
+
 
 # Type alias for clarity
 RepoSourceType = RepoSource

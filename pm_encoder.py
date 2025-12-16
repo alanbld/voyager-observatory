@@ -5,7 +5,7 @@ using the Plus/Minus format, with robust directory pruning,
 filtering, and sorting capabilities.
 """
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 __author__ = "pm_encoder contributors"
 __license__ = "MIT"
 
@@ -18,7 +18,7 @@ import sys
 import tempfile
 from pathlib import Path
 from fnmatch import fnmatch
-from typing import Optional, Tuple, List, Dict, Any
+from typing import Optional, Tuple, List, Dict, Any, Iterator, Generator
 from collections import defaultdict
 
 # Handle SIGPIPE gracefully for Unix pipe compatibility (e.g., ./pm_encoder.py . | head)
@@ -1323,8 +1323,14 @@ def serialize(
     show_stats: bool = False,
     language_plugins_dir: Optional[Path] = None,
     lens_manager: Optional['LensManager'] = None,
+    stream_mode: bool = False,
 ):
-    """Collects, sorts, and serializes files based on specified criteria."""
+    """Collects, sorts, and serializes files based on specified criteria.
+
+    Args:
+        stream_mode: If True, emits output immediately without global sorting.
+                     Uses depth-first directory traversal order for zero TTFB.
+    """
 
     # Inject .pm_encoder_meta file if lens is active
     if lens_manager and lens_manager.active_lens:
@@ -1350,10 +1356,11 @@ def serialize(
     if truncate_exclude is None:
         truncate_exclude = []
 
-    # Step 1: Collect all valid file paths recursively
-    def collect_files(current_dir: Path):
+    # File collection: generator for streaming, list for batch mode
+    def collect_files_generator(current_dir: Path) -> Generator[Path, None, None]:
+        """Generator that yields files as they're found (depth-first traversal)."""
         try:
-            # Sort items locally for deterministic traversal, preventing filesystem order dependency
+            # Sort items locally for deterministic traversal within each directory
             sorted_items = sorted(list(current_dir.iterdir()), key=lambda p: p.name.lower())
         except OSError as e:
             print(f"Warning: Could not read directory {current_dir}: {e}", file=sys.stderr)
@@ -1363,9 +1370,7 @@ def serialize(
             relative_path = item.relative_to(project_root)
 
             # Check ignore patterns FIRST (they take precedence over includes)
-            # This supports lens excludes like "docs/**", "tests/**" etc.
             is_ignored = any(fnmatch(part, pattern) for part in relative_path.parts for pattern in ignore_patterns)
-            # Also check full path patterns for glob-style excludes (e.g., "docs/**", "test_vectors/**")
             is_path_ignored = any(
                 fnmatch(relative_path.as_posix(), pattern) or
                 fnmatch(relative_path.as_posix() + "/", pattern.rstrip("*"))
@@ -1375,7 +1380,6 @@ def serialize(
             if is_ignored or is_path_ignored:
                 if item.is_dir():
                     print(f"[SKIP DIR] {relative_path.as_posix()} (matches ignore pattern)", file=sys.stderr)
-                # Skip files and dirs that match ignore patterns
                 continue
 
             # Check if this path is explicitly included
@@ -1383,82 +1387,90 @@ def serialize(
                 fnmatch(relative_path.as_posix(), pattern) for pattern in include_patterns
             )
 
-            # For files: if explicitly included, add to files_to_process
-            if item.is_file() and is_explicitly_included:
-                files_to_process.append(item)
-                print(f"[KEEP] {relative_path.as_posix()} (explicitly included)", file=sys.stderr)
-                continue
-
-            # Process directories and remaining files
-            if item.is_dir():
-                collect_files(item)
-            elif item.is_file():
-                # Whitelist behavior: if include_patterns exist but no ignore_patterns, only include matched files
-                # Override behavior: if both exist, include_patterns override ignore_patterns for matched files
-                # When both exist, non-matching, non-ignored files are still included
+            if item.is_file():
+                # Pure whitelist mode: only include explicitly matched files
                 if include_patterns and not is_explicitly_included and not ignore_patterns:
-                    # Pure whitelist: only include explicitly matched files
                     continue
-                files_to_process.append(item)
+                yield item  # Stream: yield immediately
+            elif item.is_dir():
+                yield from collect_files_generator(item)  # Recurse into subdirectories
 
-    collect_files(project_root)
-
-    # Step 2: Sort the collected list of files globally
-    reverse_order = sort_order == 'desc'
-    sort_key_func = None
-
-    if sort_by == 'name':
-        sort_key_func = lambda p: p.relative_to(project_root).as_posix()
-    elif sort_by == 'mtime':
-        sort_key_func = lambda p: p.stat().st_mtime
-    elif sort_by == 'ctime':
-        sort_key_func = lambda p: p.stat().st_ctime
-
-    print(f"\nSorting {len(files_to_process)} files by {sort_by} ({sort_order})...", file=sys.stderr)
-    files_to_process.sort(key=sort_key_func, reverse=reverse_order)
-
-    # Step 3: Process and write the sorted files
-    for file_path in files_to_process:
+    # Helper function to process a single file
+    def process_file(file_path: Path) -> bool:
+        """Process a single file and write to output. Returns True if file was processed."""
         relative_path = file_path.relative_to(project_root)
         content = read_file_content(file_path)
 
-        if content is not None:
-            original_lines = len(content.split('\n'))
-            was_truncated = False
-            analysis = {}
+        if content is None:
+            return False
 
-            # Apply truncation if enabled (numeric limit OR structure mode)
-            if truncate_lines > 0 or truncate_mode == 'structure':
-                # Check if file should be excluded from truncation
-                should_truncate = not any(
-                    fnmatch(relative_path.as_posix(), pattern)
-                    for pattern in truncate_exclude
+        original_lines = len(content.split('\n'))
+        was_truncated = False
+        analysis = {}
+
+        # Apply truncation if enabled (numeric limit OR structure mode)
+        if truncate_lines > 0 or truncate_mode == 'structure':
+            should_truncate = not any(
+                fnmatch(relative_path.as_posix(), pattern)
+                for pattern in truncate_exclude
+            )
+
+            if should_truncate:
+                content, was_truncated, analysis = truncate_content(
+                    content,
+                    relative_path,
+                    truncate_lines,
+                    truncate_mode,
+                    analyzer_registry,
+                    truncate_summary
                 )
 
-                if should_truncate:
-                    content, was_truncated, analysis = truncate_content(
-                        content,
-                        relative_path,
-                        truncate_lines,
-                        truncate_mode,
-                        analyzer_registry,
-                        truncate_summary
-                    )
+        # Record stats
+        if stats:
+            final_lines = len(content.split('\n'))
+            language = analysis.get('language', 'Unknown') if analysis else 'Unknown'
+            stats.add_file(language, original_lines, final_lines, was_truncated)
 
-            # Record stats
-            if stats:
-                final_lines = len(content.split('\n'))
-                language = analysis.get('language', 'Unknown') if analysis else 'Unknown'
-                stats.add_file(language, original_lines, final_lines, was_truncated)
+        # Print status
+        if was_truncated:
+            print(f"[TRUNCATED] {relative_path.as_posix()} ({original_lines} → {len(content.split(chr(10)))} lines)", file=sys.stderr)
+        else:
+            print(f"[KEEP] {relative_path.as_posix()}", file=sys.stderr)
 
-            # Print status
-            if was_truncated:
-                print(f"[TRUNCATED] {relative_path.as_posix()} ({original_lines} → {len(content.split(chr(10)))} lines)", file=sys.stderr)
-            else:
-                print(f"[KEEP] {relative_path.as_posix()}", file=sys.stderr)
+        # Write to output immediately
+        write_pm_format(output_stream, relative_path, content, was_truncated, original_lines)
+        return True
 
-            # Write to output
-            write_pm_format(output_stream, relative_path, content, was_truncated, original_lines)
+    # Streaming mode: emit output immediately, no global sort
+    if stream_mode:
+        print(f"\n[STREAM MODE] Emitting output immediately (directory traversal order)...", file=sys.stderr)
+        file_count = 0
+        for file_path in collect_files_generator(project_root):
+            if process_file(file_path):
+                file_count += 1
+        print(f"\nStreamed {file_count} files.", file=sys.stderr)
+
+    # Batch mode (default): collect all files, sort globally, then process
+    else:
+        files_to_process = list(collect_files_generator(project_root))
+
+        # Sort the collected list of files globally
+        reverse_order = sort_order == 'desc'
+        sort_key_func = None
+
+        if sort_by == 'name':
+            sort_key_func = lambda p: p.relative_to(project_root).as_posix()
+        elif sort_by == 'mtime':
+            sort_key_func = lambda p: p.stat().st_mtime
+        elif sort_by == 'ctime':
+            sort_key_func = lambda p: p.stat().st_ctime
+
+        print(f"\nSorting {len(files_to_process)} files by {sort_by} ({sort_order})...", file=sys.stderr)
+        files_to_process.sort(key=sort_key_func, reverse=reverse_order)
+
+        # Process and write the sorted files
+        for file_path in files_to_process:
+            process_file(file_path)
 
     # Print stats if requested
     if stats and show_stats:
@@ -1979,6 +1991,12 @@ Examples:
     parser.add_argument("--sort-order", choices=["asc", "desc"], default="asc",
                         help="Sort order: 'asc' (ascending, default) or 'desc' (descending).")
 
+    # Streaming mode (v1.6.0)
+    parser.add_argument("--stream", action="store_true",
+                        help="Enable streaming mode: emit output immediately without global sorting.\n"
+                             "Reduces Time-To-First-Byte (TTFB) for large repositories.\n"
+                             "Note: Disables global sorting (uses directory traversal order).")
+
     # Truncation options
     parser.add_argument("--truncate", type=int, metavar="N", default=0,
                         help="Truncate files exceeding N lines (default: 0 = no truncation)")
@@ -2085,6 +2103,12 @@ Examples:
 
     print(f"\nSerializing '{args.project_root}'...", file=sys.stderr)
 
+    # Warn about streaming mode limitations
+    if args.stream:
+        if sort_by_arg != 'name' or sort_order_arg != 'asc':
+            print(f"\n⚠️  WARNING: --stream mode ignores --sort-by and --sort-order flags.", file=sys.stderr)
+            print(f"    Files will be emitted in directory traversal order (depth-first).", file=sys.stderr)
+
     try:
         serialize(
             args.project_root,
@@ -2100,6 +2124,7 @@ Examples:
             show_stats=args.truncate_stats or truncate_arg > 0,
             language_plugins_dir=args.language_plugins,
             lens_manager=lens_manager if args.lens else None,
+            stream_mode=args.stream,
         )
         print(f"\nSuccessfully serialized project.", file=sys.stderr)
     finally:

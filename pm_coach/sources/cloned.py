@@ -257,6 +257,31 @@ class ClonedRepoSource(RepoSource):
             self._temp_dir = None
             self._repo_path = None
 
+    def walk_with_content(self) -> Iterator[tuple]:
+        """Yield (FileDescriptor, content) tuples.
+
+        For ClonedRepoSource, this is NOT true streaming - we still
+        do two I/O operations per file (stat + read). But it provides
+        the unified interface that true streaming sources will implement.
+        """
+        for fd in self.walk():
+            if fd.is_binary or fd.size > MAX_FILE_SIZE:
+                continue
+            try:
+                content = self.get_content(fd.path)
+                yield (fd, content)
+            except (UnicodeDecodeError, ValueError):
+                continue
+
+    def supports_streaming(self) -> bool:
+        """ClonedRepoSource does NOT support true streaming.
+
+        We must read the file system twice: once for metadata (stat),
+        once for content. True streaming sources (GitHub API, tarballs)
+        can provide both in a single operation.
+        """
+        return False
+
     def __enter__(self) -> "ClonedRepoSource":
         """Context manager entry."""
         return self
