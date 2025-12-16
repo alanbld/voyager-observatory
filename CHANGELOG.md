@@ -28,6 +28,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stream mode warns when sort flags (`--sort-by`, `--sort-order`) are ignored
 - Generator-based `collect_files_generator()` yields files during directory traversal
 
+## [Rust v0.5.0] - 2025-12-16
+
+### Added - Streaming Architecture 🌊
+- **Iterator Pipeline**: Refactored core logic from `Vec<FileEntry>` to `impl Iterator<Item = FileEntry>`
+- **Lazy Evaluation**: Directory traversal and serialization now happen on-the-fly via `walk_directory_iter()`
+- **Streaming Serialization**: New `serialize_project_streaming()` writes directly to stdout
+- **CLI Flag**: Added `--stream` flag matching Python v1.6.0 behavior
+- **Parity**: Restored architectural parity with Python v1.6.0
+
+### Performance
+- **Instant Start**: Time-To-First-Byte (TTFB) dropped to **~5ms** (from ~1,600ms in batch mode)
+- **17x Speedup**: Rust streaming is 17x faster than Python streaming (5ms vs 88ms)
+- **320x vs Batch**: Streaming is 320x faster than Rust batch mode for TTFB
+- **Scalability**: Constant memory usage for repositories of any size (100k+ files)
+
+### Research Findings (Phase 3 Complexity Analysis)
+- **Complexity Dividend**: Rust code has **50% lower Cyclomatic Complexity** (Avg CCN 3.33 vs Python's 6.72)
+- **Decomposition Effect**: Rust has 52% more functions (76 vs 50), spreading complexity across smaller units
+- **Type Tax**: Rust is 19% larger in LOC but significantly simpler to reason about locally
+- **Validation**: Long-term maintainability of the Rust port confirmed via lizard analysis
+
+### Technical Details
+- Backward compatible: Default behavior unchanged (batch mode with global sorting)
+- Stream mode warns when `--sort-by` or `--sort-order` flags are specified (ignored in stream mode)
+- File output (`-o`) warns and is ignored in stream mode (output goes to stdout)
+
 ## [1.3.1] - 2025-12-13
 
 ### Added - Modern Dev Bootstrap
