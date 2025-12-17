@@ -1539,6 +1539,13 @@ class BudgetReport:
     dropped_count: int
     dropped_files: List[Tuple[Path, int, int]]  # (path, priority, tokens)
     estimation_method: str
+    strategy: str = "drop"
+    included_files: List[Tuple[Path, int, int, str]] = None  # (path, priority, tokens, method)
+    truncated_count: int = 0
+
+    def __post_init__(self):
+        if self.included_files is None:
+            self.included_files = []
 
     @property
     def used_percentage(self) -> float:
@@ -1559,9 +1566,23 @@ class BudgetReport:
         print(f"Used:       {self.used:,} tokens ({self.used_percentage:.1f}%)", file=output)
         print(f"Remaining:  {self.remaining:,} tokens", file=output)
         print(f"Estimation: {self.estimation_method}", file=output)
+        print(f"Strategy:   {self.strategy}", file=output)
         print(file=output)
-        print(f"Files included: {self.selected_count}", file=output)
+
+        # Show files included with method
+        full_count = sum(1 for f in self.included_files if f[3] == "full")
+        print(f"Files included: {self.selected_count} ({full_count} full, {self.truncated_count} truncated)", file=output)
         print(f"Files dropped:  {self.dropped_count} (lowest priority first)", file=output)
+
+        # Show truncated files if any
+        if self.truncated_count > 0:
+            print(file=output)
+            print("Auto-truncated files (structure mode):", file=output)
+            truncated_list = [(p, pr, t) for p, pr, t, m in self.included_files if m == "truncated"]
+            for path, priority, tokens in truncated_list[:5]:
+                print(f"  [P:{priority:3d}] {path} ({tokens:,} tokens)", file=output)
+            if len(truncated_list) > 5:
+                print(f"  ... and {len(truncated_list) - 5} more", file=output)
 
         if self.dropped_files:
             print(file=output)
@@ -1574,11 +1595,43 @@ class BudgetReport:
         print("=" * 70, file=output)
 
 
+def _truncate_to_structure(
+    path: Path,
+    content: str,
+    analyzer_registry: 'LanguageAnalyzerRegistry'
+) -> Tuple[str, bool]:
+    """
+    Truncate content to structure-only mode (signatures, imports, etc.).
+
+    Returns:
+        Tuple of (truncated_content, was_truncated)
+    """
+    if analyzer_registry is None:
+        return content, False
+
+    analyzer = analyzer_registry.get_analyzer(path)
+    lines = content.split('\n')
+    structure_ranges = analyzer.get_structure_ranges(lines)
+
+    if not structure_ranges:
+        # No structure extraction available for this file type
+        return content, False
+
+    # Extract lines from structure ranges
+    kept_lines = []
+    for start, end in structure_ranges:
+        kept_lines.extend(lines[start-1:end])
+
+    truncated = '\n'.join(kept_lines)
+    return truncated, True
+
+
 def apply_token_budget(
     files_with_content: List[Tuple[Path, str]],
     budget: int,
     lens_manager: 'LensManager',
-    strategy: str = "drop"
+    strategy: str = "drop",
+    analyzer_registry: 'LanguageAnalyzerRegistry' = None
 ) -> Tuple[List[Tuple[Path, str]], BudgetReport]:
     """
     Select files to fit within a token budget, prioritized by lens configuration.
@@ -1589,7 +1642,11 @@ def apply_token_budget(
         files_with_content: List of (path, content) tuples
         budget: Maximum tokens allowed
         lens_manager: LensManager instance for priority resolution
-        strategy: Budget strategy ("drop" = exclude files that don't fit)
+        strategy: Budget strategy:
+            - "drop": Exclude files that don't fit (default)
+            - "truncate": Force structure mode on files that don't fit
+            - "hybrid": Auto-truncate files consuming >10% of budget
+        analyzer_registry: LanguageAnalyzerRegistry for structure truncation
 
     Returns:
         Tuple of (selected_files, report)
@@ -1598,39 +1655,95 @@ def apply_token_budget(
         1. Calculate tokens for each file
         2. Get priority for each file from lens_manager
         3. Sort by priority (DESC) then path (ASC) for determinism
-        4. Accumulate files until budget is exceeded
-        5. Drop remaining files
+        4. Apply strategy to fit files within budget
+        5. Generate report with inclusion methods
     """
+    # Threshold for hybrid strategy: files > 10% of budget get auto-truncated
+    HYBRID_THRESHOLD = 0.10
+
     # Step 1: Calculate tokens and get priorities
     file_data = []
     for path, content in files_with_content:
         tokens = TokenEstimator.estimate_file_tokens(path, content)
         priority = lens_manager.get_file_priority(path) if lens_manager else 50
-        file_data.append((path, content, priority, tokens))
+        file_data.append({
+            'path': path,
+            'content': content,
+            'priority': priority,
+            'tokens': tokens,
+            'original_tokens': tokens,
+            'method': 'full'
+        })
 
     # Step 2: Sort by priority (DESC) then path (ASC) for determinism
-    file_data.sort(key=lambda x: (-x[2], x[0].as_posix()))
+    file_data.sort(key=lambda x: (-x['priority'], x['path'].as_posix()))
 
-    # Step 3: Accumulate until budget exceeded
+    # Step 3: For hybrid strategy, pre-truncate large files
+    if strategy == 'hybrid' and analyzer_registry:
+        budget_threshold = budget * HYBRID_THRESHOLD
+        for fd in file_data:
+            if fd['tokens'] > budget_threshold:
+                truncated_content, was_truncated = _truncate_to_structure(
+                    fd['path'], fd['content'], analyzer_registry
+                )
+                if was_truncated:
+                    new_tokens = TokenEstimator.estimate_file_tokens(fd['path'], truncated_content)
+                    fd['content'] = truncated_content
+                    fd['tokens'] = new_tokens
+                    fd['method'] = 'truncated'
+
+    # Step 4: Accumulate files with strategy-specific handling
     selected = []
+    included_files = []
     total_tokens = 0
     dropped = []
+    truncated_count = 0
 
-    for path, content, priority, tokens in file_data:
+    for fd in file_data:
+        path = fd['path']
+        content = fd['content']
+        priority = fd['priority']
+        tokens = fd['tokens']
+        method = fd['method']
+
+        # Check if file fits in remaining budget
         if total_tokens + tokens <= budget:
             selected.append((path, content))
+            included_files.append((path, priority, tokens, method))
             total_tokens += tokens
+            if method == 'truncated':
+                truncated_count += 1
         else:
-            dropped.append((path, priority, tokens))
+            # File doesn't fit - apply strategy
+            if strategy == 'truncate' and analyzer_registry:
+                # Try to truncate to structure mode
+                truncated_content, was_truncated = _truncate_to_structure(
+                    path, content, analyzer_registry
+                )
+                if was_truncated:
+                    new_tokens = TokenEstimator.estimate_file_tokens(path, truncated_content)
+                    if total_tokens + new_tokens <= budget:
+                        # Truncated version fits!
+                        selected.append((path, truncated_content))
+                        included_files.append((path, priority, new_tokens, 'truncated'))
+                        total_tokens += new_tokens
+                        truncated_count += 1
+                        continue
 
-    # Step 4: Generate report
+            # File still doesn't fit or can't be truncated - drop it
+            dropped.append((path, priority, fd['original_tokens']))
+
+    # Step 5: Generate report
     report = BudgetReport(
         budget=budget,
         used=total_tokens,
         selected_count=len(selected),
         dropped_count=len(dropped),
         dropped_files=dropped,
-        estimation_method=TokenEstimator.get_method()
+        estimation_method=TokenEstimator.get_method(),
+        strategy=strategy,
+        included_files=included_files,
+        truncated_count=truncated_count
     )
 
     return selected, report
@@ -1734,6 +1847,7 @@ def serialize(
     lens_manager: Optional['LensManager'] = None,
     stream_mode: bool = False,
     token_budget: int = 0,
+    budget_strategy: str = "drop",
 ):
     """Collects, sorts, and serializes files based on specified criteria.
 
@@ -1742,6 +1856,10 @@ def serialize(
                      Uses depth-first directory traversal order for zero TTFB.
         token_budget: Maximum tokens for output (v1.7.0). 0 = no limit.
                       When set, drops lowest priority files to fit within budget.
+        budget_strategy: Strategy for budget enforcement (v1.7.0):
+                         - "drop": Exclude files that don't fit (default)
+                         - "truncate": Force structure mode on oversized files
+                         - "hybrid": Auto-truncate files >10% of budget
     """
 
     # Inject .pm_encoder_meta file if lens is active
@@ -1877,11 +1995,13 @@ def serialize(
                 if content is not None:
                     files_with_content.append((file_path.relative_to(project_root), content))
 
-            # Apply budget selection based on priority
+            # Apply budget selection based on priority and strategy
             selected_files, budget_report = apply_token_budget(
                 files_with_content,
                 token_budget,
-                lens_manager
+                lens_manager,
+                strategy=budget_strategy,
+                analyzer_registry=analyzer_registry
             )
 
             # Print budget report
@@ -2466,6 +2586,12 @@ Examples:
                         help="Maximum tokens for output (e.g., 100000, 100k, 2M).\n"
                              "Drops lowest priority files to fit within budget.\n"
                              "Note: Disables streaming mode (requires batch processing).")
+    parser.add_argument("--budget-strategy", choices=["drop", "truncate", "hybrid"],
+                        default="drop",
+                        help="Budget enforcement strategy:\n"
+                             "  drop: Skip files that don't fit (default)\n"
+                             "  truncate: Force structure mode on oversized files\n"
+                             "  hybrid: Auto-truncate files >10%% of budget")
 
     # Truncation options
     parser.add_argument("--truncate", type=int, metavar="N", default=0,
@@ -2615,6 +2741,7 @@ Examples:
             lens_manager=lens_manager if args.lens else None,
             stream_mode=stream_mode,
             token_budget=token_budget,
+            budget_strategy=args.budget_strategy,
         )
         print(f"\nSuccessfully serialized project.", file=sys.stderr)
     finally:
