@@ -20,6 +20,7 @@ from pathlib import Path
 from fnmatch import fnmatch
 from typing import Optional, Tuple, List, Dict, Any, Iterator, Generator
 from collections import defaultdict
+from dataclasses import dataclass
 
 # Handle SIGPIPE gracefully for Unix pipe compatibility (e.g., ./pm_encoder.py . | head)
 # This prevents BrokenPipeError tracebacks when output is piped and closed early
@@ -1407,6 +1408,234 @@ class LensManager:
         return '\n'.join(lines)
 
 
+# ============================================================================
+# TOKEN BUDGETING SYSTEM (v1.7.0)
+# ============================================================================
+
+class TokenEstimator:
+    """
+    Estimates token counts for content.
+
+    v1.7.0: Uses tiktoken if available, falls back to heuristic.
+
+    The heuristic of len(content) // 4 is based on the observation that
+    English text averages about 4 characters per token for GPT tokenizers.
+    """
+
+    _tiktoken_available: Optional[bool] = None
+    _tiktoken_encoding = None
+    _warning_shown: bool = False
+
+    @classmethod
+    def _check_tiktoken(cls) -> bool:
+        """Lazily check if tiktoken is available."""
+        if cls._tiktoken_available is None:
+            try:
+                import tiktoken
+                cls._tiktoken_encoding = tiktoken.get_encoding("cl100k_base")
+                cls._tiktoken_available = True
+            except ImportError:
+                cls._tiktoken_available = False
+        return cls._tiktoken_available
+
+    @classmethod
+    def estimate_tokens(cls, content: str) -> int:
+        """
+        Estimate the number of tokens in content.
+
+        Args:
+            content: The text content to estimate tokens for
+
+        Returns:
+            Estimated token count
+        """
+        if cls._check_tiktoken():
+            return len(cls._tiktoken_encoding.encode(content))
+        else:
+            # Show warning once
+            if not cls._warning_shown:
+                print("WARNING: tiktoken not installed, using heuristic token estimation (~4 chars/token).",
+                      file=sys.stderr)
+                print("         Install with: pip install tiktoken", file=sys.stderr)
+                cls._warning_shown = True
+            # Heuristic: ~4 characters per token
+            return len(content) // 4
+
+    @classmethod
+    def estimate_file_tokens(cls, file_path: Path, content: str) -> int:
+        """
+        Estimate tokens for a file including PM format overhead.
+
+        Args:
+            file_path: Path to the file (for header/footer calculation)
+            content: The file content
+
+        Returns:
+            Total estimated tokens including format overhead
+        """
+        # Content tokens
+        content_tokens = cls.estimate_tokens(content)
+
+        # PM format overhead (header + footer)
+        # Header: "++++++++++ path ++++++++++\n"
+        # Footer: "---------- path <32 char checksum> path ----------\n"
+        path_str = file_path.as_posix() if hasattr(file_path, 'as_posix') else str(file_path)
+        overhead = f"++++++++++ {path_str} ++++++++++\n---------- {path_str} {'x'*32} {path_str} ----------\n"
+        overhead_tokens = cls.estimate_tokens(overhead)
+
+        return content_tokens + overhead_tokens
+
+    @classmethod
+    def get_method(cls) -> str:
+        """Return the token estimation method being used."""
+        if cls._check_tiktoken():
+            return "tiktoken (cl100k_base)"
+        return "Heuristic (~4 chars/token)"
+
+
+def parse_token_budget(value: str) -> int:
+    """
+    Parse a token budget string with optional k/M suffix.
+
+    v1.7.0: Supports shorthand notation for convenience.
+
+    Args:
+        value: Budget string like "100000", "100k", "100K", "2m", "2M"
+
+    Returns:
+        Integer token count
+
+    Raises:
+        ValueError: If the format is invalid
+
+    Examples:
+        >>> parse_token_budget("100000")
+        100000
+        >>> parse_token_budget("100k")
+        100000
+        >>> parse_token_budget("2M")
+        2000000
+    """
+    import re
+
+    value = value.strip()
+    match = re.match(r'^(\d+)([kKmM]?)$', value)
+    if not match:
+        raise ValueError(f"Invalid token budget format: '{value}'. Expected format: 123, 100k, 2M")
+
+    number = int(match.group(1))
+    suffix = match.group(2).lower()
+
+    multipliers = {'': 1, 'k': 1_000, 'm': 1_000_000}
+    return number * multipliers[suffix]
+
+
+@dataclass
+class BudgetReport:
+    """Report of token budgeting results."""
+    budget: int
+    used: int
+    selected_count: int
+    dropped_count: int
+    dropped_files: List[Tuple[Path, int, int]]  # (path, priority, tokens)
+    estimation_method: str
+
+    @property
+    def used_percentage(self) -> float:
+        """Percentage of budget used."""
+        return (self.used / self.budget * 100) if self.budget > 0 else 0
+
+    @property
+    def remaining(self) -> int:
+        """Tokens remaining in budget."""
+        return max(0, self.budget - self.used)
+
+    def print_report(self, output=sys.stderr):
+        """Print a formatted budget report."""
+        print("=" * 70, file=output)
+        print("TOKEN BUDGET REPORT", file=output)
+        print("=" * 70, file=output)
+        print(f"Budget:     {self.budget:,} tokens", file=output)
+        print(f"Used:       {self.used:,} tokens ({self.used_percentage:.1f}%)", file=output)
+        print(f"Remaining:  {self.remaining:,} tokens", file=output)
+        print(f"Estimation: {self.estimation_method}", file=output)
+        print(file=output)
+        print(f"Files included: {self.selected_count}", file=output)
+        print(f"Files dropped:  {self.dropped_count} (lowest priority first)", file=output)
+
+        if self.dropped_files:
+            print(file=output)
+            print("Dropped files:", file=output)
+            for path, priority, tokens in self.dropped_files[:10]:  # Show top 10
+                print(f"  [P:{priority:3d}] {path} ({tokens:,} tokens)", file=output)
+            if len(self.dropped_files) > 10:
+                print(f"  ... and {len(self.dropped_files) - 10} more", file=output)
+
+        print("=" * 70, file=output)
+
+
+def apply_token_budget(
+    files_with_content: List[Tuple[Path, str]],
+    budget: int,
+    lens_manager: 'LensManager',
+    strategy: str = "drop"
+) -> Tuple[List[Tuple[Path, str]], BudgetReport]:
+    """
+    Select files to fit within a token budget, prioritized by lens configuration.
+
+    v1.7.0: Intelligent file selection based on priority groups.
+
+    Args:
+        files_with_content: List of (path, content) tuples
+        budget: Maximum tokens allowed
+        lens_manager: LensManager instance for priority resolution
+        strategy: Budget strategy ("drop" = exclude files that don't fit)
+
+    Returns:
+        Tuple of (selected_files, report)
+
+    Algorithm:
+        1. Calculate tokens for each file
+        2. Get priority for each file from lens_manager
+        3. Sort by priority (DESC) then path (ASC) for determinism
+        4. Accumulate files until budget is exceeded
+        5. Drop remaining files
+    """
+    # Step 1: Calculate tokens and get priorities
+    file_data = []
+    for path, content in files_with_content:
+        tokens = TokenEstimator.estimate_file_tokens(path, content)
+        priority = lens_manager.get_file_priority(path) if lens_manager else 50
+        file_data.append((path, content, priority, tokens))
+
+    # Step 2: Sort by priority (DESC) then path (ASC) for determinism
+    file_data.sort(key=lambda x: (-x[2], x[0].as_posix()))
+
+    # Step 3: Accumulate until budget exceeded
+    selected = []
+    total_tokens = 0
+    dropped = []
+
+    for path, content, priority, tokens in file_data:
+        if total_tokens + tokens <= budget:
+            selected.append((path, content))
+            total_tokens += tokens
+        else:
+            dropped.append((path, priority, tokens))
+
+    # Step 4: Generate report
+    report = BudgetReport(
+        budget=budget,
+        used=total_tokens,
+        selected_count=len(selected),
+        dropped_count=len(dropped),
+        dropped_files=dropped,
+        estimation_method=TokenEstimator.get_method()
+    )
+
+    return selected, report
+
+
 def load_config(config_path: Optional[Path]) -> Tuple[List[str], List[str], Dict[str, Dict]]:
     """Loads ignore and include patterns, and custom lenses from a JSON config file."""
     # Default patterns to ignore common build artifacts and vcs folders
@@ -1504,12 +1733,15 @@ def serialize(
     language_plugins_dir: Optional[Path] = None,
     lens_manager: Optional['LensManager'] = None,
     stream_mode: bool = False,
+    token_budget: int = 0,
 ):
     """Collects, sorts, and serializes files based on specified criteria.
 
     Args:
         stream_mode: If True, emits output immediately without global sorting.
                      Uses depth-first directory traversal order for zero TTFB.
+        token_budget: Maximum tokens for output (v1.7.0). 0 = no limit.
+                      When set, drops lowest priority files to fit within budget.
     """
 
     # Inject .pm_encoder_meta file if lens is active
@@ -1634,23 +1866,75 @@ def serialize(
     else:
         files_to_process = list(collect_files_generator(project_root))
 
-        # Sort the collected list of files globally
-        reverse_order = sort_order == 'desc'
-        sort_key_func = None
+        # Token budgeting (v1.7.0): if budget is set, filter files by priority
+        if token_budget > 0:
+            print(f"\nApplying token budget: {token_budget:,} tokens...", file=sys.stderr)
 
-        if sort_by == 'name':
-            sort_key_func = lambda p: p.relative_to(project_root).as_posix()
-        elif sort_by == 'mtime':
-            sort_key_func = lambda p: p.stat().st_mtime
-        elif sort_by == 'ctime':
-            sort_key_func = lambda p: p.stat().st_ctime
+            # Read all files and calculate tokens
+            files_with_content = []
+            for file_path in files_to_process:
+                content = read_file_content(file_path)
+                if content is not None:
+                    files_with_content.append((file_path.relative_to(project_root), content))
 
-        print(f"\nSorting {len(files_to_process)} files by {sort_by} ({sort_order})...", file=sys.stderr)
-        files_to_process.sort(key=sort_key_func, reverse=reverse_order)
+            # Apply budget selection based on priority
+            selected_files, budget_report = apply_token_budget(
+                files_with_content,
+                token_budget,
+                lens_manager
+            )
 
-        # Process and write the sorted files
-        for file_path in files_to_process:
-            process_file(file_path)
+            # Print budget report
+            budget_report.print_report()
+
+            # Process only selected files (already sorted by priority)
+            for relative_path, content in selected_files:
+                full_path = project_root / relative_path
+                original_lines = len(content.split('\n'))
+                was_truncated = False
+                analysis = {}
+
+                # Apply truncation if enabled
+                use_structure_mode = truncate_mode == 'structure'
+                should_truncate_this_file = (
+                    (truncate_lines > 0 or use_structure_mode)
+                    and not any(fnmatch(relative_path.as_posix(), pat) for pat in truncate_exclude)
+                )
+
+                if should_truncate_this_file:
+                    content, was_truncated, analysis = truncate_content(
+                        content,
+                        truncate_lines,
+                        relative_path,
+                        truncate_mode,
+                        analyzer_registry,
+                        truncate_summary
+                    )
+                    if stats and was_truncated:
+                        stats.record_truncation(relative_path, original_lines, len(content.split('\n')))
+
+                # Write to output
+                write_pm_format(output_stream, relative_path, content, was_truncated, original_lines)
+
+        else:
+            # Standard batch mode without budget
+            # Sort the collected list of files globally
+            reverse_order = sort_order == 'desc'
+            sort_key_func = None
+
+            if sort_by == 'name':
+                sort_key_func = lambda p: p.relative_to(project_root).as_posix()
+            elif sort_by == 'mtime':
+                sort_key_func = lambda p: p.stat().st_mtime
+            elif sort_by == 'ctime':
+                sort_key_func = lambda p: p.stat().st_ctime
+
+            print(f"\nSorting {len(files_to_process)} files by {sort_by} ({sort_order})...", file=sys.stderr)
+            files_to_process.sort(key=sort_key_func, reverse=reverse_order)
+
+            # Process and write the sorted files
+            for file_path in files_to_process:
+                process_file(file_path)
 
     # Print stats if requested
     if stats and show_stats:
@@ -2177,6 +2461,12 @@ Examples:
                              "Reduces Time-To-First-Byte (TTFB) for large repositories.\n"
                              "Note: Disables global sorting (uses directory traversal order).")
 
+    # Token Budgeting (v1.7.0)
+    parser.add_argument("--token-budget", type=str, metavar="N",
+                        help="Maximum tokens for output (e.g., 100000, 100k, 2M).\n"
+                             "Drops lowest priority files to fit within budget.\n"
+                             "Note: Disables streaming mode (requires batch processing).")
+
     # Truncation options
     parser.add_argument("--truncate", type=int, metavar="N", default=0,
                         help="Truncate files exceeding N lines (default: 0 = no truncation)")
@@ -2281,10 +2571,29 @@ Examples:
         if truncate_exclude_arg:
             print(f"Truncation exclusions: {truncate_exclude_arg}", file=sys.stderr)
 
+    # Parse and validate token budget (v1.7.0)
+    token_budget = 0
+    stream_mode = args.stream
+
+    if args.token_budget:
+        try:
+            token_budget = parse_token_budget(args.token_budget)
+            print(f"\nToken budget: {token_budget:,} tokens", file=sys.stderr)
+
+            # Token budgeting requires batch processing (disables streaming)
+            if stream_mode:
+                print("⚠️  WARNING: Token budgeting requires batch processing. Streaming disabled.",
+                      file=sys.stderr)
+                stream_mode = False
+
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
     print(f"\nSerializing '{args.project_root}'...", file=sys.stderr)
 
     # Warn about streaming mode limitations
-    if args.stream:
+    if stream_mode:
         if sort_by_arg != 'name' or sort_order_arg != 'asc':
             print(f"\n⚠️  WARNING: --stream mode ignores --sort-by and --sort-order flags.", file=sys.stderr)
             print(f"    Files will be emitted in directory traversal order (depth-first).", file=sys.stderr)
@@ -2304,7 +2613,8 @@ Examples:
             show_stats=args.truncate_stats or truncate_arg > 0,
             language_plugins_dir=args.language_plugins,
             lens_manager=lens_manager if args.lens else None,
-            stream_mode=args.stream,
+            stream_mode=stream_mode,
+            token_budget=token_budget,
         )
         print(f"\nSuccessfully serialized project.", file=sys.stderr)
     finally:
