@@ -2024,14 +2024,16 @@ def serialize(
                 if should_truncate_this_file:
                     content, was_truncated, analysis = truncate_content(
                         content,
-                        truncate_lines,
                         relative_path,
+                        truncate_lines,
                         truncate_mode,
                         analyzer_registry,
                         truncate_summary
                     )
                     if stats and was_truncated:
-                        stats.record_truncation(relative_path, original_lines, len(content.split('\n')))
+                        final_lines = len(content.split('\n'))
+                        language = analysis.get('language', 'Unknown') if analysis else 'Unknown'
+                        stats.add_file(language, original_lines, final_lines, was_truncated)
 
                 # Write to output
                 write_pm_format(output_stream, relative_path, content, was_truncated, original_lines)
