@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>pm_encoder WASM Demo</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #eee;
+        }
+        h1 {
+            color: #00d4ff;
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            color: #888;
+            margin-bottom: 30px;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 800px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+        .panel {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #0f3460;
+        }
+        .panel h2 {
+            margin-top: 0;
+            color: #00d4ff;
+            font-size: 1.1em;
+            border-bottom: 1px solid #0f3460;
+            padding-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #aaa;
+            font-size: 0.9em;
+        }
+        select, input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            background: #1a1a2e;
+            color: #eee;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        select:focus, input:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            padding: 12px;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            background: #0d1b2a;
+            color: #7ec8e3;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            resize: vertical;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+        .output-area {
+            height: 400px;
+            overflow: auto;
+        }
+        button {
+            background: #00d4ff;
+            color: #1a1a2e;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #00a8cc;
+        }
+        button:disabled {
+            background: #444;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: #0f3460;
+            color: #eee;
+            margin-left: 10px;
+        }
+        .btn-secondary:hover {
+            background: #1a4a7a;
+        }
+        .stats {
+            display: flex;
+            gap: 20px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .stat {
+            background: #0f3460;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .stat-value {
+            color: #00d4ff;
+            font-weight: bold;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .status.loading {
+            background: #0f3460;
+            color: #00d4ff;
+        }
+        .status.ready {
+            background: #0a3d2a;
+            color: #00ff88;
+        }
+        .status.error {
+            background: #3d0a0a;
+            color: #ff4444;
+        }
+        .file-item {
+            background: #0d1b2a;
+            border: 1px solid #0f3460;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .file-item input {
+            margin-bottom: 5px;
+        }
+        .file-item textarea {
+            height: 80px;
+        }
+        .file-actions {
+            text-align: right;
+            margin-top: 5px;
+        }
+        .file-actions button {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+        .add-file-btn {
+            width: 100%;
+            margin-top: 10px;
+            background: #0f3460;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #666;
+            font-size: 0.9em;
+        }
+        .footer a {
+            color: #00d4ff;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>pm_encoder</h1>
+    <p class="subtitle">Convert your codebase to LLM context — entirely in the browser</p>
+
+    <div id="status" class="status loading">Loading WASM module...</div>
+
+    <div class="container">
+        <div class="panel">
+            <h2>Input Files</h2>
+
+            <div id="files-container">
+                <!-- Files will be added here -->
+            </div>
+
+            <button class="add-file-btn" onclick="addFile()">+ Add File</button>
+
+            <h2 style="margin-top: 20px;">Configuration</h2>
+
+            <label for="lens">Context Lens</label>
+            <select id="lens">
+                <option value="">None (default)</option>
+                <option value="architecture">Architecture (signatures only)</option>
+                <option value="debug">Debug (full content)</option>
+                <option value="security">Security (auth, crypto)</option>
+                <option value="minimal">Minimal (entry points)</option>
+                <option value="onboarding">Onboarding (balanced)</option>
+            </select>
+
+            <label for="truncate">Truncate Lines (0 = no truncation)</label>
+            <input type="number" id="truncate" value="0" min="0">
+
+            <button onclick="serialize()" id="serializeBtn" disabled>Generate Context</button>
+            <button class="btn-secondary" onclick="copyOutput()">Copy Output</button>
+        </div>
+
+        <div class="panel">
+            <h2>Output (Plus/Minus Format)</h2>
+            <textarea id="output" class="output-area" readonly placeholder="Click 'Generate Context' to see output..."></textarea>
+
+            <div class="stats" id="stats">
+                <div class="stat">Version: <span class="stat-value" id="version">-</span></div>
+                <div class="stat">Files: <span class="stat-value" id="fileCount">0</span></div>
+                <div class="stat">Output: <span class="stat-value" id="outputSize">0</span> chars</div>
+                <div class="stat">Tokens: <span class="stat-value" id="tokenCount">~0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>
+            Powered by <a href="https://github.com/alanbld/pm_encoder" target="_blank">pm_encoder</a> WASM Engine |
+            Code never leaves your browser
+        </p>
+    </div>
+
+    <script type="module">
+        import init, { wasm_serialize, wasm_version, wasm_get_lenses } from './pkg/pm_encoder.js';
+
+        let wasmReady = false;
+
+        // Initialize WASM
+        async function initWasm() {
+            try {
+                await init();
+                wasmReady = true;
+
+                document.getElementById('status').className = 'status ready';
+                document.getElementById('status').textContent = 'WASM module loaded — ready to serialize';
+                document.getElementById('serializeBtn').disabled = false;
+                document.getElementById('version').textContent = wasm_version();
+
+                // Add initial sample files
+                addFile('src/main.py', `#!/usr/bin/env python3
+"""Main entry point for the application."""
+
+import os
+from utils import helper
+
+def main():
+    """Run the main application logic."""
+    print(f"Hello from {os.getcwd()}")
+    result = helper()
+    print(f"Result: {result}")
+
+if __name__ == '__main__':
+    main()
+`);
+                addFile('src/utils.py', `"""Utility functions."""
+
+def helper():
+    """Return the answer to everything."""
+    return 42
+
+def format_output(data):
+    """Format data for display."""
+    return f"Output: {data}"
+`);
+                addFile('README.md', `# Sample Project
+
+This is a demo project for pm_encoder WASM.
+
+## Features
+- Python application
+- Utility module
+- Clean architecture
+`);
+
+            } catch (err) {
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').textContent = `Error loading WASM: ${err.message}`;
+            }
+        }
+
+        // File management
+        let fileId = 0;
+
+        window.addFile = function(path = '', content = '') {
+            const container = document.getElementById('files-container');
+            const id = fileId++;
+
+            const div = document.createElement('div');
+            div.className = 'file-item';
+            div.id = `file-${id}`;
+            div.innerHTML = `
+                <input type="text" placeholder="path/to/file.py" value="${escapeHtml(path)}" class="file-path">
+                <textarea placeholder="File content..." class="file-content">${escapeHtml(content)}</textarea>
+                <div class="file-actions">
+                    <button class="btn-secondary" onclick="removeFile(${id})">Remove</button>
+                </div>
+            `;
+            container.appendChild(div);
+            updateFileCount();
+        };
+
+        window.removeFile = function(id) {
+            const el = document.getElementById(`file-${id}`);
+            if (el) {
+                el.remove();
+                updateFileCount();
+            }
+        };
+
+        function updateFileCount() {
+            const count = document.querySelectorAll('.file-item').length;
+            document.getElementById('fileCount').textContent = count;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Serialize
+        window.serialize = function() {
+            if (!wasmReady) return;
+
+            // Gather files
+            const fileItems = document.querySelectorAll('.file-item');
+            const files = [];
+
+            fileItems.forEach(item => {
+                const path = item.querySelector('.file-path').value.trim();
+                const content = item.querySelector('.file-content').value;
+                if (path) {
+                    files.push({ path, content });
+                }
+            });
+
+            if (files.length === 0) {
+                alert('Please add at least one file');
+                return;
+            }
+
+            // Build config
+            const config = {};
+            const lens = document.getElementById('lens').value;
+            if (lens) config.lens = lens;
+
+            const truncate = parseInt(document.getElementById('truncate').value);
+            if (truncate > 0) config.truncate_lines = truncate;
+
+            try {
+                const output = wasm_serialize(
+                    JSON.stringify(files),
+                    JSON.stringify(config)
+                );
+
+                document.getElementById('output').value = output;
+                document.getElementById('outputSize').textContent = output.length.toLocaleString();
+                document.getElementById('tokenCount').textContent = '~' + Math.round(output.length / 4).toLocaleString();
+
+            } catch (err) {
+                document.getElementById('output').value = `Error: ${err.message}`;
+            }
+        };
+
+        // Copy output
+        window.copyOutput = function() {
+            const output = document.getElementById('output');
+            output.select();
+            document.execCommand('copy');
+
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => btn.textContent = originalText, 1500);
+        };
+
+        // Initialize
+        initWasm();
+    </script>
+</body>
+</html>
