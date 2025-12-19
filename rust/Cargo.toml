@@ -1,17 +1,25 @@
 [package]
 name = "pm_encoder"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 description = "High-performance context serializer (Rust Engine)"
 license = "MIT"
+repository = "https://github.com/alanbld/pm_encoder"
+keywords = ["llm", "context", "serialization", "ai", "wasm"]
+categories = ["command-line-utilities", "wasm"]
 
 [lib]
 name = "pm_encoder"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "pm_encoder"
 path = "src/bin/main.rs"
+
+[features]
+default = []
+wasm = ["wasm-bindgen", "serde-wasm-bindgen"]
 
 [dependencies]
 md5 = "0.7"
@@ -20,6 +28,15 @@ serde_json = "1.0"
 globset = "0.4"
 regex = "1.10"
 lazy_static = "1.4"
+chrono = "0.4"
+
+# CLI-only dependencies
 clap = { version = "4.4", features = ["derive"] }
 walkdir = "2.4"
-chrono = "0.4"
+
+# WASM dependencies (optional)
+wasm-bindgen = { version = "0.2", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }

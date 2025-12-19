@@ -2963,3 +2963,109 @@ This is the last section.
         assert!(result.contains("**Bugfixes**"), "Should keep early content");
     }
 }
+
+// ============================================================================
+// WASM BINDINGS - Conditional compilation for browser/Node.js environments
+// ============================================================================
+
+#[cfg(feature = "wasm")]
+pub mod wasm {
+    use super::*;
+    use wasm_bindgen::prelude::*;
+
+    /// File input structure for WASM
+    #[derive(serde::Deserialize)]
+    struct WasmFileInput {
+        path: String,
+        content: String,
+    }
+
+    /// Configuration input for WASM
+    #[derive(serde::Deserialize, Default)]
+    struct WasmConfig {
+        #[serde(default)]
+        lens: Option<String>,
+        #[serde(default)]
+        token_budget: Option<usize>,
+        #[serde(default)]
+        budget_strategy: Option<String>,
+        #[serde(default)]
+        truncate_lines: Option<usize>,
+        #[serde(default)]
+        truncate_mode: Option<String>,
+    }
+
+    /// Serialize files to Plus/Minus format (WASM entry point)
+    ///
+    /// # Arguments
+    /// * `json_files` - JSON array of {path, content} objects
+    /// * `json_config` - Optional JSON config object
+    ///
+    /// # Returns
+    /// * Serialized context string or error
+    ///
+    /// # Example (JavaScript)
+    /// ```javascript
+    /// const files = [
+    ///   { path: "main.py", content: "print('hello')" },
+    ///   { path: "lib.py", content: "def helper(): pass" }
+    /// ];
+    /// const config = { lens: "architecture", token_budget: 100000 };
+    /// const context = wasm_serialize(JSON.stringify(files), JSON.stringify(config));
+    /// ```
+    #[wasm_bindgen]
+    pub fn wasm_serialize(json_files: &str, json_config: &str) -> Result<String, JsValue> {
+        // Parse files
+        let file_inputs: Vec<WasmFileInput> = serde_json::from_str(json_files)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse files JSON: {}", e)))?;
+
+        // Convert to (path, content) pairs
+        let files: Vec<(String, String)> = file_inputs
+            .into_iter()
+            .map(|f| (f.path, f.content))
+            .collect();
+
+        // Parse config (allow empty string for defaults)
+        let wasm_config: WasmConfig = if json_config.is_empty() || json_config == "{}" {
+            WasmConfig::default()
+        } else {
+            serde_json::from_str(json_config)
+                .map_err(|e| JsValue::from_str(&format!("Failed to parse config JSON: {}", e)))?
+        };
+
+        // Build EncoderConfig
+        let mut config = EncoderConfig::default();
+        if let Some(lines) = wasm_config.truncate_lines {
+            config.truncate_lines = lines;
+        }
+        if let Some(mode) = wasm_config.truncate_mode {
+            config.truncate_mode = mode;
+        }
+
+        // Create engine (with optional lens)
+        let engine = if let Some(lens_name) = wasm_config.lens {
+            ContextEngine::with_lens(config, &lens_name)
+                .map_err(|e| JsValue::from_str(&format!("Invalid lens: {}", e)))?
+        } else {
+            ContextEngine::new(config)
+        };
+
+        // Generate context
+        let output = engine.generate_context(&files);
+
+        Ok(output)
+    }
+
+    /// Get library version (WASM)
+    #[wasm_bindgen]
+    pub fn wasm_version() -> String {
+        version().to_string()
+    }
+
+    /// Get available lens names (WASM)
+    #[wasm_bindgen]
+    pub fn wasm_get_lenses() -> String {
+        let lenses = vec!["architecture", "debug", "security", "minimal", "onboarding"];
+        serde_json::to_string(&lenses).unwrap_or_else(|_| "[]".to_string())
+    }
+}
