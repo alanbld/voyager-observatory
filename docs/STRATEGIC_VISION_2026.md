@@ -121,18 +121,17 @@ fn test_vector_parity() {
 ### Version Timeline
 
 ```
-2024 Q4          2025 Q1          2025 Q2          2025 Q3+
-   │                │                │                │
-   ▼                ▼                ▼                ▼
-┌──────┐        ┌──────┐        ┌──────┐        ┌──────┐
-│v1.7.0│        │v2.0.0│        │v2.1.0│        │v3.0.0│
-│Python│───────▶│ Rust │───────▶│ WASM │───────▶│Semant│
-│ Ref  │        │ CLI  │        │Engine│        │  ic  │
-└──────┘        └──────┘        └──────┘        └──────┘
-   │                │                │                │
-   │                │                │                │
-Reference      Production       Universal       Next-Gen
-& Prototyping   Workhorse        Client         Chunking
+2024 Q4          2025 Q1          2025 Q2          2025 H2          2026+
+   │                │                │                │                │
+   ▼                ▼                ▼                ▼                ▼
+┌──────┐        ┌──────┐        ┌──────┐        ┌──────┐        ┌──────┐
+│v1.7.0│        │v2.0.0│        │v2.1.0│        │v2.2.0│        │v3.0.0│
+│Python│───────▶│ Rust │───────▶│ WASM │───────▶│ MCP  │───────▶│Semant│
+│ Ref  │        │ CLI  │        │Engine│        │Server│        │  ic  │
+└──────┘        └──────┘        └──────┘        └──────┘        └──────┘
+   │                │                │                │                │
+Reference      Production       Browser/IDE     Claude Desktop   Tree-sitter
+& Prototyping   Workhorse        Integration     Integration      Chunking
 ```
 
 ### v1.x (Python) - The Reference & Prototyping Lab
@@ -196,23 +195,40 @@ pub fn process_content(
 
 ---
 
-### v2.2 (Live Server) - The LSP-Style Daemon
+### v2.2 (MCP Server) - Claude Desktop Integration
 
-**Role**: Real-time context for IDE integration
+**Role**: Direct AI assistant integration via Model Context Protocol
+
+pm_encoder v2.2 introduces a **Model Context Protocol (MCP) server** designed for *deterministic, budgeted repository context delivery*.
+
+Rather than exposing a generic REST API, pm_encoder acts as an **MCP-native context provider**, enabling:
+
+- Direct Claude Desktop integration
+- Tool-driven context retrieval
+- Strict token budgeting with guaranteed limits
+- Priority-based file inclusion
+- Reproducible, checksum-verified outputs
 
 ```bash
-$ pm_encoder serve --port 8080 --watch .
+$ pm_encoder mcp --watch .
+[INFO] MCP Server started
 [INFO] Watching 1,247 files
-[INFO] WebSocket server: ws://localhost:8080
-[INFO] REST API: http://localhost:8080/api
+[INFO] Token budget: 100k (hybrid strategy)
 ```
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /context` | Full serialized context |
-| `GET /context?lens=security` | Lens-filtered context |
-| `WS /stream` | Real-time updates on file change |
-| `POST /files` | Ad-hoc file processing |
+| MCP Resource/Tool | Description |
+|-------------------|-------------|
+| `resources/context` | Full serialized context (budgeted) |
+| `resources/context?lens=security` | Lens-filtered context |
+| `tools/serialize` | On-demand context generation |
+| `notifications/file_changed` | Real-time updates on file change |
+
+**Why MCP over REST?**
+- repomix uses MCP to improve UX
+- pm_encoder uses MCP to **enforce constraints**
+- No copy-paste workflows — direct agent-mediated access
+
+> REST/WebSocket compatibility may be offered via adapter, but MCP is the primary interface.
 
 **Performance Target**: <10ms incremental update latency
 
@@ -324,10 +340,11 @@ pub fn semantic_chunk(content: &str, lang: Language) -> Vec<SemanticUnit> {
 - [ ] VS Code extension published
 - [ ] 100 weekly active users
 
-### v2.2 (Live Server)
+### v2.2 (MCP Server)
+- [ ] Claude Desktop integration working
 - [ ] <10ms incremental update
-- [ ] WebSocket stability (24hr test)
-- [ ] IDE integration docs
+- [ ] MCP protocol compliance tests
+- [ ] Published to MCP registry
 
 ### v3.0 (Semantic)
 - [ ] Tree-sitter for 5+ languages
@@ -359,6 +376,6 @@ pub fn semantic_chunk(content: &str, lang: Language) -> Vec<SemanticUnit> {
 
 ---
 
-*Document Version: 1.0*
-*Last Updated: 2024-12*
+*Document Version: 1.1*
+*Last Updated: 2025-12-19*
 *Authors: pm_encoder Core Team*
