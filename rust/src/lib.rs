@@ -136,6 +136,211 @@ impl EncoderConfig {
     }
 }
 
+// ============================================================================
+// CONTEXT ENGINE - Library-First Architecture for WASM Compatibility
+// ============================================================================
+
+/// Result of processing a single file
+#[derive(Debug, Clone)]
+pub struct ProcessedFile {
+    /// Relative path to the file
+    pub path: String,
+    /// Processed content (possibly truncated)
+    pub content: String,
+    /// MD5 checksum of the ORIGINAL content
+    pub md5: String,
+    /// Whether the content was truncated
+    pub was_truncated: bool,
+    /// Original line count (before truncation)
+    pub original_lines: usize,
+    /// Modification time (seconds since epoch)
+    pub mtime: u64,
+    /// Creation time (seconds since epoch)
+    pub ctime: u64,
+}
+
+/// The core context engine - holds configuration but does NO I/O
+///
+/// This struct is designed for the "Library-First" pattern:
+/// - All methods are pure functions (no filesystem access)
+/// - Can be compiled to WASM
+/// - Can be embedded in Python via PyO3
+/// - CLI uses this via I/O adapter functions
+///
+/// # Example
+///
+/// ```rust
+/// use pm_encoder::{ContextEngine, EncoderConfig};
+///
+/// let engine = ContextEngine::new(EncoderConfig::default());
+///
+/// // Process file content (PURE - no I/O)
+/// let processed = engine.process_file_content("main.py", "print('hello')");
+///
+/// // Serialize processed files (PURE - no I/O)
+/// let output = engine.serialize_processed_files(&[processed]);
+/// ```
+pub struct ContextEngine {
+    /// Encoder configuration
+    pub config: EncoderConfig,
+    /// Lens manager for context filtering
+    pub lens_manager: LensManager,
+}
+
+impl ContextEngine {
+    /// Create a new context engine with the given configuration
+    pub fn new(config: EncoderConfig) -> Self {
+        Self {
+            config,
+            lens_manager: LensManager::new(),
+        }
+    }
+
+    /// Create a new context engine with a specific lens applied
+    pub fn with_lens(config: EncoderConfig, lens_name: &str) -> Result<Self, String> {
+        let mut engine = Self::new(config);
+        engine.lens_manager.apply_lens(lens_name)?;
+        Ok(engine)
+    }
+
+    /// Process a single file's content (PURE - no I/O)
+    ///
+    /// This is the core pure function that can run in WASM.
+    /// It takes path and content as inputs (no filesystem access).
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Relative path to the file
+    /// * `content` - Raw file content as string
+    ///
+    /// # Returns
+    ///
+    /// * `ProcessedFile` - Processed file with optional truncation applied
+    pub fn process_file_content(&self, path: &str, content: &str) -> ProcessedFile {
+        let original_lines = count_lines_python_style(content);
+        let md5 = calculate_md5(content);
+
+        // Apply truncation if configured
+        let (processed_content, was_truncated) = if self.config.truncate_lines > 0
+            || self.config.truncate_mode == "structure"
+        {
+            match self.config.truncate_mode.as_str() {
+                "simple" => truncate_simple_with_options(
+                    content,
+                    self.config.truncate_lines,
+                    path,
+                    self.config.truncate_summary,
+                ),
+                "smart" => truncate_smart_with_options(
+                    content,
+                    self.config.truncate_lines,
+                    path,
+                    self.config.truncate_summary,
+                ),
+                "structure" => truncate_structure_with_fallback(
+                    content,
+                    path,
+                    self.config.truncate_summary,
+                    self.config.truncate_lines,
+                ),
+                _ => (content.to_string(), false),
+            }
+        } else {
+            (content.to_string(), false)
+        };
+
+        ProcessedFile {
+            path: path.to_string(),
+            content: processed_content,
+            md5,
+            was_truncated,
+            original_lines,
+            mtime: 0, // Set by caller if needed
+            ctime: 0, // Set by caller if needed
+        }
+    }
+
+    /// Serialize a single processed file to Plus/Minus format (PURE - no I/O)
+    pub fn serialize_processed_file(&self, file: &ProcessedFile) -> String {
+        let mut output = String::new();
+
+        // Header: ++++++++++ filename [TRUNCATED: N lines] ++++++++++
+        if file.was_truncated {
+            output.push_str(&format!(
+                "++++++++++ {} [TRUNCATED: {} lines] ++++++++++\n",
+                file.path, file.original_lines
+            ));
+        } else {
+            output.push_str(&format!("++++++++++ {} ++++++++++\n", file.path));
+        }
+
+        // Content
+        output.push_str(&file.content);
+
+        // Ensure content ends with newline
+        if !file.content.ends_with('\n') {
+            output.push('\n');
+        }
+
+        // Calculate final line count for footer
+        let final_lines = count_lines_python_style(&file.content);
+
+        // Footer: ---------- filename [TRUNCATED:orig→final] md5 filename ----------
+        if file.was_truncated {
+            output.push_str(&format!(
+                "---------- {} [TRUNCATED:{}→{}] {} {} ----------\n",
+                file.path, file.original_lines, final_lines, file.md5, file.path
+            ));
+        } else {
+            output.push_str(&format!(
+                "---------- {} {} {} ----------\n",
+                file.path, file.md5, file.path
+            ));
+        }
+
+        output
+    }
+
+    /// Serialize multiple processed files (PURE - no I/O)
+    ///
+    /// Files are serialized in the order provided. Sorting should be done
+    /// by the caller before passing to this function.
+    pub fn serialize_processed_files(&self, files: &[ProcessedFile]) -> String {
+        let mut output = String::new();
+        for file in files {
+            output.push_str(&self.serialize_processed_file(file));
+        }
+        output
+    }
+
+    /// Generate complete context from path-content pairs (PURE - no I/O)
+    ///
+    /// This is the main entry point for WASM usage. It takes a list of
+    /// (path, content) pairs and returns the complete serialized context.
+    ///
+    /// # Arguments
+    ///
+    /// * `files` - List of (path, content) tuples
+    ///
+    /// # Returns
+    ///
+    /// * Serialized context string
+    pub fn generate_context(&self, files: &[(String, String)]) -> String {
+        // Process all files
+        let processed: Vec<ProcessedFile> = files
+            .iter()
+            .map(|(path, content)| self.process_file_content(path, content))
+            .collect();
+
+        // Sort by path (default behavior)
+        let mut sorted = processed;
+        sorted.sort_by(|a, b| a.path.cmp(&b.path));
+
+        // Serialize
+        self.serialize_processed_files(&sorted)
+    }
+}
+
 /// Version of the pm_encoder library
 pub const VERSION: &str = "0.8.0";
 
