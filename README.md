@@ -1,11 +1,75 @@
-# Project Encoder (`pm_encoder.py`)
+# pm_encoder
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.6+](https://img.shields.io/badge/python-3.6+-blue.svg)](https://www.python.org/downloads/)
+[![Rust](https://img.shields.io/badge/rust-v0.9.1-orange.svg)](rust/)
 
-`pm_encoder.py` is a powerful command-line utility designed to serialize a project's source files into a single, well-structured text file. This is ideal for sharing project context with Large Language Models (LLMs), creating context packages for new developers, or for archival purposes.
+**Convert your entire codebase into a single text file, intelligently budgeted for LLM context windows.**
 
-The script uses a custom "Plus/Minus" format that is both human-readable and easy for other scripts to parse. It offers robust filtering capabilities through a JSON configuration file and command-line arguments.
+```bash
+# Fit a 500-file project into Claude's context
+./pm_encoder.py ./my-project --token-budget 100k --budget-strategy hybrid
+
+# Output: One file, priority-sorted, intelligently truncated, ready to paste
+```
+
+---
+
+## Why pm_encoder?
+
+There are other tools in this space ([repomix](https://github.com/yamadashy/repomix), [files-to-prompt](https://github.com/simonw/files-to-prompt)). Here's when to use pm_encoder:
+
+| Feature | pm_encoder | repomix | files-to-prompt |
+|---------|-----------|---------|-----------------|
+| **Token budgeting** | ✅ `--token-budget 100k` | ❌ | ❌ |
+| **Budget strategies** | ✅ drop/truncate/hybrid | ❌ | ❌ |
+| **Priority groups** | ✅ Explicit numeric | ⚠️ Git frequency | ❌ |
+| **Deterministic output** | ✅ Reproducible | ⚠️ Varies | ✅ |
+| **Zero dependencies** | ✅ Python stdlib | ❌ Node.js | ❌ pip install |
+| **Dual engine** | ✅ Python + Rust | ❌ | ❌ |
+| **File checksums** | ✅ MD5 per file | ❌ | ❌ |
+
+### pm_encoder is Pipeline-First
+
+```
+repomix       = UX-first      → Interactive chat, human review
+files-to-prompt = Simple-first  → Quick concatenation
+pm_encoder    = Pipeline-first → CI/CD, agents, automation, reproducibility
+```
+
+**Best for:**
+- CI pipelines with strict token limits
+- Deterministic, reproducible prompts for regression testing
+- Agent workflows with hard budget constraints
+- Automated refactors and code mods
+- Eval harnesses comparing LLM outputs
+
+**Not ideal for:**
+- Quick one-off pastes (use files-to-prompt)
+- Interactive exploration with Web UI (use repomix.com)
+
+---
+
+## Quick Start
+
+```bash
+# Basic: serialize entire project
+./pm_encoder.py . > context.txt
+
+# With token budget (fits in Claude's context)
+./pm_encoder.py . --token-budget 100k -o context.txt
+
+# Smart curation: hybrid strategy + architecture lens
+./pm_encoder.py . --token-budget 100k --budget-strategy hybrid --lens architecture
+
+# Generate CLAUDE.md + CONTEXT.txt for AI IDE
+./pm_encoder.py . --init-prompt --target claude
+
+# Use Rust engine (10x faster)
+./rust/target/release/pm_encoder . --token-budget 100k
+```
+
+---
 
 ## Features
 
@@ -26,31 +90,32 @@ The script uses a custom "Plus/Minus" format that is both human-readable and eas
 - **🆕 Plugin System** (v1.1+): Extensible architecture for community-contributed language analyzers.
 - **🆕 Token Optimization** (v1.1+): Detailed statistics on size and token reduction.
 
-## Project Structure
+## The Twins Architecture
 
-This repository contains **two implementations** of pm_encoder:
+This repository contains **two implementations** with 100% byte-level parity:
 
-### Python Implementation (Current Production)
+| Engine | Version | Status | Performance | Best For |
+|--------|---------|--------|-------------|----------|
+| **Python** | v1.7.0 | Production | ~46ms TTFB | Feature prototyping, plugins |
+| **Rust** | v0.9.1 | Production | ~5ms TTFB | Large codebases, CI pipelines |
 
-- **Location:** `pm_encoder.py` (root directory)
-- **Version:** 1.5.0
-- **Status:** Production-ready with 95% test coverage
-- **Best for:** Python ecosystem integration, rapid feature development
-- **Dependencies:** None (Python 3.6+ stdlib only)
+Both engines produce **identical output** for the same input. Verified by 213 tests and differential fuzzing via `pm_coach`.
 
-### Rust Implementation (v2.0 Foundation)
+```bash
+# Python (reference implementation)
+./pm_encoder.py . --token-budget 100k
 
-- **Location:** `rust/` directory
-- **Version:** 0.1.0 (skeleton)
-- **Status:** Architecture foundation
-- **Best for:** High-performance, WASM/Python bindings, large codebases
-- **Architecture:** Library-first pattern (`lib.rs` + `bin/main.rs`)
+# Rust (10x faster, same output)
+./rust/target/release/pm_encoder . --token-budget 100k
+```
 
-The Rust implementation is designed with a **Library-First** architecture:
-- `rust/src/lib.rs` - Pure logic, reusable by CLI/WASM/PyO3
-- `rust/src/bin/main.rs` - Thin CLI wrapper
+### Library-First Architecture (WASM-Ready)
 
-See `rust/README.md` for details on the Rust architecture and future WASM/Python binding plans.
+The Rust engine uses a pure-function core for future WASM compilation:
+- `rust/src/lib.rs` - Pure logic, no I/O (WASM compatible)
+- `rust/src/bin/main.rs` - Thin CLI wrapper with filesystem access
+
+See [docs/STRATEGIC_VISION_2026.md](docs/STRATEGIC_VISION_2026.md) for the roadmap to browser/IDE integration.
 
 ## Documentation
 
