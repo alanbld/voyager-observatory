@@ -804,6 +804,12 @@ fn main() {
         // Convert Function/Class/Module targets to File targets with resolved locations
         use pm_encoder::core::{SymbolResolver, SymbolType};
 
+        // Track the original symbol name for excluding from suggestions
+        let original_symbol_name: Option<String> = match &zoom_config.target {
+            ZoomTarget::Function(name) | ZoomTarget::Class(name) => Some(name.clone()),
+            _ => None,
+        };
+
         let resolved_file: Option<String> = match &zoom_config.target {
             ZoomTarget::Function(name) => {
                 let resolver = SymbolResolver::new()
@@ -909,8 +915,48 @@ fn main() {
                     }
                 }
 
+                // ═══════════════════════════════════════════════════════════════════════════
+                // FRACTAL PROTOCOL v2: Call Graph Analysis & Zoom Suggestions
+                // ═══════════════════════════════════════════════════════════════════════════
+                use pm_encoder::core::{CallGraphAnalyzer, ZoomSuggestion};
+
+                let call_analyzer = CallGraphAnalyzer::new().with_max_results(10);
+                let resolver = SymbolResolver::new()
+                    .with_ignore(config.ignore_patterns.clone());
+
+                let valid_calls = call_analyzer.get_valid_calls(&output, &resolver, &project_root);
+
+                // Generate zoom_menu if we found related functions
+                let zoom_menu = if !valid_calls.is_empty() {
+                    // Deduplicate by function name and exclude current target
+                    let mut seen = std::collections::HashSet::new();
+                    let suggestions: Vec<ZoomSuggestion> = valid_calls.iter()
+                        .filter(|(call, _)| {
+                            // Exclude the current zoom target
+                            if let Some(ref orig) = original_symbol_name {
+                                if &call.name == orig {
+                                    return false;
+                                }
+                            }
+                            seen.insert(call.name.clone())
+                        })
+                        .map(|(call, loc)| ZoomSuggestion::from_call(call, loc))
+                        .collect();
+
+                    let menu_items: Vec<String> = suggestions.iter()
+                        .map(|s| format!("  {}", s.to_xml()))
+                        .collect();
+
+                    format!("\n<zoom_menu>\n{}\n</zoom_menu>", menu_items.join("\n"))
+                } else {
+                    String::new()
+                };
+
+                // Append zoom_menu to output
+                let final_output = format!("{}{}", output, zoom_menu);
+
                 if let Some(output_path) = cli.output {
-                    match std::fs::write(&output_path, &output) {
+                    match std::fs::write(&output_path, &final_output) {
                         Ok(_) => eprintln!("Zoom output written to: {}", output_path.display()),
                         Err(e) => {
                             eprintln!("Error writing output: {}", e);
@@ -918,7 +964,7 @@ fn main() {
                         }
                     }
                 } else {
-                    print!("{}", output);
+                    print!("{}", final_output);
                 }
             }
             Err(e) => {

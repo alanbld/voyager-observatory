@@ -33,4 +33,7 @@ pub use zoom::{
     ZoomSession, ZoomSessionStore,
 };
 pub use store::{ContextStore, FileUtility, DEFAULT_ALPHA};
-pub use search::{SymbolResolver, SymbolLocation, SymbolType};
+pub use search::{
+    SymbolResolver, SymbolLocation, SymbolType,
+    CallGraphAnalyzer, FunctionCall, ZoomSuggestion,
+};
