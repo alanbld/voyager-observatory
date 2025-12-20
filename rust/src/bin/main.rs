@@ -12,7 +12,7 @@
 
 use clap::{Parser, ValueEnum};
 use pm_encoder::{self, EncoderConfig, LensManager, OutputFormat, parse_token_budget, apply_token_budget};
-use pm_encoder::core::{ContextEngine, ZoomConfig, ZoomTarget};
+use pm_encoder::core::{ContextEngine, ZoomConfig, ZoomTarget, ContextStore, DEFAULT_ALPHA};
 use std::path::PathBuf;
 
 /// Serialize project files into the Plus/Minus format with intelligent truncation.
@@ -181,6 +181,21 @@ struct Cli {
     /// Show Context Health summary after serialization
     #[arg(long = "health")]
     health: bool,
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // CONTEXT STORE / LEARNING (v2.2.0)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Report utility for a file to train the learning system.
+    /// Format: "path/to/file:score:reason" where score is 0.0-1.0.
+    /// Example: --report-utility "src/lib.rs:0.95:core logic"
+    #[arg(long = "report-utility", value_name = "FILE:SCORE:REASON")]
+    report_utility: Option<String>,
+
+    /// Enable privacy hashing for context store paths.
+    /// When enabled, file paths are hashed before storing.
+    #[arg(long = "store-privacy")]
+    store_privacy: bool,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -226,6 +241,42 @@ enum BudgetStrategy {
     Drop,
     Truncate,
     Hybrid,
+}
+
+/// Parse a report-utility string into (path, score, reason).
+/// Format: "path/to/file:score:reason" where score is 0.0-1.0.
+fn parse_report_utility(s: &str) -> Result<(String, f64, String), String> {
+    // Split by ':' but be careful - file paths might contain colons on Windows
+    // We expect: path:score:reason
+    // Find the last two colons (reason:score are at the end)
+    let parts: Vec<&str> = s.rsplitn(3, ':').collect();
+
+    if parts.len() < 2 {
+        return Err(format!(
+            "Invalid report-utility format: '{}'. Expected 'path:score:reason' or 'path:score'",
+            s
+        ));
+    }
+
+    // parts are in reverse order: [reason, score, path] or [score, path]
+    let (path, score_str, reason) = if parts.len() == 3 {
+        (parts[2].to_string(), parts[1], parts[0].to_string())
+    } else {
+        (parts[1].to_string(), parts[0], "manual report".to_string())
+    };
+
+    let score: f64 = score_str.parse().map_err(|_| {
+        format!("Invalid utility score: '{}'. Expected a number between 0.0 and 1.0", score_str)
+    })?;
+
+    if score < 0.0 || score > 1.0 {
+        return Err(format!(
+            "Utility score must be between 0.0 and 1.0, got: {}",
+            score
+        ));
+    }
+
+    Ok((path, score, reason))
 }
 
 /// Parse a zoom target string into ZoomConfig.
@@ -373,6 +424,43 @@ fn main() {
         std::process::exit(1);
     }
 
+    // Handle --report-utility command (Context Store v2.2.0)
+    if let Some(utility_str) = &cli.report_utility {
+        match parse_report_utility(utility_str) {
+            Ok((path, score, reason)) => {
+                // Load or create context store
+                let store_path = ContextStore::default_path(&project_root);
+                let mut store = if cli.store_privacy {
+                    let mut s = ContextStore::load_from_file(&store_path);
+                    s.paths_hashed = true;
+                    s
+                } else {
+                    ContextStore::load_from_file(&store_path)
+                };
+
+                // Report the utility
+                store.report_utility(&path, score, DEFAULT_ALPHA);
+
+                // Save the store
+                match store.save_to_file(&store_path) {
+                    Ok(_) => {
+                        eprintln!("Utility reported: {} = {:.2} ({})", path, score, reason);
+                        eprintln!("Store saved to: {}", store_path.display());
+                    }
+                    Err(e) => {
+                        eprintln!("Error saving context store: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+                return;
+            }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
     // Build config from CLI args
     let mut config = if let Some(config_path) = cli.config {
         match EncoderConfig::from_file(&config_path) {
@@ -480,6 +568,35 @@ fn main() {
 
         match engine.zoom(project_root.to_str().unwrap(), &zoom_config) {
             Ok(output) => {
+                // Apply Zoom Utility Bump (v2.2.0)
+                // When a file is zoomed into, we bump its utility by +0.05
+                // This teaches the system that zoomed files are likely relevant
+                if !config.frozen {
+                    let store_path = ContextStore::default_path(&project_root);
+                    let mut store = ContextStore::load_from_file(&store_path);
+
+                    // Extract file path from zoom target
+                    let zoom_file = match &zoom_config.target {
+                        ZoomTarget::File { path, .. } => Some(path.clone()),
+                        ZoomTarget::Function(_) | ZoomTarget::Class(_) | ZoomTarget::Module(_) => {
+                            // For function/class/module zoom, we'd need to find which file it's in
+                            // For now, we can't determine this without more context
+                            // Future enhancement: engine.zoom could return the file path
+                            eprintln!("Note: Zoom utility bump only applies to file zoom targets");
+                            None
+                        }
+                    };
+
+                    if let Some(file_path) = zoom_file {
+                        const ZOOM_BUMP: f64 = 0.05;
+                        store.bump_utility(&file_path, ZOOM_BUMP, DEFAULT_ALPHA);
+
+                        if let Err(e) = store.save_to_file(&store_path) {
+                            eprintln!("Warning: Could not save zoom utility bump: {}", e);
+                        }
+                    }
+                }
+
                 if let Some(output_path) = cli.output {
                     match std::fs::write(&output_path, &output) {
                         Ok(_) => eprintln!("Zoom output written to: {}", output_path.display()),

@@ -6,6 +6,7 @@
 //! Build: cargo build --features mcp --bin pm_encoder_mcp
 //! Run:   ./target/debug/pm_encoder_mcp
 
+use std::path::PathBuf;
 use pm_encoder::{
     ContextEngine, EncoderConfig, LensManager,
     parse_token_budget, apply_token_budget,
@@ -13,6 +14,7 @@ use pm_encoder::{
 use pm_encoder::core::{
     ContextEngine as CoreContextEngine,
     ZoomConfig, ZoomTarget, ZoomDepth,
+    ContextStore, DEFAULT_ALPHA,
 };
 use rmcp::{
     schemars,
@@ -86,13 +88,28 @@ struct ZoomContextParams {
     token_budget: Option<usize>,
 }
 
+/// Input for report_utility tool (v2.2.0)
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ReportUtilityParams {
+    /// Root directory of the project (for finding the context store)
+    root: String,
+    /// File path to report utility for
+    path: String,
+    /// Utility score (0.0 to 1.0, where 1.0 = highly useful)
+    utility: f64,
+    /// Optional reason for the rating
+    #[serde(default)]
+    reason: Option<String>,
+}
+
 impl PmEncoderServer {
     fn new() -> Self {
         // Build the tool router with our tools
         let tool_router = ToolRouter::new()
             .with_route(Self::get_context_route())
             .with_route(Self::list_lenses_route())
-            .with_route(Self::zoom_context_route());
+            .with_route(Self::zoom_context_route())
+            .with_route(Self::report_utility_route());
 
         Self { tool_router }
     }
@@ -283,6 +300,63 @@ impl PmEncoderServer {
             })
         })
     }
+
+    fn report_utility_route() -> rmcp::handler::server::tool::ToolRoute<Self> {
+        let tool = Tool::new(
+            "report_utility",
+            "Report the utility of a file to train the learning system. AI agents can use this to provide feedback about which files were helpful in answering questions.",
+            rmcp::handler::server::tool::schema_for_type::<ReportUtilityParams>(),
+        );
+
+        rmcp::handler::server::tool::ToolRoute::new_dyn(tool, |ctx| {
+            Box::pin(async move {
+                let params: ReportUtilityParams = rmcp::handler::server::tool::parse_json_object(
+                    ctx.arguments.unwrap_or_default(),
+                )?;
+
+                // Validate utility score
+                if params.utility < 0.0 || params.utility > 1.0 {
+                    return Err(rmcp::ErrorData::invalid_params(
+                        format!(
+                            "Utility must be between 0.0 and 1.0, got: {}",
+                            params.utility
+                        ),
+                        None,
+                    ));
+                }
+
+                // Load or create context store
+                let root_path = PathBuf::from(&params.root);
+                let store_path = ContextStore::default_path(&root_path);
+                let mut store = ContextStore::load_from_file(&store_path);
+
+                // Report the utility
+                store.report_utility(&params.path, params.utility, DEFAULT_ALPHA);
+
+                // Save the store
+                store.save_to_file(&store_path).map_err(|e| {
+                    rmcp::ErrorData::internal_error(
+                        format!("Failed to save context store: {}", e),
+                        None,
+                    )
+                })?;
+
+                // Format response
+                let reason = params.reason.unwrap_or_else(|| "MCP feedback".to_string());
+                let current_score = store.get_utility_score(&params.path);
+                let response = format!(
+                    "Utility reported:\n  File: {}\n  Score: {:.2} → {:.2}\n  Reason: {}\n  Store: {}",
+                    params.path,
+                    params.utility,
+                    current_score,
+                    reason,
+                    store_path.display()
+                );
+
+                Ok(CallToolResult::success(vec![Content::text(response)]))
+            })
+        })
+    }
 }
 
 impl ServerHandler for PmEncoderServer {
@@ -303,7 +377,8 @@ impl ServerHandler for PmEncoderServer {
             instructions: Some(
                 "Use get_context to serialize code files into LLM-optimized context. \
                  Use list_lenses to see available context lenses. \
-                 Use zoom_context to expand truncated content (follow ZOOM_AFFORDANCE markers)."
+                 Use zoom_context to expand truncated content (follow ZOOM_AFFORDANCE markers). \
+                 Use report_utility to provide feedback about which files helped answer questions."
                     .into(),
             ),
         }

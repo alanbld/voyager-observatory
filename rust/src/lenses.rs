@@ -5,10 +5,19 @@
 //! - debug: Recent changes for debugging
 //! - security: Security-relevant files
 //! - onboarding: Essential files for new contributors
+//!
+//! # Learning Integration (v2.2.0)
+//!
+//! LensManager can integrate with ContextStore for adaptive prioritization:
+//! - Accepts optional ContextStore for learned priorities
+//! - Uses Priority Blend: `final = (static * 0.7) + (learned * 100 * 0.3)`
+//! - Respects "frozen" mode by ignoring learned priorities
 
 use std::collections::HashMap;
 use std::path::Path;
 use serde::{Deserialize, Serialize};
+
+use crate::core::store::ContextStore;
 
 /// Priority group for file ranking (v1.7.0)
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -105,6 +114,10 @@ pub struct LensManager {
     custom: HashMap<String, LensConfig>,
     /// Currently active lens
     pub active_lens: Option<String>,
+    /// Optional context store for learned priorities (v2.2.0)
+    context_store: Option<ContextStore>,
+    /// Frozen mode: ignore learned priorities for deterministic output
+    frozen: bool,
 }
 
 impl LensManager {
@@ -246,7 +259,41 @@ impl LensManager {
             built_in,
             custom: HashMap::new(),
             active_lens: None,
+            context_store: None,
+            frozen: false,
         }
+    }
+
+    /// Create a new LensManager with a context store for learning (v2.2.0)
+    pub fn with_store(store: ContextStore) -> Self {
+        let mut manager = Self::new();
+        manager.context_store = Some(store);
+        manager
+    }
+
+    /// Set the context store for learned priorities
+    pub fn set_store(&mut self, store: ContextStore) {
+        self.context_store = Some(store);
+    }
+
+    /// Get a mutable reference to the context store
+    pub fn store_mut(&mut self) -> Option<&mut ContextStore> {
+        self.context_store.as_mut()
+    }
+
+    /// Get a reference to the context store
+    pub fn store(&self) -> Option<&ContextStore> {
+        self.context_store.as_ref()
+    }
+
+    /// Set frozen mode (ignores learned priorities)
+    pub fn set_frozen(&mut self, frozen: bool) {
+        self.frozen = frozen;
+    }
+
+    /// Check if frozen mode is enabled
+    pub fn is_frozen(&self) -> bool {
+        self.frozen
     }
 
     /// Load custom lenses from config
@@ -396,7 +443,34 @@ impl LensManager {
     ///
     /// Returns the highest matching priority from groups, or fallback priority.
     /// Default priority is 50 if no groups defined (backward compatible).
+    ///
+    /// # Learning Integration (v2.2.0)
+    ///
+    /// When a ContextStore is available and frozen mode is disabled, the priority
+    /// is blended with learned utility scores:
+    /// `final = (static * 0.7) + (learned * 100 * 0.3)`
     pub fn get_file_priority(&self, file_path: &Path) -> i32 {
+        let static_priority = self.get_static_priority(file_path);
+
+        // If frozen or no store, return static priority only
+        if self.frozen {
+            return static_priority;
+        }
+
+        // Blend with learned priorities if store available
+        match &self.context_store {
+            Some(store) => {
+                let path_str = file_path.to_string_lossy();
+                store.blend_priority(&path_str, static_priority)
+            }
+            None => static_priority,
+        }
+    }
+
+    /// Get static priority from lens configuration only (no learning)
+    ///
+    /// Used internally and for frozen mode.
+    pub fn get_static_priority(&self, file_path: &Path) -> i32 {
         let lens_config = match &self.active_lens {
             Some(name) => self.get_lens(name),
             None => return 50, // No active lens = default priority
@@ -1157,5 +1231,129 @@ mod tests {
 
         let js_priority = manager.get_file_priority(Path::new("app.js"));
         assert_eq!(js_priority, 55, "JavaScript files should have priority 55");
+    }
+
+    // ============================================================
+    // Phase 2: Learning Integration (Context Store v2)
+    // ============================================================
+
+    #[test]
+    fn test_lens_manager_with_store() {
+        let store = ContextStore::new();
+        let manager = LensManager::with_store(store);
+        assert!(manager.store().is_some());
+    }
+
+    #[test]
+    fn test_lens_manager_set_store() {
+        let mut manager = LensManager::new();
+        assert!(manager.store().is_none());
+
+        let store = ContextStore::new();
+        manager.set_store(store);
+        assert!(manager.store().is_some());
+    }
+
+    #[test]
+    fn test_frozen_mode_ignores_store() {
+        let mut store = ContextStore::new();
+        // Train the store to prefer this file highly
+        for _ in 0..10 {
+            store.report_utility("test.py", 1.0, 0.3);
+        }
+
+        let mut manager = LensManager::with_store(store);
+        let _ = manager.apply_lens("architecture");
+
+        // Without frozen: should get blended priority
+        let priority_normal = manager.get_file_priority(Path::new("test.py"));
+
+        // With frozen: should get static priority (100 for .py)
+        manager.set_frozen(true);
+        let priority_frozen = manager.get_file_priority(Path::new("test.py"));
+
+        assert_eq!(priority_frozen, 100, "Frozen should return static priority");
+        // Normal should be blended: (100 * 0.7) + (1.0 * 100 * 0.3) = 100
+        // In this case they're the same because max utility = max priority blend
+        assert!(priority_normal >= 95, "Normal should have high blended priority");
+    }
+
+    #[test]
+    fn test_priority_blend_high_utility() {
+        let mut store = ContextStore::new();
+        // Train high utility
+        for _ in 0..10 {
+            store.report_utility("important.xyz", 1.0, 0.3);
+        }
+
+        let mut manager = LensManager::with_store(store);
+        let _ = manager.apply_lens("architecture");
+
+        // Fallback is 50 for unknown extension
+        // Blended: (50 * 0.7) + (1.0 * 100 * 0.3) = 35 + 30 = 65
+        let priority = manager.get_file_priority(Path::new("important.xyz"));
+        assert!(priority >= 60 && priority <= 70, "Expected ~65, got {}", priority);
+    }
+
+    #[test]
+    fn test_priority_blend_low_utility() {
+        let mut store = ContextStore::new();
+        // Train low utility
+        for _ in 0..10 {
+            store.report_utility("useless.py", 0.0, 0.3);
+        }
+
+        let mut manager = LensManager::with_store(store);
+        let _ = manager.apply_lens("architecture");
+
+        // Static for .py is 100
+        // Blended: (100 * 0.7) + (0.0 * 100 * 0.3) = 70 + 0 = 70
+        let priority = manager.get_file_priority(Path::new("useless.py"));
+        assert!(priority >= 65 && priority <= 75, "Expected ~70, got {}", priority);
+    }
+
+    #[test]
+    fn test_static_priority_unchanged() {
+        let mut manager = LensManager::new();
+        let _ = manager.apply_lens("architecture");
+
+        // Without store, should return static priority
+        let static_priority = manager.get_static_priority(Path::new("main.py"));
+        let priority = manager.get_file_priority(Path::new("main.py"));
+
+        assert_eq!(static_priority, priority);
+        assert_eq!(static_priority, 100);
+    }
+
+    #[test]
+    fn test_store_mut_access() {
+        let mut manager = LensManager::new();
+        manager.set_store(ContextStore::new());
+
+        // Report utility via mutable store access
+        if let Some(store) = manager.store_mut() {
+            store.report_utility("test.rs", 0.9, 0.3);
+        }
+
+        // Verify it was recorded
+        if let Some(store) = manager.store() {
+            let score = store.get_utility_score("test.rs");
+            assert!(score > 0.5, "Score should have increased");
+        }
+    }
+
+    #[test]
+    fn test_is_frozen_default() {
+        let manager = LensManager::new();
+        assert!(!manager.is_frozen());
+    }
+
+    #[test]
+    fn test_set_frozen() {
+        let mut manager = LensManager::new();
+        manager.set_frozen(true);
+        assert!(manager.is_frozen());
+        manager.set_frozen(false);
+        assert!(!manager.is_frozen());
     }
 }
