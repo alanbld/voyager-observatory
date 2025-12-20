@@ -414,29 +414,26 @@ fn main() {
             .collect();
 
         // Serialize selected files with configured format and truncation
-        let mut output = String::new();
-
-        // Add Claude-XML header with metadata if using that format
-        if config.output_format == OutputFormat::ClaudeXml {
-            output.push_str(&pm_encoder::generate_claude_xml_header(&config, &entries));
-        }
-
-        for entry in &entries {
-            // Use serialize_file_with_format to apply config truncation and output format
-            // Note: files may already be truncated by apply_token_budget, so we pass 0 for truncate_lines
-            // to avoid double-truncation, unless config explicitly requests additional truncation
-            output.push_str(&pm_encoder::serialize_file_with_format(
-                entry,
-                config.truncate_lines,
-                &config.truncate_mode,
-                config.output_format,
-            ));
-        }
-
-        // Add Claude-XML footer if using that format
-        if config.output_format == OutputFormat::ClaudeXml {
-            output.push_str("  </files>\n</context>\n");
-        }
+        let output = if config.output_format == OutputFormat::ClaudeXml {
+            // Use streaming XmlWriter for ClaudeXml format (Fractal Protocol v2.0)
+            pm_encoder::serialize_entries_claude_xml(&config, &entries)
+                .unwrap_or_else(|e| {
+                    eprintln!("Error serializing XML: {}", e);
+                    std::process::exit(1);
+                })
+        } else {
+            // Use standard serialization for other formats
+            let mut output = String::new();
+            for entry in &entries {
+                output.push_str(&pm_encoder::serialize_file_with_format(
+                    entry,
+                    config.truncate_lines,
+                    &config.truncate_mode,
+                    config.output_format,
+                ));
+            }
+            output
+        };
 
         // Write output
         if let Some(output_path) = cli.output {

@@ -1,0 +1,82 @@
+{
+  "name": "xml_v2_safety",
+  "description": "Safety contract for XML v2.0 - CDATA escaping and deterministic attribute ordering",
+  "version": "2.0.0",
+  "category": "format_safety",
+  "input": {
+    "files": {
+      "src/poison.rs": "// CDATA Poison Test\npub fn check_bounds(arr: &[i32]) -> bool {\n    arr[arr.len() - 1]]> == 42  // Contains ]]> sequence\n}\n\nfn nested_poison() {\n    let s = \"]]>nested]]>poison]]>\";\n}\n",
+      "src/clean.py": "# Clean file without poison\ndef hello():\n    return \"world\"\n"
+    },
+    "format": "claude-xml",
+    "frozen": true,
+    "lens": "architecture"
+  },
+  "expected": {
+    "format": "claude-xml",
+    "cdata_safety": {
+      "poison_sequence": "]]>",
+      "escape_pattern": "]]]]><![CDATA[>",
+      "description": "All ]]> sequences must be split across CDATA boundaries"
+    },
+    "attribute_ordering": {
+      "strategy": "alphabetical",
+      "description": "Attributes must be sorted alphabetically for deterministic output",
+      "file_attributes_order": ["language", "md5", "path", "priority"]
+    },
+    "structure_checks": [
+      {
+        "name": "valid_xml",
+        "description": "Output must be valid XML (xmllint --noout passes)"
+      },
+      {
+        "name": "has_context_root",
+        "xpath": "/context",
+        "description": "Root element must be <context>"
+      },
+      {
+        "name": "has_metadata",
+        "xpath": "/context/metadata",
+        "description": "Must have <metadata> section"
+      },
+      {
+        "name": "frozen_no_timestamp",
+        "description": "Frozen mode must not include <timestamp>"
+      }
+    ],
+    "content_checks": [
+      {
+        "name": "cdata_escaped_single",
+        "pattern": "\\]\\]\\]\\]><\\!\\[CDATA\\[>",
+        "count": 4,
+        "description": "Four ]]> sequences must be escaped"
+      },
+      {
+        "name": "no_raw_poison",
+        "anti_pattern": "]]>(?!\\]\\]><)",
+        "description": "No raw ]]> outside of escape pattern"
+      }
+    ],
+    "file_expectations": [
+      {
+        "path": "src/poison.rs",
+        "language": "rust",
+        "contains": ["CDATA Poison Test", "]]]]><![CDATA[>"]
+      },
+      {
+        "path": "src/clean.py",
+        "language": "python",
+        "contains": ["def hello()"]
+      }
+    ],
+    "determinism": {
+      "frozen_snapshot_id": "FROZEN_SNAPSHOT",
+      "description": "Running twice with --frozen must produce byte-identical output"
+    }
+  },
+  "metadata": {
+    "created_by": "manual",
+    "rust_version": "2.0.0",
+    "purpose": "Validate XML safety: CDATA escaping, attribute ordering, frozen determinism"
+  }
+}

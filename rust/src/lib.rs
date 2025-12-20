@@ -24,11 +24,13 @@ use walkdir::WalkDir;
 
 pub mod analyzers;
 pub mod budgeting;
+pub mod formats;
 pub mod init;
 pub mod lenses;
 
 pub use lenses::{LensManager, LensConfig, AppliedLens};
 pub use budgeting::{TokenEstimator, BudgetReport, parse_token_budget, apply_token_budget, FileData};
+pub use formats::{XmlWriter, XmlConfig, XmlError, AttentionEntry, escape_cdata};
 
 /// A file entry with its content and metadata
 #[derive(Debug, Clone)]
@@ -1907,13 +1909,13 @@ pub fn serialize_project_with_config(
         }
     }
 
-    // Serialize each file entry with optional truncation and format
-    let mut output = String::new();
-
-    // Add Claude-XML header with metadata if using that format
+    // Use streaming XmlWriter for ClaudeXml format (Phase 2 refactor)
     if config.output_format == OutputFormat::ClaudeXml {
-        output.push_str(&generate_claude_xml_header(config, &sorted_entries));
+        return serialize_entries_claude_xml(config, &sorted_entries);
     }
+
+    // Serialize each file entry with optional truncation and format (non-XML formats)
+    let mut output = String::new();
 
     for entry in sorted_entries {
         output.push_str(&serialize_file_with_format(
@@ -1924,12 +1926,143 @@ pub fn serialize_project_with_config(
         ));
     }
 
-    // Add Claude-XML footer if using that format
-    if config.output_format == OutputFormat::ClaudeXml {
-        output.push_str("  </files>\n</context>\n");
+    Ok(output)
+}
+
+/// Serialize files to Claude-XML format using streaming XmlWriter
+///
+/// Uses O(1) memory overhead by writing directly to buffer.
+/// Implements the Fractal Protocol v2.0 specification.
+///
+/// # Arguments
+///
+/// * `config` - Encoder configuration
+/// * `files` - File entries to serialize
+///
+/// # Returns
+///
+/// * `Ok(String)` - The serialized XML output
+/// * `Err(String)` - Error message if serialization fails
+pub fn serialize_entries_claude_xml(
+    config: &EncoderConfig,
+    files: &[FileEntry],
+) -> Result<String, String> {
+    use crate::formats::{XmlWriter, XmlConfig, AttentionEntry};
+
+    let mut buffer = Vec::new();
+
+    // Build XmlConfig from EncoderConfig
+    let xml_config = XmlConfig {
+        package: "pm_encoder".to_string(),
+        version: VERSION.to_string(),
+        lens: config.active_lens.clone(),
+        token_budget: config.token_budget,
+        utilized_tokens: Some(files.iter().map(|f| f.content.len() / 4).sum()),
+        frozen: config.frozen,
+        allow_sensitive: config.allow_sensitive,
+        snapshot_id: if config.frozen { Some("FROZEN_SNAPSHOT".to_string()) } else { None },
+    };
+
+    let mut writer = XmlWriter::new(&mut buffer, xml_config);
+
+    // Build attention entries for metadata
+    let lens_manager = LensManager::new();
+    let attention_entries: Vec<AttentionEntry> = files.iter().map(|f| {
+        let priority = lens_manager.get_file_priority(std::path::Path::new(&f.path));
+        let tokens = f.content.len() / 4;
+        let truncated = config.truncate_lines > 0 && f.content.lines().count() > config.truncate_lines;
+        AttentionEntry {
+            path: f.path.clone(),
+            priority,
+            tokens,
+            truncated,
+            dropped: false,
+        }
+    }).collect();
+
+    // Write XML structure
+    writer.write_context_start().map_err(|e| e.to_string())?;
+    writer.write_metadata(&attention_entries).map_err(|e| e.to_string())?;
+    writer.write_files_start().map_err(|e| e.to_string())?;
+
+    for entry in files {
+        let language = detect_language(&entry.path);
+        let priority = lens_manager.get_file_priority(std::path::Path::new(&entry.path));
+
+        // Apply truncation if configured
+        let (content, truncated) = if config.truncate_lines > 0 {
+            truncate_for_xml(&entry.content, config.truncate_lines, &config.truncate_mode)
+        } else {
+            (entry.content.clone(), false)
+        };
+
+        let original_tokens = if truncated {
+            Some(entry.content.len() / 4)
+        } else {
+            None
+        };
+
+        // Build zoom command for truncated files (Phase 4: Fractal affordances)
+        let zoom_cmd = if truncated {
+            Some(format!("--include {} --truncate 0", entry.path))
+        } else {
+            None
+        };
+
+        writer.write_file(
+            &entry.path,
+            &language,
+            &entry.md5,
+            priority,
+            &content,
+            truncated,
+            original_tokens,
+            zoom_cmd.as_deref(),
+        ).map_err(|e| e.to_string())?;
     }
 
-    Ok(output)
+    writer.write_files_end().map_err(|e| e.to_string())?;
+    writer.write_context_end().map_err(|e| e.to_string())?;
+    writer.flush().map_err(|e| e.to_string())?;
+
+    String::from_utf8(buffer).map_err(|e| e.to_string())
+}
+
+/// Truncate content for XML output
+fn truncate_for_xml(content: &str, max_lines: usize, mode: &str) -> (String, bool) {
+    let lines: Vec<&str> = content.lines().collect();
+    if lines.len() <= max_lines {
+        return (content.to_string(), false);
+    }
+
+    match mode {
+        "structure" => {
+            let (truncated, _) = truncate_structure(content, "file");
+            (truncated, true)
+        }
+        "smart" => {
+            let (truncated, was_truncated) = truncate_smart(content, max_lines, "file");
+            (truncated, was_truncated)
+        }
+        _ => {
+            // Simple truncation
+            let truncated: String = lines[..max_lines].join("\n");
+            (truncated, true)
+        }
+    }
+}
+
+/// Detect language from content (fallback when path not available)
+fn detect_language_from_content(content: &str) -> String {
+    if content.contains("def ") && content.contains(":") {
+        "python".to_string()
+    } else if content.contains("fn ") && content.contains("->") {
+        "rust".to_string()
+    } else if content.contains("function ") || content.contains("const ") {
+        "javascript".to_string()
+    } else {
+        "text".to_string()
+    }
 }
 
 /// Generate Claude-XML wrapper start with metadata
@@ -2041,7 +2174,7 @@ mod tests {
 
     #[test]
     fn test_version() {
-        assert_eq!(version(), "0.8.0");
+        assert_eq!(version(), "0.9.0");
     }
 
     #[test]
