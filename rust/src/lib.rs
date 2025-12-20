@@ -28,6 +28,7 @@ pub mod core;
 pub mod formats;
 pub mod init;
 pub mod lenses;
+pub mod server;
 
 pub use lenses::{LensManager, LensConfig, AppliedLens};
 pub use budgeting::{TokenEstimator, BudgetReport, parse_token_budget, apply_token_budget, FileData};

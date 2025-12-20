@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### The Twins Architecture
 - **Python v1.7.0** - Reference implementation, feature prototyping
-- **Rust v0.9.1** - High-performance engine, 100% byte-level parity
+- **Rust v1.0.0** - High-performance engine, MCP server mode
 - **pm_coach** - Differential testing tool for parity verification
 
 ### Key Features
@@ -16,6 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Context lenses (architecture, security, debug, minimal)
 - Priority groups for intelligent file selection
 - Streaming mode for low-latency output
+- **MCP Server Mode** - JSON-RPC 2.0 protocol for AI CLI integration
 
 ## Quick Start
 
@@ -25,6 +26,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Rust (10x faster)
 ./rust/target/release/pm_encoder . --token-budget 100k --lens architecture
+```
+
+## MCP Server Mode
+
+The Rust engine supports MCP (Model Context Protocol) for integration with AI CLIs:
+
+```bash
+# Run as MCP server (JSON-RPC 2.0 over stdio)
+./rust/target/release/pm_encoder --server /path/to/project
+```
+
+**Available Tools:**
+- `get_context` - Serialize directory with lens/budget options
+- `zoom` - Symbol-aware zoom into functions/classes/files
+- `session_list` - List saved zoom sessions
+- `session_create` - Create new zoom session
+- `report_utility` - Report file utility for learning
+
+**Configuration:**
+```json
+// ~/.claude/mcp.json or ~/.gemini/settings.json
+{
+  "mcpServers": {
+    "pm_encoder": {
+      "command": "/path/to/pm_encoder",
+      "args": ["--server", "/path/to/project"]
+    }
+  }
+}
 ```
 
 ## Commands

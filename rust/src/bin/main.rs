@@ -13,6 +13,7 @@
 use clap::{Parser, ValueEnum};
 use pm_encoder::{self, EncoderConfig, LensManager, OutputFormat, parse_token_budget, apply_token_budget};
 use pm_encoder::core::{ContextEngine, ZoomConfig, ZoomTarget, ContextStore, DEFAULT_ALPHA};
+use pm_encoder::server::McpServer;
 use std::path::PathBuf;
 
 /// Serialize project files into the Plus/Minus format with intelligent truncation.
@@ -224,6 +225,16 @@ struct Cli {
     /// When enabled, file paths are hashed before storing.
     #[arg(long = "store-privacy")]
     store_privacy: bool,
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MCP SERVER MODE (v2.3.0)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Run as MCP (Model Context Protocol) server over stdio.
+    /// Speaks JSON-RPC 2.0: reads requests from stdin, writes responses to stdout.
+    /// All logging redirected to stderr.
+    #[arg(long = "server")]
+    server: bool,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -429,6 +440,28 @@ fn print_context_health(output: &str, file_count: usize) {
 
 fn main() {
     let cli = Cli::parse();
+
+    // Handle MCP Server Mode (v2.3.0)
+    // When --server is set, run as JSON-RPC server over stdio
+    if cli.server {
+        let project_root = match &cli.project_root {
+            Some(path) => path.clone(),
+            None => std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        };
+
+        if !project_root.exists() || !project_root.is_dir() {
+            eprintln!("Error: Project root '{}' must be a valid directory", project_root.display());
+            std::process::exit(1);
+        }
+
+        // Note: No startup logs here - MCP clients expect clean stdio
+        let mut server = McpServer::new(project_root);
+        if let Err(e) = server.run() {
+            eprintln!("MCP server error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
 
     // If no project root provided, show usage
     let project_root = match cli.project_root {
