@@ -1992,6 +1992,7 @@ pub fn serialize_entries_claude_xml(
             tokens,
             truncated,
             dropped: false,
+            utility_score: None,
         }
     }).collect();
 
@@ -2082,6 +2083,7 @@ pub fn serialize_entries_claude_xml_with_report(
     let mut writer = XmlWriter::new(&mut buffer, xml_config);
 
     // Build attention entries from included files
+    // TODO: Integrate with ContextStore for utility scores
     let mut attention_entries: Vec<AttentionEntry> = report.included_files.iter().map(|(path, priority, tokens, method)| {
         AttentionEntry {
             path: path.clone(),
@@ -2089,6 +2091,7 @@ pub fn serialize_entries_claude_xml_with_report(
             tokens: *tokens,
             truncated: method == "truncated",
             dropped: false,
+            utility_score: None, // Will be populated from ContextStore when available
         }
     }).collect();
 
@@ -2100,6 +2103,7 @@ pub fn serialize_entries_claude_xml_with_report(
             tokens: *tokens,
             truncated: false,
             dropped: true,
+            utility_score: None,
         });
     }
 

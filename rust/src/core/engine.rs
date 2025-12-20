@@ -247,6 +247,7 @@ impl ContextEngine {
                 tokens: f.tokens,
                 truncated: f.truncated,
                 dropped: false,
+                utility_score: None,
             }
         }).collect();
 

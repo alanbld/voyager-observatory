@@ -45,6 +45,8 @@ pub struct AttentionEntry {
     pub tokens: usize,
     pub truncated: bool,
     pub dropped: bool,
+    /// Learned utility score from Context Store (0.0-1.0)
+    pub utility_score: Option<f64>,
 }
 
 /// Configuration for XML generation
@@ -137,24 +139,48 @@ impl<W: Write> XmlWriter<W> {
             writeln!(self.writer, "    <snapshot_id>{}</snapshot_id>", snapshot_id)?;
         }
 
-        // Attention map
+        // Attention map with priority tiers
         if !attention_entries.is_empty() {
             writeln!(self.writer, "    <attention_map>")?;
-            for entry in attention_entries {
-                if entry.dropped {
-                    write!(self.writer, "      <coldspot path=\"{}\" priority=\"{}\" tokens=\"{}\" dropped=\"true\"",
-                        escape_xml_attr(&entry.path), entry.priority, entry.tokens)?;
-                } else if entry.truncated {
-                    write!(self.writer, "      <hotspot path=\"{}\" priority=\"{}\" tokens=\"{}\" truncated=\"true\"",
-                        escape_xml_attr(&entry.path), entry.priority, entry.tokens)?;
-                } else if entry.priority > 80 {
-                    write!(self.writer, "      <hotspot path=\"{}\" priority=\"{}\" tokens=\"{}\"",
-                        escape_xml_attr(&entry.path), entry.priority, entry.tokens)?;
-                } else {
-                    continue; // Skip low-priority non-truncated files
+
+            // Group entries by priority tier for LLM attention priming
+            let critical: Vec<_> = attention_entries.iter()
+                .filter(|e| !e.dropped && (e.priority >= 95 || e.utility_score.unwrap_or(0.0) > 0.8))
+                .collect();
+            let high: Vec<_> = attention_entries.iter()
+                .filter(|e| !e.dropped && e.priority >= 80 && e.priority < 95 && e.utility_score.unwrap_or(0.0) <= 0.8)
+                .collect();
+            let dropped: Vec<_> = attention_entries.iter()
+                .filter(|e| e.dropped)
+                .collect();
+
+            // Critical tier (priority >= 95 or utility > 0.8)
+            if !critical.is_empty() {
+                writeln!(self.writer, "      <priority_tier level=\"critical\">")?;
+                for entry in &critical {
+                    self.write_attention_entry(entry, "hotspot")?;
                 }
-                writeln!(self.writer, " />")?;
+                writeln!(self.writer, "      </priority_tier>")?;
             }
+
+            // High tier (priority 80-94)
+            if !high.is_empty() {
+                writeln!(self.writer, "      <priority_tier level=\"high\">")?;
+                for entry in &high {
+                    self.write_attention_entry(entry, "hotspot")?;
+                }
+                writeln!(self.writer, "      </priority_tier>")?;
+            }
+
+            // Coldspots (dropped files)
+            if !dropped.is_empty() {
+                writeln!(self.writer, "      <coldspots>")?;
+                for entry in &dropped {
+                    self.write_attention_entry(entry, "coldspot")?;
+                }
+                writeln!(self.writer, "      </coldspots>")?;
+            }
+
             writeln!(self.writer, "    </attention_map>")?;
         }
 
@@ -168,6 +194,25 @@ impl<W: Write> XmlWriter<W> {
         writeln!(self.writer, "  </metadata>")?;
         writeln!(self.writer)?;
 
+        Ok(())
+    }
+
+    /// Write a single attention entry (hotspot or coldspot)
+    fn write_attention_entry(&mut self, entry: &AttentionEntry, tag: &str) -> Result<()> {
+        write!(self.writer, "        <{} path=\"{}\" priority=\"{}\" tokens=\"{}\"",
+            tag, escape_xml_attr(&entry.path), entry.priority, entry.tokens)?;
+
+        if entry.truncated {
+            write!(self.writer, " truncated=\"true\"")?;
+        }
+        if entry.dropped {
+            write!(self.writer, " dropped=\"true\"")?;
+        }
+        if let Some(utility) = entry.utility_score {
+            write!(self.writer, " utility=\"{:.2}\"", utility)?;
+        }
+
+        writeln!(self.writer, " />")?;
         Ok(())
     }
 
@@ -231,12 +276,23 @@ impl<W: Write> XmlWriter<W> {
 
         // Zoom affordances for truncated files
         if truncated {
+            writeln!(self.writer, "      <zoom_actions>")?;
+
+            // Primary expand action
             if let Some(cmd) = zoom_command {
-                writeln!(self.writer, "      <zoom_actions>")?;
                 writeln!(self.writer, "        <action type=\"expand\" cmd=\"{}\" />",
                     escape_xml_attr(cmd))?;
-                writeln!(self.writer, "      </zoom_actions>")?;
             }
+
+            // Structure-only view (always available for truncated files)
+            writeln!(self.writer, "        <action type=\"structure\" cmd=\"pm_encoder --zoom file={} --depth signature\" />",
+                escape_xml_attr(path))?;
+
+            // Full file (no truncation) - use single quotes for shell arg
+            writeln!(self.writer, "        <action type=\"full\" cmd=\"pm_encoder --truncate 0 --include '{}'\" />",
+                escape_xml_attr(path))?;
+
+            writeln!(self.writer, "      </zoom_actions>")?;
         }
 
         writeln!(self.writer, "    </file>")?;
