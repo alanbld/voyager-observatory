@@ -11,7 +11,7 @@
 //! - Maintains interface parity with Python implementation
 
 use clap::{Parser, ValueEnum};
-use pm_encoder::{self, EncoderConfig, LensManager, parse_token_budget, apply_token_budget};
+use pm_encoder::{self, EncoderConfig, LensManager, OutputFormat, parse_token_budget, apply_token_budget};
 use std::path::PathBuf;
 
 /// Serialize project files into the Plus/Minus format with intelligent truncation.
@@ -139,6 +139,23 @@ struct Cli {
     /// Target AI for --init-prompt: 'claude' (CLAUDE.md) or 'gemini' (GEMINI_INSTRUCTIONS.txt)
     #[arg(long = "target", value_enum, default_value = "claude")]
     target: TargetAI,
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // OUTPUT FORMAT (v0.10.0)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Output format: 'plus_minus' (default), 'xml', or 'markdown'
+    #[arg(long = "format", value_enum, default_value = "plus-minus")]
+    format: OutputFormatArg,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum OutputFormatArg {
+    #[value(name = "plus-minus", alias = "pm")]
+    PlusMinus,
+    Xml,
+    #[value(alias = "md")]
+    Markdown,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -239,6 +256,13 @@ fn main() {
     };
 
     config.stream = cli.stream;
+
+    // Apply output format
+    config.output_format = match cli.format {
+        OutputFormatArg::PlusMinus => OutputFormat::PlusMinus,
+        OutputFormatArg::Xml => OutputFormat::Xml,
+        OutputFormatArg::Markdown => OutputFormat::Markdown,
+    };
 
     // Streaming mode warning for file output
     if cli.stream && cli.output.is_some() {

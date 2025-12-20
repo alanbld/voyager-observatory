@@ -847,7 +847,14 @@ class LanguageAnalyzerRegistry:
 # ============================================================================
 
 class TruncationStats:
-    """Tracks statistics about truncation operations."""
+    """Tracks statistics about truncation operations with Token ROI calculation.
+
+    The ROI Factor measures the efficiency gain from intelligent truncation:
+    ROI Factor = Naive Tokens / Smart Tokens
+
+    A factor of 2.0x means you're getting 2x more information per token,
+    effectively doubling the value of each token in the context window.
+    """
 
     def __init__(self):
         self.files_analyzed = 0
@@ -856,7 +863,9 @@ class TruncationStats:
         self.final_lines = 0
         self.original_size = 0
         self.final_size = 0
-        self.by_language = defaultdict(lambda: {"analyzed": 0, "truncated": 0})
+        self.naive_tokens = 0  # Tokens without truncation (full files)
+        self.smart_tokens = 0  # Tokens after smart truncation
+        self.by_language = defaultdict(lambda: {"analyzed": 0, "truncated": 0, "original_lines": 0, "final_lines": 0})
 
     def add_file(self, language: str, original_lines: int, final_lines: int, was_truncated: bool):
         """Record stats for a processed file."""
@@ -864,19 +873,39 @@ class TruncationStats:
         self.original_lines += original_lines
         self.final_lines += final_lines
 
+        # Track naive vs smart tokens (1 token ≈ 4 chars, ~40 chars/line)
+        naive = original_lines * 40 // 4
+        smart = final_lines * 40 // 4
+        self.naive_tokens += naive
+        self.smart_tokens += smart
+
         self.by_language[language]["analyzed"] += 1
+        self.by_language[language]["original_lines"] += original_lines
+        self.by_language[language]["final_lines"] += final_lines
 
         if was_truncated:
             self.files_truncated += 1
             self.by_language[language]["truncated"] += 1
 
+    def get_roi_factor(self) -> float:
+        """Calculate ROI factor: Naive Tokens / Smart Tokens.
+
+        Higher is better:
+        - 1.0x: No improvement (no truncation)
+        - 2.0x: 2x efficiency (half the tokens, same info)
+        - 5.0x: 5x efficiency (20% of tokens, same key info)
+        """
+        if self.smart_tokens == 0:
+            return 1.0
+        return self.naive_tokens / self.smart_tokens
+
     def print_report(self):
-        """Print a summary report."""
+        """Print a summary report with Token ROI."""
         if self.files_analyzed == 0:
             return
 
         print("\n" + "="*70, file=sys.stderr)
-        print("TRUNCATION REPORT", file=sys.stderr)
+        print("TRUNCATION REPORT - Token ROI Analysis", file=sys.stderr)
         print("="*70, file=sys.stderr)
 
         print(f"Files analyzed: {self.files_analyzed}", file=sys.stderr)
@@ -887,12 +916,18 @@ class TruncationStats:
             print(f"\nBy Language:", file=sys.stderr)
             for lang in sorted(self.by_language.keys()):
                 stats = self.by_language[lang]
-                print(f"  {lang}: {stats['analyzed']} files, {stats['truncated']} truncated", file=sys.stderr)
+                lang_reduction = self._reduction_pct(stats['original_lines'], stats['final_lines'])
+                print(f"  {lang}: {stats['analyzed']} files, {stats['truncated']} truncated ({lang_reduction}% reduction)", file=sys.stderr)
 
-        # Rough token estimation (1 token ≈ 4 chars)
-        orig_tokens = self.original_lines * 40 // 4  # Assume ~40 chars/line
-        final_tokens = self.final_lines * 40 // 4
-        print(f"\nEstimated tokens: ~{orig_tokens:,} → ~{final_tokens:,} ({self._reduction_pct(orig_tokens, final_tokens)}% reduction)", file=sys.stderr)
+        # Token ROI calculation
+        print(f"\n📊 Token Economics:", file=sys.stderr)
+        print(f"  Naive tokens (no truncation):  ~{self.naive_tokens:,}", file=sys.stderr)
+        print(f"  Smart tokens (after truncation): ~{self.smart_tokens:,}", file=sys.stderr)
+
+        roi = self.get_roi_factor()
+        reduction = self._reduction_pct(self.naive_tokens, self.smart_tokens)
+        print(f"\n  ⭐ ROI Factor: {roi:.2f}x", file=sys.stderr)
+        print(f"     ({reduction}% token savings - you're getting {roi:.1f}x more information per token)", file=sys.stderr)
         print("="*70, file=sys.stderr)
 
     def _reduction_pct(self, original, final):
@@ -1831,6 +1866,78 @@ def write_pm_format(output_stream, relative_path: Path, content: str, was_trunca
     else:
         output_stream.write(f"---------- {path_str} {checksum} {path_str} ----------\n")
 
+
+def write_xml_format(output_stream, relative_path: Path, content: str, was_truncated: bool = False, original_lines: int = 0):
+    """Writes a single file's data in XML format."""
+    path_str = relative_path.as_posix()
+    checksum = hashlib.md5(content.encode('utf-8')).hexdigest()
+    final_lines = len(content.split('\n'))
+
+    # Escape XML special characters
+    def escape_xml(s: str) -> str:
+        return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    def escape_xml_attr(s: str) -> str:
+        return escape_xml(s).replace('"', '&quot;').replace("'", '&apos;')
+
+    escaped_content = escape_xml(content)
+
+    if was_truncated:
+        output_stream.write(f'<file path="{escape_xml_attr(path_str)}" md5="{checksum}" truncated="true" original_lines="{original_lines}" final_lines="{final_lines}">\n')
+    else:
+        output_stream.write(f'<file path="{escape_xml_attr(path_str)}" md5="{checksum}">\n')
+
+    output_stream.write(escaped_content)
+    if not escaped_content.endswith('\n'):
+        output_stream.write('\n')
+
+    output_stream.write('</file>\n')
+
+
+def write_markdown_format(output_stream, relative_path: Path, content: str, was_truncated: bool = False, original_lines: int = 0):
+    """Writes a single file's data in Markdown format."""
+    path_str = relative_path.as_posix()
+    checksum = hashlib.md5(content.encode('utf-8')).hexdigest()
+    final_lines = len(content.split('\n'))
+
+    # Detect language from file extension
+    ext = path_str.rsplit('.', 1)[-1].lower() if '.' in path_str else ''
+    lang_map = {
+        'py': 'python', 'rs': 'rust', 'js': 'javascript', 'ts': 'typescript',
+        'jsx': 'jsx', 'tsx': 'tsx', 'json': 'json', 'toml': 'toml',
+        'yaml': 'yaml', 'yml': 'yaml', 'md': 'markdown', 'html': 'html',
+        'css': 'css', 'sh': 'bash', 'bash': 'bash', 'go': 'go',
+        'java': 'java', 'c': 'c', 'cpp': 'cpp', 'h': 'cpp', 'hpp': 'cpp',
+        'rb': 'ruby', 'php': 'php', 'sql': 'sql', 'xml': 'xml'
+    }
+    lang = lang_map.get(ext, '')
+
+    # Header
+    if was_truncated:
+        output_stream.write(f'### {path_str} [TRUNCATED: {original_lines} → {final_lines} lines]\n\n')
+    else:
+        output_stream.write(f'### {path_str}\n\n')
+
+    # Code block
+    output_stream.write(f'```{lang}\n')
+    output_stream.write(content)
+    if not content.endswith('\n'):
+        output_stream.write('\n')
+    output_stream.write('```\n\n')
+
+    # Footer with checksum
+    output_stream.write(f'*MD5: {checksum}*\n\n')
+
+
+def write_file_with_format(output_stream, relative_path: Path, content: str, output_format: str = "plus_minus", was_truncated: bool = False, original_lines: int = 0):
+    """Writes a single file's data in the specified format."""
+    if output_format == "xml":
+        write_xml_format(output_stream, relative_path, content, was_truncated, original_lines)
+    elif output_format in ("markdown", "md"):
+        write_markdown_format(output_stream, relative_path, content, was_truncated, original_lines)
+    else:
+        write_pm_format(output_stream, relative_path, content, was_truncated, original_lines)
+
 def serialize(
     project_root: Path,
     output_stream,
@@ -1848,6 +1955,7 @@ def serialize(
     stream_mode: bool = False,
     token_budget: int = 0,
     budget_strategy: str = "drop",
+    output_format: str = "plus_minus",
 ):
     """Collects, sorts, and serializes files based on specified criteria.
 
@@ -1860,6 +1968,7 @@ def serialize(
                          - "drop": Exclude files that don't fit (default)
                          - "truncate": Force structure mode on oversized files
                          - "hybrid": Auto-truncate files >10% of budget
+        output_format: Output format - "plus_minus" (default), "xml", or "markdown"
     """
 
     # Inject .pm_encoder_meta file if lens is active
@@ -1968,7 +2077,7 @@ def serialize(
             print(f"[KEEP] {relative_path.as_posix()}", file=sys.stderr)
 
         # Write to output immediately
-        write_pm_format(output_stream, relative_path, content, was_truncated, original_lines)
+        write_file_with_format(output_stream, relative_path, content, output_format, was_truncated, original_lines)
         return True
 
     # Streaming mode: emit output immediately, no global sort
@@ -2036,7 +2145,7 @@ def serialize(
                         stats.add_file(language, original_lines, final_lines, was_truncated)
 
                 # Write to output
-                write_pm_format(output_stream, relative_path, content, was_truncated, original_lines)
+                write_file_with_format(output_stream, relative_path, content, output_format, was_truncated, original_lines)
 
         else:
             # Standard batch mode without budget
@@ -2615,6 +2724,14 @@ Examples:
     parser.add_argument("--lens", type=str, metavar="NAME",
                         help="Apply a context lens (architecture|debug|security|onboarding|custom)")
 
+    # Output Format (v1.8.0)
+    parser.add_argument("--format", choices=["plus_minus", "xml", "markdown", "md"],
+                        default="plus_minus",
+                        help="Output format:\n"
+                             "  plus_minus: Machine-optimized format (default)\n"
+                             "  xml: XML with file tags\n"
+                             "  markdown/md: Markdown with code blocks")
+
     args = parser.parse_args()
 
     # Handle special commands that don't need project_root
@@ -2744,6 +2861,7 @@ Examples:
             stream_mode=stream_mode,
             token_budget=token_budget,
             budget_strategy=args.budget_strategy,
+            output_format=args.format,
         )
         print(f"\nSuccessfully serialized project.", file=sys.stderr)
     finally:

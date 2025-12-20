@@ -65,6 +65,30 @@ impl Default for Config {
     }
 }
 
+/// Output format for serialization
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum OutputFormat {
+    /// Plus/Minus format (default) - optimized for LLMs
+    #[default]
+    PlusMinus,
+    /// XML format - structured with tags
+    Xml,
+    /// Markdown format - human-readable with code blocks
+    Markdown,
+}
+
+impl OutputFormat {
+    /// Parse format from string
+    pub fn from_str(s: &str) -> Result<Self, String> {
+        match s.to_lowercase().as_str() {
+            "plus_minus" | "plusminus" | "pm" | "" => Ok(Self::PlusMinus),
+            "xml" => Ok(Self::Xml),
+            "markdown" | "md" => Ok(Self::Markdown),
+            _ => Err(format!("Unknown format '{}'. Valid options: plus_minus, xml, markdown", s)),
+        }
+    }
+}
+
 /// Configuration for the encoder (expanded for CLI parity)
 #[derive(Debug, Clone)]
 pub struct EncoderConfig {
@@ -90,6 +114,8 @@ pub struct EncoderConfig {
     pub truncate_exclude: Vec<String>,
     /// Show truncation statistics report
     pub truncate_stats: bool,
+    /// Output format (plus_minus, xml, markdown)
+    pub output_format: OutputFormat,
 }
 
 impl Default for EncoderConfig {
@@ -114,6 +140,7 @@ impl Default for EncoderConfig {
             truncate_summary: true, // Include summary markers by default
             truncate_exclude: vec![], // No files excluded by default
             truncate_stats: false, // Don't show stats report by default
+            output_format: OutputFormat::PlusMinus, // Default to Plus/Minus format
         }
     }
 }
@@ -262,6 +289,15 @@ impl ContextEngine {
 
     /// Serialize a single processed file to Plus/Minus format (PURE - no I/O)
     pub fn serialize_processed_file(&self, file: &ProcessedFile) -> String {
+        match self.config.output_format {
+            OutputFormat::PlusMinus => self.serialize_plus_minus(file),
+            OutputFormat::Xml => self.serialize_xml(file),
+            OutputFormat::Markdown => self.serialize_markdown(file),
+        }
+    }
+
+    /// Serialize file to Plus/Minus format
+    fn serialize_plus_minus(&self, file: &ProcessedFile) -> String {
         let mut output = String::new();
 
         // Header: ++++++++++ filename [TRUNCATED: N lines] ++++++++++
@@ -297,6 +333,70 @@ impl ContextEngine {
                 file.path, file.md5, file.path
             ));
         }
+
+        output
+    }
+
+    /// Serialize file to XML format
+    fn serialize_xml(&self, file: &ProcessedFile) -> String {
+        let mut output = String::new();
+
+        // Escape XML special characters in content
+        let escaped_content = escape_xml(&file.content);
+
+        if file.was_truncated {
+            let final_lines = count_lines_python_style(&file.content);
+            output.push_str(&format!(
+                "<file path=\"{}\" md5=\"{}\" truncated=\"true\" original_lines=\"{}\" final_lines=\"{}\">\n",
+                escape_xml_attr(&file.path), file.md5, file.original_lines, final_lines
+            ));
+        } else {
+            output.push_str(&format!(
+                "<file path=\"{}\" md5=\"{}\">\n",
+                escape_xml_attr(&file.path), file.md5
+            ));
+        }
+
+        output.push_str(&escaped_content);
+
+        if !escaped_content.ends_with('\n') {
+            output.push('\n');
+        }
+
+        output.push_str("</file>\n");
+        output
+    }
+
+    /// Serialize file to Markdown format
+    fn serialize_markdown(&self, file: &ProcessedFile) -> String {
+        let mut output = String::new();
+
+        // Detect language from file extension for code block
+        let lang = detect_language(&file.path);
+
+        // Header
+        if file.was_truncated {
+            let final_lines = count_lines_python_style(&file.content);
+            output.push_str(&format!(
+                "### {} [TRUNCATED: {} → {} lines]\n\n",
+                file.path, file.original_lines, final_lines
+            ));
+        } else {
+            output.push_str(&format!("### {}\n\n", file.path));
+        }
+
+        // Code block
+        output.push_str(&format!("```{}\n", lang));
+        output.push_str(&file.content);
+
+        if !file.content.ends_with('\n') {
+            output.push('\n');
+        }
+
+        output.push_str("```\n\n");
+
+        // Footer with checksum
+        output.push_str(&format!("*MD5: {}*\n\n", file.md5));
 
         output
     }
@@ -387,6 +487,50 @@ pub fn load_config(root: &str) -> Result<Config, String> {
 /// * MD5 checksum as hexadecimal string
 pub fn calculate_md5(content: &str) -> String {
     format!("{:x}", md5::compute(content.as_bytes()))
+}
+
+/// Escape special XML characters in content
+fn escape_xml(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// Escape special XML characters in attribute values
+fn escape_xml_attr(s: &str) -> String {
+    escape_xml(s)
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+/// Detect programming language from file extension
+fn detect_language(path: &str) -> &'static str {
+    let ext = path.rsplit('.').next().unwrap_or("");
+    match ext.to_lowercase().as_str() {
+        "py" => "python",
+        "rs" => "rust",
+        "js" => "javascript",
+        "ts" => "typescript",
+        "jsx" => "jsx",
+        "tsx" => "tsx",
+        "json" => "json",
+        "toml" => "toml",
+        "yaml" | "yml" => "yaml",
+        "md" => "markdown",
+        "html" => "html",
+        "css" => "css",
+        "sh" | "bash" => "bash",
+        "go" => "go",
+        "java" => "java",
+        "c" => "c",
+        "cpp" | "cc" | "cxx" => "cpp",
+        "h" | "hpp" => "cpp",
+        "rb" => "ruby",
+        "php" => "php",
+        "sql" => "sql",
+        "xml" => "xml",
+        _ => "",
+    }
 }
 
 /// Check if content appears to be binary
@@ -1357,7 +1501,17 @@ pub fn serialize_file_with_truncation(
     truncate_lines: usize,
     truncate_mode: &str,
 ) -> String {
-    let mut output = String::new();
+    // Default to Plus/Minus format for backward compatibility
+    serialize_file_with_format(entry, truncate_lines, truncate_mode, OutputFormat::PlusMinus)
+}
+
+/// Serialize a file entry with format support
+pub fn serialize_file_with_format(
+    entry: &FileEntry,
+    truncate_lines: usize,
+    truncate_mode: &str,
+    format: OutputFormat,
+) -> String {
     let original_lines = count_lines_python_style(&entry.content);
 
     // Apply truncation and track if file was truncated
@@ -1379,37 +1533,104 @@ pub fn serialize_file_with_truncation(
         (entry.content.clone(), false)
     };
 
+    let final_lines = count_lines_python_style(&content);
+
+    match format {
+        OutputFormat::PlusMinus => serialize_plus_minus_entry(&entry.path, &content, &entry.md5, was_truncated, original_lines, final_lines),
+        OutputFormat::Xml => serialize_xml_entry(&entry.path, &content, &entry.md5, was_truncated, original_lines, final_lines),
+        OutputFormat::Markdown => serialize_markdown_entry(&entry.path, &content, &entry.md5, was_truncated, original_lines, final_lines),
+    }
+}
+
+/// Serialize to Plus/Minus format
+fn serialize_plus_minus_entry(path: &str, content: &str, md5: &str, was_truncated: bool, original_lines: usize, final_lines: usize) -> String {
+    let mut output = String::new();
+
     // Header: ++++++++++ filename [TRUNCATED: N lines] ++++++++++
-    // Match Python's format when truncation was applied
     if was_truncated {
-        output.push_str(&format!("++++++++++ {} [TRUNCATED: {} lines] ++++++++++\n", entry.path, original_lines));
+        output.push_str(&format!("++++++++++ {} [TRUNCATED: {} lines] ++++++++++\n", path, original_lines));
     } else {
-        output.push_str(&format!("++++++++++ {} ++++++++++\n", entry.path));
+        output.push_str(&format!("++++++++++ {} ++++++++++\n", path));
     }
 
     // Content
-    output.push_str(&content);
+    output.push_str(content);
 
-    // Ensure content ends with newline (check content, not whole output)
-    // This matches Python's behavior for empty files
+    // Ensure content ends with newline
     if !content.ends_with('\n') {
         output.push('\n');
     }
 
     // Footer format: ---------- filename [TRUNCATED:original→final] checksum filename ----------
-    // Match Python's format with truncation info in footer
-    let final_lines = count_lines_python_style(&content);
     if was_truncated {
         output.push_str(&format!(
             "---------- {} [TRUNCATED:{}→{}] {} {} ----------\n",
-            entry.path, original_lines, final_lines, entry.md5, entry.path
+            path, original_lines, final_lines, md5, path
         ));
     } else {
         output.push_str(&format!(
             "---------- {} {} {} ----------\n",
-            entry.path, entry.md5, entry.path
+            path, md5, path
         ));
     }
+
+    output
+}
+
+/// Serialize to XML format
+fn serialize_xml_entry(path: &str, content: &str, md5: &str, was_truncated: bool, original_lines: usize, final_lines: usize) -> String {
+    let mut output = String::new();
+    let escaped_content = escape_xml(content);
+
+    if was_truncated {
+        output.push_str(&format!(
+            "<file path=\"{}\" md5=\"{}\" truncated=\"true\" original_lines=\"{}\" final_lines=\"{}\">\n",
+            escape_xml_attr(path), md5, original_lines, final_lines
+        ));
+    } else {
+        output.push_str(&format!(
+            "<file path=\"{}\" md5=\"{}\">\n",
+            escape_xml_attr(path), md5
+        ));
+    }
+
+    output.push_str(&escaped_content);
+
+    if !escaped_content.ends_with('\n') {
+        output.push('\n');
+    }
+
+    output.push_str("</file>\n");
+    output
+}
+
+/// Serialize to Markdown format
+fn serialize_markdown_entry(path: &str, content: &str, md5: &str, was_truncated: bool, original_lines: usize, final_lines: usize) -> String {
+    let mut output = String::new();
+    let lang = detect_language(path);
+
+    // Header
+    if was_truncated {
+        output.push_str(&format!(
+            "### {} [TRUNCATED: {} → {} lines]\n\n",
+            path, original_lines, final_lines
+        ));
+    } else {
+        output.push_str(&format!("### {}\n\n", path));
+    }
+
+    // Code block
+    output.push_str(&format!("```{}\n", lang));
+    output.push_str(content);
+
+    if !content.ends_with('\n') {
+        output.push('\n');
+    }
+
+    output.push_str("```\n\n");
+
+    // Footer with checksum
+    output.push_str(&format!("*MD5: {}*\n\n", md5));
 
     output
 }
@@ -1507,13 +1728,14 @@ pub fn serialize_project_with_config(
         }
     }
 
-    // Serialize each file entry with optional truncation
+    // Serialize each file entry with optional truncation and format
     let mut output = String::new();
     for entry in sorted_entries {
-        output.push_str(&serialize_file_with_truncation(
+        output.push_str(&serialize_file_with_format(
             &entry,
             config.truncate_lines,
             &config.truncate_mode,
+            config.output_format,
         ));
     }
 
@@ -1562,10 +1784,11 @@ pub fn serialize_project_streaming(
         config.include_patterns.clone(),
         config.max_file_size,
     ) {
-        let serialized = serialize_file_with_truncation(
+        let serialized = serialize_file_with_format(
             &entry,
             config.truncate_lines,
             &config.truncate_mode,
+            config.output_format,
         );
         // Write immediately to stdout
         if handle.write_all(serialized.as_bytes()).is_err() {
@@ -1880,6 +2103,7 @@ impl Config {
             truncate_summary: true,
             truncate_exclude: vec![],
             truncate_stats: false,
+            output_format: OutputFormat::PlusMinus,
         };
 
         assert_eq!(config.truncate_lines, 500);

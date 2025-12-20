@@ -6,7 +6,10 @@
 //! Build: cargo build --features mcp --bin pm_encoder_mcp
 //! Run:   ./target/debug/pm_encoder_mcp
 
-use pm_encoder::{ContextEngine, EncoderConfig};
+use pm_encoder::{
+    ContextEngine, EncoderConfig, LensManager,
+    parse_token_budget, apply_token_budget,
+};
 use rmcp::{
     schemars,
     schemars::JsonSchema,
@@ -38,6 +41,12 @@ struct GetContextParams {
     /// Truncate files to this many lines (0 = no truncation)
     #[serde(default)]
     truncate_lines: Option<usize>,
+    /// Maximum token budget (e.g., "100000", "100k", "2M")
+    #[serde(default)]
+    token_budget: Option<String>,
+    /// Budget strategy: "drop", "truncate", or "hybrid"
+    #[serde(default)]
+    budget_strategy: Option<String>,
 }
 
 /// A file with path and content
@@ -66,7 +75,7 @@ impl PmEncoderServer {
     fn get_context_route() -> rmcp::handler::server::tool::ToolRoute<Self> {
         let tool = Tool::new(
             "get_context",
-            "Serialize files into LLM-optimized context using Plus/Minus format. Supports context lenses and file truncation.",
+            "Serialize files into LLM-optimized context using Plus/Minus format. Supports context lenses, token budgeting, and file truncation.",
             rmcp::handler::server::tool::schema_for_type::<GetContextParams>(),
         );
 
@@ -83,6 +92,42 @@ impl PmEncoderServer {
                     config.truncate_lines = lines;
                 }
 
+                // Create lens manager for priority resolution
+                let mut lens_manager = LensManager::new();
+
+                // Apply lens if specified
+                if let Some(ref lens_name) = params.lens {
+                    lens_manager.apply_lens(lens_name).map_err(|e| {
+                        rmcp::ErrorData::invalid_params(
+                            format!("Invalid lens '{}': {}", lens_name, e),
+                            None,
+                        )
+                    })?;
+                }
+
+                // Convert files to tuples
+                let files: Vec<(String, String)> = params
+                    .files
+                    .into_iter()
+                    .map(|f| (f.path, f.content))
+                    .collect();
+
+                // Apply token budget if specified
+                let selected_files = if let Some(ref budget_str) = params.token_budget {
+                    let budget = parse_token_budget(budget_str).map_err(|e| {
+                        rmcp::ErrorData::invalid_params(
+                            format!("Invalid token budget '{}': {}", budget_str, e),
+                            None,
+                        )
+                    })?;
+
+                    let strategy = params.budget_strategy.as_deref().unwrap_or("drop");
+                    let (selected, _report) = apply_token_budget(files, budget, &lens_manager, strategy);
+                    selected
+                } else {
+                    files
+                };
+
                 // Create engine with optional lens
                 let engine = if let Some(lens_name) = params.lens {
                     ContextEngine::with_lens(config, &lens_name).map_err(|e| {
@@ -95,15 +140,8 @@ impl PmEncoderServer {
                     ContextEngine::new(config)
                 };
 
-                // Convert files to tuples
-                let files: Vec<(String, String)> = params
-                    .files
-                    .into_iter()
-                    .map(|f| (f.path, f.content))
-                    .collect();
-
                 // Generate context
-                let context = engine.generate_context(&files);
+                let context = engine.generate_context(&selected_files);
 
                 Ok(CallToolResult::success(vec![Content::text(context)]))
             })
