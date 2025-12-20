@@ -177,6 +177,10 @@ struct Cli {
     ///   file=<path>:L1-L2   - Zoom to file lines L1 to L2
     #[arg(long = "zoom", value_name = "TARGET")]
     zoom: Option<String>,
+
+    /// Show Context Health summary after serialization
+    #[arg(long = "health")]
+    health: bool,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -299,6 +303,49 @@ fn parse_zoom_target(s: &str) -> Result<ZoomConfig, String> {
         include_tests: false,
         context_lines: 5,
     })
+}
+
+/// Print Context Health summary to stderr
+fn print_context_health(output: &str, file_count: usize) {
+    // Calculate total tokens (rough estimate: 4 chars per token)
+    let total_tokens = output.len() / 4;
+
+    // Count zoom affordances
+    let zoom_count = output.matches("ZOOM_AFFORDANCE").count();
+
+    // Estimate content tokens (exclude markers and metadata)
+    // Content is roughly the actual file content vs formatting overhead
+    let marker_overhead = output.matches("+++++++++").count() * 20 +
+                         output.matches("---------").count() * 20 +
+                         output.matches("TRUNCATED").count() * 50 +
+                         output.matches("<file").count() * 30 +
+                         output.matches("</file>").count() * 10;
+    let content_tokens = total_tokens.saturating_sub(marker_overhead / 4);
+
+    // Token efficiency (content / total)
+    let efficiency = if total_tokens > 0 {
+        (content_tokens as f64 / total_tokens as f64 * 100.0).round() as u32
+    } else {
+        100
+    };
+
+    // Zoom density (affordances per file)
+    let zoom_density = if file_count > 0 {
+        zoom_count as f64 / file_count as f64
+    } else {
+        0.0
+    };
+
+    eprintln!();
+    eprintln!("=== Context Health ===");
+    eprintln!("  Files:            {}", file_count);
+    eprintln!("  Total Tokens:     ~{}", total_tokens);
+    eprintln!("  Token Efficiency: {}%", efficiency);
+    eprintln!("  Zoom Affordances: {}", zoom_count);
+    if zoom_count > 0 {
+        eprintln!("  Zoom Density:     {:.2} per file", zoom_density);
+    }
+    eprintln!("======================");
 }
 
 fn main() {
@@ -586,7 +633,7 @@ fn main() {
         };
 
         // Write output
-        if let Some(output_path) = cli.output {
+        if let Some(output_path) = cli.output.clone() {
             match std::fs::write(&output_path, &output) {
                 Ok(_) => eprintln!("Output written to: {}", output_path.display()),
                 Err(e) => {
@@ -596,6 +643,11 @@ fn main() {
             }
         } else {
             print!("{}", output);
+        }
+
+        // Print Context Health if requested
+        if cli.health {
+            print_context_health(&output, entries.len());
         }
         return;
     }
@@ -622,6 +674,13 @@ fn main() {
                 }
             } else {
                 print!("{}", output);
+            }
+
+            // Print Context Health if requested
+            if cli.health {
+                // Count files in output (each file starts with "++++++++++ ")
+                let file_count = output.matches("++++++++++ ").count();
+                print_context_health(&output, file_count);
             }
         }
         Err(e) => {
