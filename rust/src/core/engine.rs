@@ -4,10 +4,172 @@
 //! It coordinates file walking, analysis, truncation, and serialization.
 
 use crate::core::error::{EncoderError, Result};
+use crate::core::manifest::{ProjectManifest, ProjectType};
 use crate::core::models::{EncoderConfig, FileEntry, OutputFormat, ProcessedFile};
 use crate::core::serialization::{get_serializer, Serializer};
 use crate::core::walker::{DefaultWalker, FileWalker, WalkConfig};
 use crate::core::zoom::{ZoomAction, ZoomConfig, ZoomTarget};
+
+/// File tier for prioritized budgeting
+/// Core domain files get budget first, then config, tests last
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FileTier {
+    /// Core domain: src/, lib/, main source files
+    Core = 0,
+    /// Configuration: Cargo.toml, package.json, config files
+    Config = 1,
+    /// Tests: tests/, test_*, *_test.*, examples/
+    Tests = 2,
+    /// Other: docs, scripts, misc
+    Other = 3,
+}
+
+/// Statistics about budget allocation across tiers
+#[derive(Debug, Default, Clone)]
+pub struct BudgetStats {
+    pub core_count: usize,
+    pub core_tokens: usize,
+    pub config_count: usize,
+    pub config_tokens: usize,
+    pub test_count: usize,
+    pub test_tokens: usize,
+    pub other_count: usize,
+    pub other_tokens: usize,
+}
+
+impl BudgetStats {
+    /// Total files across all tiers
+    pub fn total_files(&self) -> usize {
+        self.core_count + self.config_count + self.test_count + self.other_count
+    }
+
+    /// Total tokens across all tiers
+    pub fn total_tokens(&self) -> usize {
+        self.core_tokens + self.config_tokens + self.test_tokens + self.other_tokens
+    }
+}
+
+impl FileTier {
+    /// Classify a file path into a tier based on project structure
+    /// Uses project manifest to understand project type and adjust classification
+    pub fn classify(path: &str, manifest: Option<&ProjectManifest>) -> Self {
+        let path_lower = path.to_lowercase();
+
+        // Config files (high value/token ratio)
+        if Self::is_config_file(&path_lower) {
+            return FileTier::Config;
+        }
+
+        // Test files
+        if Self::is_test_file(&path_lower) {
+            return FileTier::Tests;
+        }
+
+        // Core domain files
+        if Self::is_core_file(&path_lower, manifest) {
+            return FileTier::Core;
+        }
+
+        // Everything else
+        FileTier::Other
+    }
+
+    /// Check if path is a configuration file
+    fn is_config_file(path: &str) -> bool {
+        // Manifest files
+        let config_names = [
+            "cargo.toml", "package.json", "pyproject.toml", "setup.py",
+            "go.mod", "pom.xml", "build.gradle", "composer.json",
+            "gemfile", "requirements.txt", "pipfile",
+        ];
+
+        // Check if the filename matches a config file
+        if let Some(filename) = path.rsplit('/').next() {
+            if config_names.iter().any(|c| filename == *c) {
+                return true;
+            }
+        }
+
+        // Config directories and extensions
+        path.contains("/config/") ||
+        path.contains("/configs/") ||
+        path.ends_with(".toml") ||
+        path.ends_with(".yaml") ||
+        path.ends_with(".yml") ||
+        path.ends_with(".json") && !path.contains("/test")
+    }
+
+    /// Check if path is a test file
+    fn is_test_file(path: &str) -> bool {
+        // Test directories
+        if path.starts_with("tests/") ||
+           path.starts_with("test/") ||
+           path.contains("/tests/") ||
+           path.contains("/test/") ||
+           path.starts_with("examples/") ||
+           path.contains("/examples/") ||
+           path.starts_with("benches/") ||
+           path.contains("/benches/") {
+            return true;
+        }
+
+        // Test file patterns
+        if let Some(filename) = path.rsplit('/').next() {
+            let fname_lower = filename.to_lowercase();
+            if fname_lower.starts_with("test_") ||
+               fname_lower.ends_with("_test.py") ||
+               fname_lower.ends_with("_test.rs") ||
+               fname_lower.ends_with("_test.go") ||
+               fname_lower.ends_with(".test.js") ||
+               fname_lower.ends_with(".test.ts") ||
+               fname_lower.ends_with(".spec.js") ||
+               fname_lower.ends_with(".spec.ts") {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Check if path is a core domain file
+    fn is_core_file(path: &str, manifest: Option<&ProjectManifest>) -> bool {
+        // Standard source directories
+        let core_dirs = ["src/", "lib/", "pkg/", "internal/", "app/", "core/"];
+
+        for dir in core_dirs {
+            if path.starts_with(dir) || path.contains(&format!("/{}", dir)) {
+                return true;
+            }
+        }
+
+        // Project-type specific logic
+        if let Some(m) = manifest {
+            match m.project_type {
+                ProjectType::Rust => {
+                    // Rust: src/ is core, also lib.rs, main.rs at root
+                    if path == "lib.rs" || path == "main.rs" {
+                        return true;
+                    }
+                }
+                ProjectType::Python => {
+                    // Python: any .py file not in tests
+                    if path.ends_with(".py") && !Self::is_test_file(path) {
+                        return true;
+                    }
+                }
+                ProjectType::Node => {
+                    // Node: src/, lib/, index.js, index.ts
+                    if path == "index.js" || path == "index.ts" {
+                        return true;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        false
+    }
+}
 
 /// The main context serialization engine
 pub struct ContextEngine {
@@ -197,16 +359,57 @@ impl ContextEngine {
         }).collect()
     }
 
-    /// Apply token budget (simple drop strategy)
+    /// Apply token budget with tiered allocation strategy
+    ///
+    /// Algorithm:
+    /// 1. Classify files into tiers (Core, Config, Tests, Other)
+    /// 2. Fill budget with Core files first (highest priority)
+    /// 3. Then Config files (high value/token ratio)
+    /// 4. Then Tests (if budget remains)
+    /// 5. Finally Other files
+    ///
+    /// Within each tier, files are sorted by priority (highest first)
     fn apply_budget(&self, files: Vec<ProcessedFile>, budget: usize) -> Vec<ProcessedFile> {
+        self.apply_budget_with_manifest(files, budget, None)
+    }
+
+    /// Apply tiered budget with optional project manifest for smarter classification
+    pub fn apply_budget_with_manifest(
+        &self,
+        files: Vec<ProcessedFile>,
+        budget: usize,
+        manifest: Option<&ProjectManifest>,
+    ) -> Vec<ProcessedFile> {
+        // Classify files into tiers
+        let mut core_files = Vec::new();
+        let mut config_files = Vec::new();
+        let mut test_files = Vec::new();
+        let mut other_files = Vec::new();
+
+        for file in files {
+            match FileTier::classify(&file.path, manifest) {
+                FileTier::Core => core_files.push(file),
+                FileTier::Config => config_files.push(file),
+                FileTier::Tests => test_files.push(file),
+                FileTier::Other => other_files.push(file),
+            }
+        }
+
+        // Sort each tier by priority (highest first)
+        core_files.sort_by(|a, b| b.priority.cmp(&a.priority));
+        config_files.sort_by(|a, b| b.priority.cmp(&a.priority));
+        test_files.sort_by(|a, b| b.priority.cmp(&a.priority));
+        other_files.sort_by(|a, b| b.priority.cmp(&a.priority));
+
         let mut result = Vec::new();
         let mut used = 0;
 
-        // Sort by priority (highest first)
-        let mut sorted = files;
-        sorted.sort_by(|a, b| b.priority.cmp(&a.priority));
-
-        for file in sorted {
+        // Fill in tier order: Core -> Config -> Tests -> Other
+        for file in core_files.into_iter()
+            .chain(config_files)
+            .chain(test_files)
+            .chain(other_files)
+        {
             if used + file.tokens <= budget {
                 used += file.tokens;
                 result.push(file);
@@ -214,6 +417,34 @@ impl ContextEngine {
         }
 
         result
+    }
+
+    /// Get budget allocation statistics (for debugging/UI)
+    pub fn budget_stats(&self, files: &[ProcessedFile], manifest: Option<&ProjectManifest>) -> BudgetStats {
+        let mut stats = BudgetStats::default();
+
+        for file in files {
+            match FileTier::classify(&file.path, manifest) {
+                FileTier::Core => {
+                    stats.core_count += 1;
+                    stats.core_tokens += file.tokens;
+                }
+                FileTier::Config => {
+                    stats.config_count += 1;
+                    stats.config_tokens += file.tokens;
+                }
+                FileTier::Tests => {
+                    stats.test_count += 1;
+                    stats.test_tokens += file.tokens;
+                }
+                FileTier::Other => {
+                    stats.other_count += 1;
+                    stats.other_tokens += file.tokens;
+                }
+            }
+        }
+
+        stats
     }
 
     /// Serialize to Claude-XML format
@@ -478,5 +709,282 @@ mod tests {
         let result = engine.apply_budget(files, 50);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].path, "small.py");
+    }
+
+    // Tiered Budgeting Tests
+
+    #[test]
+    fn test_file_tier_classify_core() {
+        assert_eq!(FileTier::classify("src/main.rs", None), FileTier::Core);
+        assert_eq!(FileTier::classify("src/lib.rs", None), FileTier::Core);
+        assert_eq!(FileTier::classify("src/core/engine.rs", None), FileTier::Core);
+        assert_eq!(FileTier::classify("lib/utils.py", None), FileTier::Core);
+        assert_eq!(FileTier::classify("pkg/handler.go", None), FileTier::Core);
+        assert_eq!(FileTier::classify("internal/service.go", None), FileTier::Core);
+        assert_eq!(FileTier::classify("app/models/user.rb", None), FileTier::Core);
+    }
+
+    #[test]
+    fn test_file_tier_classify_config() {
+        assert_eq!(FileTier::classify("Cargo.toml", None), FileTier::Config);
+        assert_eq!(FileTier::classify("package.json", None), FileTier::Config);
+        assert_eq!(FileTier::classify("pyproject.toml", None), FileTier::Config);
+        assert_eq!(FileTier::classify("config/settings.yaml", None), FileTier::Config);
+        assert_eq!(FileTier::classify("configs/prod.yml", None), FileTier::Config);
+    }
+
+    #[test]
+    fn test_file_tier_classify_tests() {
+        assert_eq!(FileTier::classify("tests/test_main.py", None), FileTier::Tests);
+        assert_eq!(FileTier::classify("test/unit_test.rs", None), FileTier::Tests);
+        assert_eq!(FileTier::classify("src/tests/integration.rs", None), FileTier::Tests);
+        assert_eq!(FileTier::classify("examples/demo.py", None), FileTier::Tests);
+        assert_eq!(FileTier::classify("benches/bench_main.rs", None), FileTier::Tests);
+        assert_eq!(FileTier::classify("test_utils.py", None), FileTier::Tests);
+        assert_eq!(FileTier::classify("handler_test.go", None), FileTier::Tests);
+        assert_eq!(FileTier::classify("component.spec.ts", None), FileTier::Tests);
+    }
+
+    #[test]
+    fn test_file_tier_classify_other() {
+        assert_eq!(FileTier::classify("README.md", None), FileTier::Other);
+        assert_eq!(FileTier::classify("docs/guide.md", None), FileTier::Other);
+        assert_eq!(FileTier::classify("scripts/deploy.sh", None), FileTier::Other);
+        assert_eq!(FileTier::classify("Makefile", None), FileTier::Other);
+    }
+
+    #[test]
+    fn test_tiered_budget_core_first() {
+        let engine = ContextEngine::new();
+
+        // Create files from different tiers with same priority
+        let files = vec![
+            ProcessedFile {
+                path: "tests/test_main.py".to_string(),
+                content: "test".to_string(),
+                md5: "test".to_string(),
+                language: "python".to_string(),
+                priority: 50,
+                tokens: 100,
+                truncated: false,
+                original_tokens: None,
+            },
+            ProcessedFile {
+                path: "src/main.rs".to_string(),
+                content: "fn main".to_string(),
+                md5: "main".to_string(),
+                language: "rust".to_string(),
+                priority: 50,
+                tokens: 100,
+                truncated: false,
+                original_tokens: None,
+            },
+            ProcessedFile {
+                path: "README.md".to_string(),
+                content: "readme".to_string(),
+                md5: "readme".to_string(),
+                language: "markdown".to_string(),
+                priority: 50,
+                tokens: 100,
+                truncated: false,
+                original_tokens: None,
+            },
+        ];
+
+        // Budget for only one file - should pick Core (src/main.rs)
+        let result = engine.apply_budget(files, 100);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].path, "src/main.rs");
+    }
+
+    #[test]
+    fn test_tiered_budget_order() {
+        let engine = ContextEngine::new();
+
+        // Create one file from each tier
+        let files = vec![
+            ProcessedFile {
+                path: "docs/guide.md".to_string(),  // Other
+                content: "guide".to_string(),
+                md5: "guide".to_string(),
+                language: "markdown".to_string(),
+                priority: 50,
+                tokens: 50,
+                truncated: false,
+                original_tokens: None,
+            },
+            ProcessedFile {
+                path: "tests/test.py".to_string(),  // Tests
+                content: "test".to_string(),
+                md5: "test".to_string(),
+                language: "python".to_string(),
+                priority: 50,
+                tokens: 50,
+                truncated: false,
+                original_tokens: None,
+            },
+            ProcessedFile {
+                path: "Cargo.toml".to_string(),  // Config
+                content: "[package]".to_string(),
+                md5: "cargo".to_string(),
+                language: "toml".to_string(),
+                priority: 50,
+                tokens: 50,
+                truncated: false,
+                original_tokens: None,
+            },
+            ProcessedFile {
+                path: "src/lib.rs".to_string(),  // Core
+                content: "pub fn".to_string(),
+                md5: "lib".to_string(),
+                language: "rust".to_string(),
+                priority: 50,
+                tokens: 50,
+                truncated: false,
+                original_tokens: None,
+            },
+        ];
+
+        // Budget for 3 files - should pick Core, Config, Tests (drop Other)
+        let result = engine.apply_budget(files, 150);
+        assert_eq!(result.len(), 3);
+
+        // Verify order: Core -> Config -> Tests
+        assert_eq!(result[0].path, "src/lib.rs");      // Core
+        assert_eq!(result[1].path, "Cargo.toml");       // Config
+        assert_eq!(result[2].path, "tests/test.py");    // Tests
+    }
+
+    #[test]
+    fn test_budget_stats() {
+        let engine = ContextEngine::new();
+
+        let files = vec![
+            ProcessedFile {
+                path: "src/main.rs".to_string(),
+                content: "fn main".to_string(),
+                md5: "main".to_string(),
+                language: "rust".to_string(),
+                priority: 50,
+                tokens: 100,
+                truncated: false,
+                original_tokens: None,
+            },
+            ProcessedFile {
+                path: "src/lib.rs".to_string(),
+                content: "pub fn".to_string(),
+                md5: "lib".to_string(),
+                language: "rust".to_string(),
+                priority: 50,
+                tokens: 150,
+                truncated: false,
+                original_tokens: None,
+            },
+            ProcessedFile {
+                path: "Cargo.toml".to_string(),
+                content: "[package]".to_string(),
+                md5: "cargo".to_string(),
+                language: "toml".to_string(),
+                priority: 50,
+                tokens: 50,
+                truncated: false,
+                original_tokens: None,
+            },
+            ProcessedFile {
+                path: "tests/test.py".to_string(),
+                content: "test".to_string(),
+                md5: "test".to_string(),
+                language: "python".to_string(),
+                priority: 50,
+                tokens: 80,
+                truncated: false,
+                original_tokens: None,
+            },
+        ];
+
+        let stats = engine.budget_stats(&files, None);
+
+        assert_eq!(stats.core_count, 2);
+        assert_eq!(stats.core_tokens, 250);
+        assert_eq!(stats.config_count, 1);
+        assert_eq!(stats.config_tokens, 50);
+        assert_eq!(stats.test_count, 1);
+        assert_eq!(stats.test_tokens, 80);
+        assert_eq!(stats.other_count, 0);
+        assert_eq!(stats.other_tokens, 0);
+
+        assert_eq!(stats.total_files(), 4);
+        assert_eq!(stats.total_tokens(), 380);
+    }
+
+    #[test]
+    fn test_tiered_budget_with_priority_within_tier() {
+        let engine = ContextEngine::new();
+
+        // Two core files with different priorities
+        let files = vec![
+            ProcessedFile {
+                path: "src/low_priority.rs".to_string(),
+                content: "low".to_string(),
+                md5: "low".to_string(),
+                language: "rust".to_string(),
+                priority: 30,
+                tokens: 100,
+                truncated: false,
+                original_tokens: None,
+            },
+            ProcessedFile {
+                path: "src/high_priority.rs".to_string(),
+                content: "high".to_string(),
+                md5: "high".to_string(),
+                language: "rust".to_string(),
+                priority: 80,
+                tokens: 100,
+                truncated: false,
+                original_tokens: None,
+            },
+        ];
+
+        // Budget for one file - should pick higher priority within Core tier
+        let result = engine.apply_budget(files, 100);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].path, "src/high_priority.rs");
+    }
+
+    #[test]
+    fn test_file_tier_with_rust_manifest() {
+        use crate::core::manifest::{ProjectManifest, ProjectType};
+        use std::path::PathBuf;
+
+        let manifest = ProjectManifest {
+            root: PathBuf::from("/project"),
+            project_type: ProjectType::Rust,
+            manifest_files: vec![PathBuf::from("Cargo.toml")],
+            is_workspace: false,
+        };
+
+        // Root lib.rs should be Core for Rust projects
+        assert_eq!(FileTier::classify("lib.rs", Some(&manifest)), FileTier::Core);
+        assert_eq!(FileTier::classify("main.rs", Some(&manifest)), FileTier::Core);
+    }
+
+    #[test]
+    fn test_file_tier_with_python_manifest() {
+        use crate::core::manifest::{ProjectManifest, ProjectType};
+        use std::path::PathBuf;
+
+        let manifest = ProjectManifest {
+            root: PathBuf::from("/project"),
+            project_type: ProjectType::Python,
+            manifest_files: vec![PathBuf::from("pyproject.toml")],
+            is_workspace: false,
+        };
+
+        // Any .py file not in tests should be Core for Python projects
+        assert_eq!(FileTier::classify("utils.py", Some(&manifest)), FileTier::Core);
+        assert_eq!(FileTier::classify("module/handler.py", Some(&manifest)), FileTier::Core);
+
+        // But test files are still Tests
+        assert_eq!(FileTier::classify("test_utils.py", Some(&manifest)), FileTier::Tests);
     }
 }

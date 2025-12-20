@@ -28,7 +28,7 @@ pub use models::{FileEntry, EncoderConfig, ProcessedFile, OutputFormat, Config};
 pub use error::{EncoderError, Result};
 pub use walker::{FileWalker, DefaultWalker, SmartWalker, SmartWalkConfig, WalkEntry};
 pub use manifest::{ProjectManifest, ProjectType};
-pub use engine::ContextEngine;
+pub use engine::{ContextEngine, FileTier, BudgetStats};
 pub use zoom::{
     ZoomAction, ZoomTarget, ZoomConfig, ZoomDepth,
     // Fractal Protocol v2
@@ -39,4 +39,6 @@ pub use store::{ContextStore, FileUtility, DEFAULT_ALPHA};
 pub use search::{
     SymbolResolver, SymbolLocation, SymbolType,
     CallGraphAnalyzer, FunctionCall, ZoomSuggestion,
+    // Phase 2: Reverse call graph
+    UsageLocation, UsageFinder, RelatedContext,
 };

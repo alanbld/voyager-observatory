@@ -540,6 +540,260 @@ impl CallGraphAnalyzer {
     }
 }
 
+// ============================================================================
+// Reverse Call Graph - Find Usages (Phase 2)
+// ============================================================================
+
+/// A location where a symbol is used (not defined)
+#[derive(Debug, Clone)]
+pub struct UsageLocation {
+    /// File path relative to project root
+    pub path: String,
+    /// Line number (1-indexed)
+    pub line: usize,
+    /// The code snippet containing the usage
+    pub snippet: String,
+    /// Column offset where the symbol starts (0-indexed)
+    pub column: Option<usize>,
+}
+
+impl UsageLocation {
+    /// Format as XML for rich zoom output
+    pub fn to_xml(&self) -> String {
+        format!(
+            r#"<usage file="{}" line="{}">{}</usage>"#,
+            self.path,
+            self.line,
+            escape_xml(&self.snippet)
+        )
+    }
+}
+
+/// Escape XML special characters
+fn escape_xml(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// Find usages of a symbol across the codebase (reverse call graph)
+pub struct UsageFinder {
+    /// Maximum number of usages to return
+    max_results: usize,
+    /// Ignore patterns for walking
+    ignore_patterns: Vec<String>,
+}
+
+impl Default for UsageFinder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl UsageFinder {
+    /// Create a new usage finder
+    pub fn new() -> Self {
+        Self {
+            max_results: 10,
+            ignore_patterns: vec![
+                "*.pyc".to_string(),
+                "__pycache__".to_string(),
+                "node_modules".to_string(),
+                "target".to_string(),
+                ".git".to_string(),
+                "*.min.js".to_string(),
+            ],
+        }
+    }
+
+    /// Set maximum results
+    pub fn with_max_results(mut self, max: usize) -> Self {
+        self.max_results = max;
+        self
+    }
+
+    /// Find all usages of a symbol in the codebase
+    ///
+    /// Excludes the definition itself by checking if the line matches
+    /// a definition pattern (fn, def, class, etc.)
+    pub fn find_usages(
+        &self,
+        symbol: &str,
+        root: &Path,
+        definition_path: Option<&str>,
+        definition_line: Option<usize>,
+    ) -> Vec<UsageLocation> {
+        use crate::core::walker::{SmartWalker, SmartWalkConfig};
+
+        let config = SmartWalkConfig {
+            max_file_size: 1_048_576,
+            ..Default::default()
+        };
+
+        let walker = SmartWalker::with_config(root, config);
+        let entries = match walker.walk_as_file_entries() {
+            Ok(e) => e,
+            Err(_) => return Vec::new(),
+        };
+
+        let mut usages = Vec::new();
+
+        // Build regex to find the symbol as a word (not substring)
+        let pattern = format!(r"\b{}\b", regex::escape(symbol));
+        let regex = match Regex::new(&pattern) {
+            Ok(r) => r,
+            Err(_) => return Vec::new(),
+        };
+
+        for entry in entries {
+            for (line_idx, line) in entry.content.lines().enumerate() {
+                let line_num = line_idx + 1;
+
+                // Skip if this is the definition line
+                if let (Some(def_path), Some(def_line)) = (definition_path, definition_line) {
+                    if entry.path == def_path && line_num == def_line {
+                        continue;
+                    }
+                }
+
+                // Skip if line looks like a definition (not a usage)
+                if self.is_definition_line(line, symbol) {
+                    continue;
+                }
+
+                // Check if symbol appears on this line
+                if regex.is_match(line) {
+                    // Find column offset
+                    let column = regex.find(line).map(|m| m.start());
+
+                    usages.push(UsageLocation {
+                        path: entry.path.clone(),
+                        line: line_num,
+                        snippet: line.trim().to_string(),
+                        column,
+                    });
+
+                    if usages.len() >= self.max_results {
+                        return usages;
+                    }
+                }
+            }
+        }
+
+        usages
+    }
+
+    /// Check if a line is a definition (not a usage)
+    fn is_definition_line(&self, line: &str, symbol: &str) -> bool {
+        let trimmed = line.trim();
+
+        // Rust definitions
+        if trimmed.contains(&format!("fn {}", symbol))
+            || trimmed.contains(&format!("struct {}", symbol))
+            || trimmed.contains(&format!("enum {}", symbol))
+            || trimmed.contains(&format!("trait {}", symbol))
+            || trimmed.contains(&format!("type {}", symbol))
+            || trimmed.contains(&format!("mod {}", symbol))
+        {
+            return true;
+        }
+
+        // Python definitions
+        if trimmed.contains(&format!("def {}(", symbol))
+            || trimmed.contains(&format!("def {}:", symbol))
+            || trimmed.contains(&format!("class {}(", symbol))
+            || trimmed.contains(&format!("class {}:", symbol))
+        {
+            return true;
+        }
+
+        // JavaScript/TypeScript definitions
+        if trimmed.contains(&format!("function {}", symbol))
+            || trimmed.contains(&format!("const {} =", symbol))
+            || trimmed.contains(&format!("let {} =", symbol))
+            || trimmed.contains(&format!("var {} =", symbol))
+            || trimmed.contains(&format!("class {} ", symbol))
+        {
+            return true;
+        }
+
+        // Go definitions
+        if trimmed.contains(&format!("func {}", symbol))
+            || trimmed.contains(&format!("type {} ", symbol))
+        {
+            return true;
+        }
+
+        false
+    }
+}
+
+/// Related context for a zoomed symbol (callers, callees, etc.)
+#[derive(Debug, Clone, Default)]
+pub struct RelatedContext {
+    /// Functions/methods that call this symbol
+    pub callers: Vec<UsageLocation>,
+    /// Functions/methods called by this symbol (if available)
+    pub callees: Vec<ZoomSuggestion>,
+}
+
+impl RelatedContext {
+    /// Create empty related context
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Add callers to the context
+    pub fn with_callers(mut self, callers: Vec<UsageLocation>) -> Self {
+        self.callers = callers;
+        self
+    }
+
+    /// Add callees to the context
+    pub fn with_callees(mut self, callees: Vec<ZoomSuggestion>) -> Self {
+        self.callees = callees;
+        self
+    }
+
+    /// Check if context is empty
+    pub fn is_empty(&self) -> bool {
+        self.callers.is_empty() && self.callees.is_empty()
+    }
+
+    /// Format as XML for Claude-XML output
+    pub fn to_xml(&self) -> String {
+        if self.is_empty() {
+            return String::new();
+        }
+
+        let mut xml = String::from("<related_context>\n");
+
+        if !self.callers.is_empty() {
+            xml.push_str("  <callers>\n");
+            for caller in &self.callers {
+                xml.push_str("    ");
+                xml.push_str(&caller.to_xml());
+                xml.push('\n');
+            }
+            xml.push_str("  </callers>\n");
+        }
+
+        if !self.callees.is_empty() {
+            xml.push_str("  <callees>\n");
+            for callee in &self.callees {
+                xml.push_str("    ");
+                xml.push_str(&callee.to_xml());
+                xml.push('\n');
+            }
+            xml.push_str("  </callees>\n");
+        }
+
+        xml.push_str("</related_context>");
+        xml
+    }
+}
+
 /// A zoom suggestion for the user/AI
 #[derive(Debug, Clone)]
 pub struct ZoomSuggestion {
@@ -804,5 +1058,135 @@ mod tests {
         assert!(xml.contains("target=\"function=init_logger\""));
         assert!(xml.contains("path=\"src/logging.rs:10-25\""));
         assert!(xml.contains("Definition of init_logger"));
+    }
+
+    // ========================================================================
+    // Phase 2: Find Usages Tests
+    // ========================================================================
+
+    #[test]
+    fn test_usage_location_xml() {
+        let usage = UsageLocation {
+            path: "src/main.rs".to_string(),
+            line: 45,
+            snippet: "let res = process_request(data);".to_string(),
+            column: Some(10),
+        };
+
+        let xml = usage.to_xml();
+        assert!(xml.contains("file=\"src/main.rs\""));
+        assert!(xml.contains("line=\"45\""));
+        assert!(xml.contains("let res = process_request(data);"));
+    }
+
+    #[test]
+    fn test_usage_location_xml_escapes_special_chars() {
+        let usage = UsageLocation {
+            path: "src/lib.rs".to_string(),
+            line: 10,
+            snippet: "if x < y && y > 0 { func() }".to_string(),
+            column: None,
+        };
+
+        let xml = usage.to_xml();
+        assert!(xml.contains("&lt;"));
+        assert!(xml.contains("&gt;"));
+        assert!(xml.contains("&amp;"));
+    }
+
+    #[test]
+    fn test_related_context_empty() {
+        let ctx = RelatedContext::new();
+        assert!(ctx.is_empty());
+        assert_eq!(ctx.to_xml(), "");
+    }
+
+    #[test]
+    fn test_related_context_with_callers() {
+        let callers = vec![
+            UsageLocation {
+                path: "src/main.rs".to_string(),
+                line: 45,
+                snippet: "process_request(data)".to_string(),
+                column: None,
+            },
+            UsageLocation {
+                path: "src/api.rs".to_string(),
+                line: 120,
+                snippet: "return process_request(req);".to_string(),
+                column: None,
+            },
+        ];
+
+        let ctx = RelatedContext::new().with_callers(callers);
+        assert!(!ctx.is_empty());
+
+        let xml = ctx.to_xml();
+        assert!(xml.contains("<related_context>"));
+        assert!(xml.contains("<callers>"));
+        assert!(xml.contains("<usage file=\"src/main.rs\""));
+        assert!(xml.contains("<usage file=\"src/api.rs\""));
+        assert!(xml.contains("</callers>"));
+        assert!(xml.contains("</related_context>"));
+    }
+
+    #[test]
+    fn test_related_context_with_callees() {
+        let callees = vec![ZoomSuggestion {
+            target: "function=helper".to_string(),
+            description: "Definition of helper".to_string(),
+            path: "src/utils.rs".to_string(),
+            lines: (5, 15),
+        }];
+
+        let ctx = RelatedContext::new().with_callees(callees);
+        let xml = ctx.to_xml();
+
+        assert!(xml.contains("<callees>"));
+        assert!(xml.contains("function=helper"));
+        assert!(xml.contains("</callees>"));
+    }
+
+    #[test]
+    fn test_usage_finder_is_definition_line() {
+        let finder = UsageFinder::new();
+
+        // Rust definitions
+        assert!(finder.is_definition_line("fn process_data() {", "process_data"));
+        assert!(finder.is_definition_line("pub fn process_data() {", "process_data"));
+        assert!(finder.is_definition_line("struct Config {", "Config"));
+
+        // Python definitions
+        assert!(finder.is_definition_line("def process_data():", "process_data"));
+        assert!(finder.is_definition_line("class Config:", "Config"));
+
+        // JavaScript definitions
+        assert!(finder.is_definition_line("function processData() {", "processData"));
+        assert!(finder.is_definition_line("const processData = () => {", "processData"));
+
+        // Not definitions (usages)
+        assert!(!finder.is_definition_line("let x = process_data();", "process_data"));
+        assert!(!finder.is_definition_line("result = process_data()", "process_data"));
+    }
+
+    #[test]
+    fn test_usage_finder_default() {
+        let finder = UsageFinder::new();
+        assert_eq!(finder.max_results, 10);
+    }
+
+    #[test]
+    fn test_usage_finder_with_max_results() {
+        let finder = UsageFinder::new().with_max_results(5);
+        assert_eq!(finder.max_results, 5);
+    }
+
+    #[test]
+    fn test_escape_xml() {
+        assert_eq!(escape_xml("a < b"), "a &lt; b");
+        assert_eq!(escape_xml("a > b"), "a &gt; b");
+        assert_eq!(escape_xml("a & b"), "a &amp; b");
+        assert_eq!(escape_xml("a \"b\""), "a &quot;b&quot;");
+        assert_eq!(escape_xml("hello"), "hello");
     }
 }
