@@ -25,7 +25,7 @@ pub mod search;
 pub mod skeleton;
 
 // Re-export commonly used types
-pub use models::{FileEntry, EncoderConfig, ProcessedFile, OutputFormat, Config};
+pub use models::{FileEntry, EncoderConfig, ProcessedFile, OutputFormat, Config, SkeletonMode, CompressionLevel};
 pub use error::{EncoderError, Result};
 pub use walker::{FileWalker, DefaultWalker, SmartWalker, SmartWalkConfig, WalkEntry};
 pub use manifest::{ProjectManifest, ProjectType};

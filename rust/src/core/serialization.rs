@@ -6,8 +6,7 @@
 //! - Markdown
 //! - Claude-XML (semantic with CDATA)
 
-use crate::core::error::Result;
-use crate::core::models::{FileEntry, OutputFormat, ProcessedFile};
+use crate::core::models::{CompressionLevel, OutputFormat, ProcessedFile};
 use crate::core::zoom::ZoomAction;
 
 /// Trait for output format serializers
@@ -43,7 +42,19 @@ impl Default for PlusMinusSerializer {
 impl Serializer for PlusMinusSerializer {
     fn serialize_file(&self, file: &ProcessedFile) -> String {
         let mut output = String::new();
-        output.push_str(&format!("+++ {}\n", file.path));
+
+        // Build header with optional [SKELETON] tag
+        let header = if file.compression_level == CompressionLevel::Skeleton {
+            if let Some(orig) = file.original_tokens {
+                format!("+++ {} [SKELETON] (original: {} tokens)\n", file.path, orig)
+            } else {
+                format!("+++ {} [SKELETON]\n", file.path)
+            }
+        } else {
+            format!("+++ {}\n", file.path)
+        };
+
+        output.push_str(&header);
         for line in file.content.lines() {
             output.push_str(&format!("+ {}\n", line));
         }
@@ -84,11 +95,24 @@ impl Default for XmlSerializer {
 impl Serializer for XmlSerializer {
     fn serialize_file(&self, file: &ProcessedFile) -> String {
         let mut output = String::new();
+
+        // Build file element with skeleton attributes if applicable
+        let skeleton_attr = if file.compression_level == CompressionLevel::Skeleton {
+            if let Some(orig) = file.original_tokens {
+                format!(" skeleton=\"true\" original_tokens=\"{}\"", orig)
+            } else {
+                " skeleton=\"true\"".to_string()
+            }
+        } else {
+            String::new()
+        };
+
         output.push_str(&format!(
-            "<file path=\"{}\" md5=\"{}\" language=\"{}\">\n",
+            "<file path=\"{}\" md5=\"{}\" language=\"{}\"{}>\n",
             Self::escape_xml(&file.path),
             file.md5,
-            file.language
+            file.language,
+            skeleton_attr
         ));
         output.push_str(&Self::escape_xml(&file.content));
         output.push_str("\n</file>\n");
@@ -158,7 +182,19 @@ impl Serializer for MarkdownSerializer {
     fn serialize_file(&self, file: &ProcessedFile) -> String {
         let lang = Self::detect_language(&file.path);
         let mut output = String::new();
-        output.push_str(&format!("## {}\n\n", file.path));
+
+        // Build header with optional [SKELETON] tag
+        let header = if file.compression_level == CompressionLevel::Skeleton {
+            if let Some(orig) = file.original_tokens {
+                format!("## {} [SKELETON] (original: {} tokens)\n\n", file.path, orig)
+            } else {
+                format!("## {} [SKELETON]\n\n", file.path)
+            }
+        } else {
+            format!("## {}\n\n", file.path)
+        };
+
+        output.push_str(&header);
         output.push_str(&format!("```{}\n", lang));
         output.push_str(&file.content);
         if !file.content.ends_with('\n') {

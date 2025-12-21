@@ -22,6 +22,7 @@ use crate::core::{
     ContextEngine, EncoderConfig, ZoomConfig, ZoomTarget, ZoomDepth,
     SymbolResolver, CallGraphAnalyzer, ZoomSuggestion,
     ZoomSessionStore, ContextStore, DEFAULT_ALPHA, OutputFormat,
+    SkeletonMode,
     // Phase 2: Rich Context
     UsageFinder, RelatedContext,
 };
@@ -271,6 +272,10 @@ impl McpServer {
                             "format": {
                                 "type": "string",
                                 "description": "Output format: plusminus, xml, markdown, claude-xml"
+                            },
+                            "skeleton": {
+                                "type": "string",
+                                "description": "Skeleton mode: 'auto' (enable if budget set), 'true', 'false'. Extracts signatures, strips bodies."
                             }
                         }
                     }
@@ -393,6 +398,7 @@ impl McpServer {
         let lens = args.get("lens").and_then(|v| v.as_str());
         let token_budget = args.get("token_budget").and_then(|v| v.as_str());
         let format = args.get("format").and_then(|v| v.as_str()).unwrap_or("plusminus");
+        let skeleton = args.get("skeleton").and_then(|v| v.as_str()).unwrap_or("auto");
 
         // TODO: Load project .pm_encoder_config.json when core::EncoderConfig supports Deserialize
         // For now, use defaults - the lens will override patterns anyway
@@ -403,6 +409,9 @@ impl McpServer {
             "claude-xml" => OutputFormat::ClaudeXml,
             _ => OutputFormat::PlusMinus,
         };
+
+        // Apply skeleton mode (v2.2.0)
+        config.skeleton_mode = SkeletonMode::from_str(skeleton).unwrap_or(SkeletonMode::Auto);
 
         // Apply lens and merge patterns into config
         let mut lens_manager = LensManager::new();

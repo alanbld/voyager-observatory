@@ -105,6 +105,8 @@ impl OutputFormat {
     }
 }
 
+pub use core::SkeletonMode;
+
 /// Configuration for the encoder (expanded for CLI parity)
 #[derive(Debug, Clone)]
 pub struct EncoderConfig {
@@ -140,6 +142,8 @@ pub struct EncoderConfig {
     pub active_lens: Option<String>,
     /// Token budget for metadata injection (v2.0.0)
     pub token_budget: Option<usize>,
+    /// Skeleton mode: 'auto', 'true', or 'false' (v2.2.0)
+    pub skeleton_mode: SkeletonMode,
 }
 
 impl Default for EncoderConfig {
@@ -169,6 +173,7 @@ impl Default for EncoderConfig {
             allow_sensitive: false, // Default to privacy-safe mode
             active_lens: None, // No lens by default
             token_budget: None, // No budget by default
+            skeleton_mode: SkeletonMode::Auto, // Auto-enable if budget is set
         }
     }
 }
@@ -2628,6 +2633,7 @@ impl Config {
             allow_sensitive: false,
             active_lens: Some("architecture".to_string()),
             token_budget: Some(100_000),
+            skeleton_mode: SkeletonMode::Auto,
         };
 
         assert_eq!(config.truncate_lines, 500);

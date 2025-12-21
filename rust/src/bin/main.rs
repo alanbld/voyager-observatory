@@ -12,7 +12,7 @@
 
 use clap::{Parser, ValueEnum};
 use pm_encoder::{self, EncoderConfig, LensManager, OutputFormat, parse_token_budget, apply_token_budget};
-use pm_encoder::core::{ContextEngine, ZoomConfig, ZoomTarget, ContextStore, DEFAULT_ALPHA};
+use pm_encoder::core::{ContextEngine, ZoomConfig, ZoomTarget, ContextStore, DEFAULT_ALPHA, SkeletonMode};
 use pm_encoder::server::McpServer;
 use std::path::PathBuf;
 
@@ -125,6 +125,11 @@ struct Cli {
     /// Budget enforcement strategy: 'drop' (skip files), 'truncate' (force structure mode), or 'hybrid' (auto-truncate large files)
     #[arg(long = "budget-strategy", value_enum, default_value = "drop")]
     budget_strategy: BudgetStrategy,
+
+    /// Skeleton mode for intelligent code compression: 'auto' (enable if budget set), 'true', or 'false'.
+    /// When enabled, extracts signatures and strips function bodies to fit more files in budget.
+    #[arg(long = "skeleton", value_name = "MODE", default_value = "auto")]
+    skeleton: String,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // INIT
@@ -587,6 +592,9 @@ fn main() {
     config.allow_sensitive = cli.allow_sensitive;
     config.active_lens = cli.lens.clone();
 
+    // Apply skeleton mode (v2.2.0)
+    config.skeleton_mode = SkeletonMode::from_str(&cli.skeleton).unwrap_or(SkeletonMode::Auto);
+
     // Streaming mode warning for file output
     if cli.stream && cli.output.is_some() {
         eprintln!("Warning: --stream mode writes directly to stdout, ignoring -o/--output");
@@ -927,6 +935,7 @@ fn main() {
             allow_sensitive: config.allow_sensitive,
             active_lens: config.active_lens.clone(),
             token_budget: config.token_budget,
+            skeleton_mode: config.skeleton_mode,
         });
 
         match engine.zoom(project_root.to_str().unwrap(), &zoom_config) {

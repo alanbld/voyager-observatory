@@ -5,8 +5,9 @@
 
 use crate::core::error::{EncoderError, Result};
 use crate::core::manifest::{ProjectManifest, ProjectType};
-use crate::core::models::{EncoderConfig, FileEntry, OutputFormat, ProcessedFile};
+use crate::core::models::{CompressionLevel, EncoderConfig, FileEntry, OutputFormat, ProcessedFile};
 use crate::core::serialization::{get_serializer, Serializer};
+use crate::core::skeleton::{AdaptiveAllocator, FileAllocation, Language, Skeletonizer};
 use crate::core::walker::{DefaultWalker, FileWalker, WalkConfig};
 use crate::core::zoom::{ZoomAction, ZoomConfig, ZoomTarget};
 
@@ -374,7 +375,97 @@ impl ContextEngine {
     }
 
     /// Apply tiered budget with optional project manifest for smarter classification
+    ///
+    /// When skeleton mode is enabled, uses AdaptiveAllocator for intelligent compression.
     pub fn apply_budget_with_manifest(
+        &self,
+        files: Vec<ProcessedFile>,
+        budget: usize,
+        manifest: Option<&ProjectManifest>,
+    ) -> Vec<ProcessedFile> {
+        let skeleton_enabled = self.config.skeleton_mode.is_enabled(true);
+
+        if skeleton_enabled {
+            self.apply_budget_with_skeleton(files, budget, manifest)
+        } else {
+            self.apply_budget_simple(files, budget, manifest)
+        }
+    }
+
+    /// Apply budget using AdaptiveAllocator with skeleton compression
+    fn apply_budget_with_skeleton(
+        &self,
+        files: Vec<ProcessedFile>,
+        budget: usize,
+        manifest: Option<&ProjectManifest>,
+    ) -> Vec<ProcessedFile> {
+        let skeletonizer = Skeletonizer::new();
+
+        // Build file allocations with both full and skeleton token costs
+        let mut allocations: Vec<(ProcessedFile, FileAllocation)> = files
+            .into_iter()
+            .map(|file| {
+                let tier = FileTier::classify(&file.path, manifest);
+                let full_tokens = file.tokens;
+
+                // Calculate skeleton token cost
+                let skeleton_tokens = if let Some(lang) = Language::from_extension(
+                    file.path.rsplit('.').next().unwrap_or("")
+                ) {
+                    let result = skeletonizer.skeletonize(&file.content, lang);
+                    result.skeleton_tokens.max(1) // At least 1 token
+                } else {
+                    // Non-skeletonizable files: skeleton = full
+                    full_tokens
+                };
+
+                let alloc = FileAllocation::new(&file.path, tier, full_tokens, skeleton_tokens);
+                (file, alloc)
+            })
+            .collect();
+
+        // Run the allocator
+        let allocator = AdaptiveAllocator::new(budget);
+        let alloc_only: Vec<FileAllocation> = allocations.iter().map(|(_, a)| a.clone()).collect();
+        let allocated = allocator.allocate(alloc_only);
+
+        // Build a map of path -> compression level
+        let level_map: std::collections::HashMap<String, crate::core::skeleton::CompressionLevel> =
+            allocated.iter().map(|a| (a.path.clone(), a.level)).collect();
+
+        // Apply compression levels to files
+        allocations
+            .into_iter()
+            .filter_map(|(mut file, _)| {
+                let level = level_map.get(&file.path)?;
+
+                match level {
+                    crate::core::skeleton::CompressionLevel::Drop => None,
+                    crate::core::skeleton::CompressionLevel::Full => {
+                        file.compression_level = CompressionLevel::Full;
+                        Some(file)
+                    }
+                    crate::core::skeleton::CompressionLevel::Skeleton => {
+                        // Apply skeletonization
+                        if let Some(lang) = Language::from_extension(
+                            file.path.rsplit('.').next().unwrap_or("")
+                        ) {
+                            let original_tokens = file.tokens;
+                            let result = skeletonizer.skeletonize(&file.content, lang);
+                            Some(file.with_skeleton(result.content, original_tokens))
+                        } else {
+                            // Can't skeletonize, keep full
+                            file.compression_level = CompressionLevel::Full;
+                            Some(file)
+                        }
+                    }
+                }
+            })
+            .collect()
+    }
+
+    /// Apply budget using simple drop strategy (original behavior)
+    fn apply_budget_simple(
         &self,
         files: Vec<ProcessedFile>,
         budget: usize,
@@ -680,7 +771,12 @@ mod tests {
 
     #[test]
     fn test_engine_apply_budget() {
-        let engine = ContextEngine::new();
+        use crate::core::models::CompressionLevel;
+
+        // Use Disabled skeleton mode to test the drop-based budget strategy
+        let mut config = EncoderConfig::default();
+        config.skeleton_mode = crate::core::models::SkeletonMode::Disabled;
+        let engine = ContextEngine::with_config(config);
 
         let files = vec![
             ProcessedFile {
@@ -692,6 +788,7 @@ mod tests {
                 tokens: 100,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
             ProcessedFile {
                 path: "small.py".to_string(),
@@ -702,6 +799,7 @@ mod tests {
                 tokens: 10,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
         ];
 
@@ -755,7 +853,11 @@ mod tests {
 
     #[test]
     fn test_tiered_budget_core_first() {
-        let engine = ContextEngine::new();
+        use crate::core::models::CompressionLevel;
+        // Use Disabled skeleton mode to test the drop-based budget strategy
+        let mut config = EncoderConfig::default();
+        config.skeleton_mode = crate::core::models::SkeletonMode::Disabled;
+        let engine = ContextEngine::with_config(config);
 
         // Create files from different tiers with same priority
         let files = vec![
@@ -768,6 +870,7 @@ mod tests {
                 tokens: 100,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
             ProcessedFile {
                 path: "src/main.rs".to_string(),
@@ -778,6 +881,7 @@ mod tests {
                 tokens: 100,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
             ProcessedFile {
                 path: "README.md".to_string(),
@@ -788,6 +892,7 @@ mod tests {
                 tokens: 100,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
         ];
 
@@ -799,7 +904,11 @@ mod tests {
 
     #[test]
     fn test_tiered_budget_order() {
-        let engine = ContextEngine::new();
+        use crate::core::models::CompressionLevel;
+        // Use Disabled skeleton mode to test the drop-based budget strategy
+        let mut config = EncoderConfig::default();
+        config.skeleton_mode = crate::core::models::SkeletonMode::Disabled;
+        let engine = ContextEngine::with_config(config);
 
         // Create one file from each tier
         let files = vec![
@@ -812,6 +921,7 @@ mod tests {
                 tokens: 50,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
             ProcessedFile {
                 path: "tests/test.py".to_string(),  // Tests
@@ -822,6 +932,7 @@ mod tests {
                 tokens: 50,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
             ProcessedFile {
                 path: "Cargo.toml".to_string(),  // Config
@@ -832,6 +943,7 @@ mod tests {
                 tokens: 50,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
             ProcessedFile {
                 path: "src/lib.rs".to_string(),  // Core
@@ -842,6 +954,7 @@ mod tests {
                 tokens: 50,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
         ];
 
@@ -857,6 +970,7 @@ mod tests {
 
     #[test]
     fn test_budget_stats() {
+        use crate::core::models::CompressionLevel;
         let engine = ContextEngine::new();
 
         let files = vec![
@@ -869,6 +983,7 @@ mod tests {
                 tokens: 100,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
             ProcessedFile {
                 path: "src/lib.rs".to_string(),
@@ -879,6 +994,7 @@ mod tests {
                 tokens: 150,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
             ProcessedFile {
                 path: "Cargo.toml".to_string(),
@@ -889,6 +1005,7 @@ mod tests {
                 tokens: 50,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
             ProcessedFile {
                 path: "tests/test.py".to_string(),
@@ -899,6 +1016,7 @@ mod tests {
                 tokens: 80,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
         ];
 
@@ -919,7 +1037,11 @@ mod tests {
 
     #[test]
     fn test_tiered_budget_with_priority_within_tier() {
-        let engine = ContextEngine::new();
+        use crate::core::models::CompressionLevel;
+        // Use Disabled skeleton mode to test the drop-based budget strategy
+        let mut config = EncoderConfig::default();
+        config.skeleton_mode = crate::core::models::SkeletonMode::Disabled;
+        let engine = ContextEngine::with_config(config);
 
         // Two core files with different priorities
         let files = vec![
@@ -932,6 +1054,7 @@ mod tests {
                 tokens: 100,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
             ProcessedFile {
                 path: "src/high_priority.rs".to_string(),
@@ -942,6 +1065,7 @@ mod tests {
                 tokens: 100,
                 truncated: false,
                 original_tokens: None,
+                compression_level: CompressionLevel::Full,
             },
         ];
 

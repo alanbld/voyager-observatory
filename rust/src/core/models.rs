@@ -142,6 +142,44 @@ pub struct EncoderConfig {
     pub active_lens: Option<String>,
     /// Token budget
     pub token_budget: Option<usize>,
+    /// Enable skeleton mode ("auto", "true", "false")
+    /// - "auto": Enable if token_budget is set
+    /// - "true": Always enable
+    /// - "false": Always disable
+    pub skeleton_mode: SkeletonMode,
+}
+
+/// Skeleton mode configuration
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SkeletonMode {
+    /// Enable skeleton compression if token_budget is set
+    #[default]
+    Auto,
+    /// Always enable skeleton compression
+    Enabled,
+    /// Always disable skeleton compression
+    Disabled,
+}
+
+impl SkeletonMode {
+    /// Parse from string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "auto" => Some(SkeletonMode::Auto),
+            "true" | "enabled" | "on" | "yes" => Some(SkeletonMode::Enabled),
+            "false" | "disabled" | "off" | "no" => Some(SkeletonMode::Disabled),
+            _ => None,
+        }
+    }
+
+    /// Check if skeleton should be enabled given a token budget
+    pub fn is_enabled(&self, has_budget: bool) -> bool {
+        match self {
+            SkeletonMode::Auto => has_budget,
+            SkeletonMode::Enabled => true,
+            SkeletonMode::Disabled => false,
+        }
+    }
 }
 
 impl Default for EncoderConfig {
@@ -170,6 +208,7 @@ impl Default for EncoderConfig {
             allow_sensitive: false,
             active_lens: None,
             token_budget: None,
+            skeleton_mode: SkeletonMode::Auto,
         }
     }
 }
@@ -210,6 +249,24 @@ impl EncoderConfig {
         self.active_lens = Some(lens.to_string());
         self
     }
+
+    /// Builder pattern: set skeleton mode
+    pub fn with_skeleton_mode(mut self, mode: SkeletonMode) -> Self {
+        self.skeleton_mode = mode;
+        self
+    }
+}
+
+/// Compression level for skeleton protocol
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CompressionLevel {
+    /// Full content preserved
+    #[default]
+    Full,
+    /// Skeleton: signatures only
+    Skeleton,
+    /// File dropped from output
+    Drop,
 }
 
 /// A processed file ready for serialization
@@ -217,7 +274,7 @@ impl EncoderConfig {
 pub struct ProcessedFile {
     /// File path
     pub path: String,
-    /// File content (possibly truncated)
+    /// File content (possibly truncated or skeletonized)
     pub content: String,
     /// MD5 checksum of original content
     pub md5: String,
@@ -229,8 +286,10 @@ pub struct ProcessedFile {
     pub tokens: usize,
     /// Whether the file was truncated
     pub truncated: bool,
-    /// Original token count (if truncated)
+    /// Original token count (if truncated or skeletonized)
     pub original_tokens: Option<usize>,
+    /// Compression level (Full, Skeleton, Drop)
+    pub compression_level: CompressionLevel,
 }
 
 impl ProcessedFile {
@@ -245,6 +304,7 @@ impl ProcessedFile {
             tokens: entry.token_estimate(),
             truncated: false,
             original_tokens: None,
+            compression_level: CompressionLevel::Full,
         }
     }
 
@@ -255,6 +315,20 @@ impl ProcessedFile {
         self.truncated = true;
         self.original_tokens = Some(original_tokens);
         self
+    }
+
+    /// Mark as skeletonized
+    pub fn with_skeleton(mut self, skeleton_content: String, original_tokens: usize) -> Self {
+        self.tokens = skeleton_content.len() / 4;
+        self.content = skeleton_content;
+        self.compression_level = CompressionLevel::Skeleton;
+        self.original_tokens = Some(original_tokens);
+        self
+    }
+
+    /// Check if file is skeletonized
+    pub fn is_skeleton(&self) -> bool {
+        self.compression_level == CompressionLevel::Skeleton
     }
 }
 
