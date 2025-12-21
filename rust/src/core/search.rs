@@ -234,6 +234,7 @@ impl SymbolResolver {
     }
 
     /// Match a symbol on a specific line
+    #[allow(clippy::too_many_arguments)]
     fn match_symbol(
         &self,
         path: &str,
@@ -534,7 +535,7 @@ impl CallGraphAnalyzer {
 
     fn is_builtin(&self, name: &str) -> bool {
         // Check for common type constructors and builtins
-        name.chars().next().map_or(false, |c| c.is_uppercase())
+        name.chars().next().is_some_and(|c| c.is_uppercase())
             || KEYWORDS.contains(&name)
     }
 }
@@ -580,7 +581,8 @@ fn escape_xml(s: &str) -> String {
 pub struct UsageFinder {
     /// Maximum number of usages to return
     max_results: usize,
-    /// Ignore patterns for walking
+    /// Ignore patterns for walking (reserved for future use)
+    #[allow(dead_code)]
     ignore_patterns: Vec<String>,
 }
 
@@ -1277,5 +1279,339 @@ mod tests {
                 usage.path
             );
         }
+    }
+
+    // ========================================================================
+    // Additional Coverage Tests
+    // ========================================================================
+
+    #[test]
+    fn test_go_function_pattern() {
+        let test_cases = vec![
+            ("func main() {", "main"),
+            ("func (s *Server) Handle() {", "Handle"),
+            ("func processData(x int) int {", "processData"),
+        ];
+
+        for (line, expected) in test_cases {
+            let caps = GO_FUNC.captures(line);
+            assert!(caps.is_some(), "Failed to match Go func: {}", line);
+            assert_eq!(caps.unwrap().get(1).unwrap().as_str(), expected);
+        }
+    }
+
+    #[test]
+    fn test_go_type_pattern() {
+        let test_cases = vec![
+            ("type Config struct {", "Config"),
+            ("type Handler interface {", "Handler"),
+            ("type MyService struct {", "MyService"),
+        ];
+
+        for (line, expected) in test_cases {
+            let caps = GO_TYPE.captures(line);
+            assert!(caps.is_some(), "Failed to match Go type: {}", line);
+            assert_eq!(caps.unwrap().get(1).unwrap().as_str(), expected);
+        }
+    }
+
+    #[test]
+    fn test_symbol_type_display_all_variants() {
+        assert_eq!(SymbolType::Function.to_string(), "function");
+        assert_eq!(SymbolType::Class.to_string(), "class");
+        assert_eq!(SymbolType::Struct.to_string(), "struct");
+        assert_eq!(SymbolType::Trait.to_string(), "trait");
+        assert_eq!(SymbolType::Enum.to_string(), "enum");
+        assert_eq!(SymbolType::Module.to_string(), "module");
+    }
+
+    #[test]
+    fn test_symbol_resolver_with_ignore() {
+        let resolver = SymbolResolver::new()
+            .with_ignore(vec!["*.test".to_string()]);
+        assert_eq!(resolver.ignore_patterns, vec!["*.test".to_string()]);
+    }
+
+    #[test]
+    fn test_symbol_resolver_with_include() {
+        let resolver = SymbolResolver::new()
+            .with_include(vec!["src/**".to_string()]);
+        assert_eq!(resolver.include_patterns, vec!["src/**".to_string()]);
+    }
+
+    #[test]
+    fn test_symbol_resolver_default() {
+        let resolver = SymbolResolver::default();
+        assert!(!resolver.ignore_patterns.is_empty());
+    }
+
+    #[test]
+    fn test_find_symbol_not_found() {
+        use tempfile::TempDir;
+        use std::fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        // Create a file without the target function
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/lib.rs"), "fn other() {}").unwrap();
+
+        let resolver = SymbolResolver::new();
+        let result = resolver.find_function("nonexistent_function", root);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    #[test]
+    fn test_find_class_tries_struct_first() {
+        use tempfile::TempDir;
+        use std::fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        // Create a Rust struct
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/lib.rs"), "pub struct Config {\n    field: i32,\n}\n").unwrap();
+
+        let resolver = SymbolResolver::new();
+        let result = resolver.find_class("Config", root);
+
+        assert!(result.is_ok());
+        let loc = result.unwrap();
+        assert_eq!(loc.name, "Config");
+        assert_eq!(loc.symbol_type, SymbolType::Struct);
+    }
+
+    #[test]
+    fn test_find_all_multiple_matches() {
+        use tempfile::TempDir;
+        use std::fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        // Create multiple files with the same function name
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/a.rs"), "fn helper() {}\n").unwrap();
+        fs::write(root.join("src/b.rs"), "fn helper() {}\n").unwrap();
+
+        let resolver = SymbolResolver::new();
+        let results = resolver.find_all("helper", SymbolType::Function, root);
+
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn test_find_block_end_unknown_extension() {
+        let resolver = SymbolResolver::new();
+        let lines = vec![
+            "something {",
+            "  content",
+            "}",
+        ];
+
+        // Unknown extension should return start + 30 (capped at lines.len)
+        let end = resolver.find_block_end(&lines, 0, "xyz");
+        assert_eq!(end, 3); // min(0 + 30, 3) = 3
+    }
+
+    #[test]
+    fn test_find_block_end_start_beyond_lines() {
+        let resolver = SymbolResolver::new();
+        let lines = vec!["fn test() {}"];
+
+        let end = resolver.find_block_end(&lines, 10, "rs");
+        assert_eq!(end, 11); // start_idx + 1
+    }
+
+    #[test]
+    fn test_find_block_end_no_closing_brace() {
+        let resolver = SymbolResolver::new();
+        let lines = vec![
+            "fn test() {",
+            "    let x = 1;",
+            "    // no closing brace",
+        ];
+
+        let end = resolver.find_block_end(&lines, 0, "rs");
+        // Should return start + 50 capped at lines.len = 3
+        assert_eq!(end, 3);
+    }
+
+    #[test]
+    fn test_is_definition_line_go() {
+        let finder = UsageFinder::new();
+
+        // Go definitions
+        assert!(finder.is_definition_line("func processData() {", "processData"));
+        assert!(finder.is_definition_line("type Config struct {", "Config"));
+
+        // Not definitions
+        assert!(!finder.is_definition_line("result := processData()", "processData"));
+    }
+
+    #[test]
+    fn test_is_definition_line_rust_more() {
+        let finder = UsageFinder::new();
+
+        // Additional Rust definitions
+        assert!(finder.is_definition_line("enum Status {", "Status"));
+        assert!(finder.is_definition_line("trait Handler {", "Handler"));
+        assert!(finder.is_definition_line("type Alias = String;", "Alias"));
+        assert!(finder.is_definition_line("mod utils {", "utils"));
+    }
+
+    #[test]
+    fn test_function_call_helpers() {
+        let call = FunctionCall {
+            name: "process".to_string(),
+            qualifier: Some("Config".to_string()),
+            full_expr: "Config::process".to_string(),
+        };
+
+        assert_eq!(call.lookup_name(), "process");
+        assert_eq!(call.as_zoom_target(), "function=process");
+    }
+
+    #[test]
+    fn test_call_graph_analyzer_default() {
+        let analyzer = CallGraphAnalyzer::default();
+        assert_eq!(analyzer.max_results, 10);
+    }
+
+    #[test]
+    fn test_usage_finder_default_impl() {
+        let finder = UsageFinder::default();
+        assert_eq!(finder.max_results, 10);
+    }
+
+    #[test]
+    fn test_find_usages_empty_on_walk_error() {
+        use std::path::Path;
+
+        let finder = UsageFinder::new();
+        // Non-existent path should return empty
+        let usages = finder.find_usages("test", Path::new("/nonexistent/path/xyz"), None, None);
+        assert!(usages.is_empty());
+    }
+
+    #[test]
+    fn test_find_usages_skips_definition_line() {
+        use tempfile::TempDir;
+        use std::fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("src/lib.rs"),
+            "fn target() {\n    println!(\"hi\");\n}\n\nfn caller() {\n    target();\n}\n",
+        ).unwrap();
+
+        let finder = UsageFinder::new();
+        let usages = finder.find_usages("target", root, Some("src/lib.rs"), Some(1));
+
+        // Should find usage in caller(), but not the definition
+        assert!(!usages.is_empty());
+        for u in &usages {
+            assert!(!u.snippet.contains("fn target"), "Should skip definition line");
+        }
+    }
+
+    #[test]
+    fn test_rust_struct_pattern() {
+        let test_cases = vec![
+            ("struct Config {", "Config"),
+            ("pub struct Handler {", "Handler"),
+            ("pub(crate) struct Internal {", "Internal"),
+        ];
+
+        for (line, expected) in test_cases {
+            let caps = RUST_STRUCT.captures(line);
+            assert!(caps.is_some(), "Failed to match: {}", line);
+            assert_eq!(caps.unwrap().get(1).unwrap().as_str(), expected);
+        }
+    }
+
+    #[test]
+    fn test_rust_enum_pattern() {
+        let test_cases = vec![
+            ("enum Status {", "Status"),
+            ("pub enum Result {", "Result"),
+        ];
+
+        for (line, expected) in test_cases {
+            let caps = RUST_ENUM.captures(line);
+            assert!(caps.is_some(), "Failed to match: {}", line);
+            assert_eq!(caps.unwrap().get(1).unwrap().as_str(), expected);
+        }
+    }
+
+    #[test]
+    fn test_rust_trait_pattern() {
+        let test_cases = vec![
+            ("trait Handler {", "Handler"),
+            ("pub trait Service {", "Service"),
+        ];
+
+        for (line, expected) in test_cases {
+            let caps = RUST_TRAIT.captures(line);
+            assert!(caps.is_some(), "Failed to match: {}", line);
+            assert_eq!(caps.unwrap().get(1).unwrap().as_str(), expected);
+        }
+    }
+
+    #[test]
+    fn test_python_class_pattern() {
+        let test_cases = vec![
+            ("class Config:", "Config"),
+            ("class Handler(Base):", "Handler"),
+        ];
+
+        for (line, expected) in test_cases {
+            let caps = PYTHON_CLASS.captures(line);
+            assert!(caps.is_some(), "Failed to match: {}", line);
+            assert_eq!(caps.unwrap().get(1).unwrap().as_str(), expected);
+        }
+    }
+
+    #[test]
+    fn test_js_class_pattern() {
+        let test_cases = vec![
+            ("class Config {", "Config"),
+            ("export class Handler {", "Handler"),
+        ];
+
+        for (line, expected) in test_cases {
+            let caps = JS_CLASS.captures(line);
+            assert!(caps.is_some(), "Failed to match: {}", line);
+            assert_eq!(caps.unwrap().get(1).unwrap().as_str(), expected);
+        }
+    }
+
+    #[test]
+    fn test_zoom_suggestion_from_call() {
+        let call = FunctionCall {
+            name: "process".to_string(),
+            qualifier: None,
+            full_expr: "process".to_string(),
+        };
+        let location = SymbolLocation {
+            path: "src/lib.rs".to_string(),
+            start_line: 10,
+            end_line: 20,
+            name: "process".to_string(),
+            symbol_type: SymbolType::Function,
+            signature: "fn process()".to_string(),
+        };
+
+        let suggestion = ZoomSuggestion::from_call(&call, &location);
+        assert_eq!(suggestion.target, "function=process");
+        assert_eq!(suggestion.path, "src/lib.rs");
+        assert_eq!(suggestion.lines, (10, 20));
     }
 }

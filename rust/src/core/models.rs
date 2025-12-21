@@ -95,8 +95,8 @@ impl OutputFormat {
         }
     }
 
-    /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parse format from string
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "plus-minus" | "pm" | "plus_minus" => Some(OutputFormat::PlusMinus),
             "xml" => Some(OutputFormat::Xml),
@@ -162,8 +162,8 @@ pub enum SkeletonMode {
 }
 
 impl SkeletonMode {
-    /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parse skeleton mode from string
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "auto" => Some(SkeletonMode::Auto),
             "true" | "enabled" | "on" | "yes" => Some(SkeletonMode::Enabled),
@@ -357,9 +357,9 @@ mod tests {
 
     #[test]
     fn test_output_format_from_str() {
-        assert_eq!(OutputFormat::from_str("plus-minus"), Some(OutputFormat::PlusMinus));
-        assert_eq!(OutputFormat::from_str("claude-xml"), Some(OutputFormat::ClaudeXml));
-        assert_eq!(OutputFormat::from_str("invalid"), None);
+        assert_eq!(OutputFormat::parse("plus-minus"), Some(OutputFormat::PlusMinus));
+        assert_eq!(OutputFormat::parse("claude-xml"), Some(OutputFormat::ClaudeXml));
+        assert_eq!(OutputFormat::parse("invalid"), None);
     }
 
     #[test]

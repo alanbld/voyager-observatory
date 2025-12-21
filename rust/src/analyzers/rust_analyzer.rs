@@ -16,6 +16,12 @@ lazy_static! {
 
 pub struct RustAnalyzer;
 
+impl Default for RustAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RustAnalyzer {
     pub fn new() -> Self {
         Self

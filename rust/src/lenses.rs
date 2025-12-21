@@ -52,6 +52,7 @@ fn default_priority() -> i32 {
 
 /// Lens configuration that can override EncoderConfig settings
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Default)]
 pub struct LensConfig {
     /// Human-readable description of the lens
     #[serde(default)]
@@ -90,21 +91,6 @@ pub struct LensConfig {
     pub fallback: Option<FallbackConfig>,
 }
 
-impl Default for LensConfig {
-    fn default() -> Self {
-        Self {
-            description: String::new(),
-            truncate_mode: None,
-            truncate: None,
-            exclude: Vec::new(),
-            include: Vec::new(),
-            sort_by: None,
-            sort_order: None,
-            groups: Vec::new(),
-            fallback: None,
-        }
-    }
-}
 
 /// Manager for context lenses
 pub struct LensManager {
@@ -543,12 +529,12 @@ impl LensManager {
                 // Case 3: "src/**/*.py" - both prefix and suffix
                 if file_str.starts_with(&format!("{}/", prefix)) {
                     let remaining = &file_str[prefix.len() + 1..];
-                    let remaining_name = Path::new(&*remaining)
+                    let remaining_name = Path::new(remaining)
                         .file_name()
                         .map(|s| s.to_string_lossy().to_string())
                         .unwrap_or_default();
                     return Self::simple_match(&remaining_name, suffix)
-                        || Self::simple_match(&remaining.to_string(), &format!("*/{}", suffix));
+                        || Self::simple_match(remaining, &format!("*/{}", suffix));
                 }
                 return false;
             }

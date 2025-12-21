@@ -60,6 +60,7 @@ pub struct FileEntry {
 
 /// Configuration loaded from .pm_encoder_config.json
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Default)]
 pub struct Config {
     /// Patterns to ignore (e.g., ["*.pyc", ".git"])
     #[serde(default)]
@@ -69,14 +70,6 @@ pub struct Config {
     pub include_patterns: Vec<String>,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            ignore_patterns: vec![],
-            include_patterns: vec![],
-        }
-    }
-}
 
 /// Output format for serialization
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -94,7 +87,7 @@ pub enum OutputFormat {
 
 impl OutputFormat {
     /// Parse format from string
-    pub fn from_str(s: &str) -> Result<Self, String> {
+    pub fn parse(s: &str) -> Result<Self, String> {
         match s.to_lowercase().as_str() {
             "plus_minus" | "plusminus" | "pm" | "" => Ok(Self::PlusMinus),
             "xml" => Ok(Self::Xml),
@@ -453,7 +446,7 @@ impl ContextEngine {
 
         if file.was_truncated {
             let final_lines = count_lines_python_style(&file.content);
-            output.push_str(&format!("  truncated=\"true\"\n"));
+            output.push_str("  truncated=\"true\"\n");
             output.push_str(&format!("  original_lines=\"{}\"\n", file.original_lines));
             output.push_str(&format!("  final_lines=\"{}\"", final_lines));
         }
@@ -1147,8 +1140,8 @@ fn truncate_with_gap_markers(
     let mut result = String::new();
 
     // Keep first section
-    for i in 0..first_end {
-        result.push_str(lines[i]);
+    for line in lines.iter().take(first_end) {
+        result.push_str(line);
         result.push('\n');
     }
 
@@ -1159,8 +1152,8 @@ fn truncate_with_gap_markers(
     }
 
     // Keep last section
-    for i in (last_start - 1)..total_lines {
-        result.push_str(lines[i]);
+    for line in lines.iter().skip(last_start - 1) {
+        result.push_str(line);
         result.push('\n');
     }
 
@@ -1200,6 +1193,7 @@ fn truncate_with_gap_markers(
 /// Python's markdown truncation keeps most of the file:
 /// - Allocates budget for H1/H2 header sections (10 lines each, up to 10% of max per section)
 /// - Fills remaining budget with beginning of file
+///
 /// This effectively keeps first ~max_lines with header supplements
 fn truncate_markdown(
     content: &str,
@@ -1638,19 +1632,9 @@ pub fn truncate_structure_with_fallback(
     (result, total_lines > 30)
 }
 
-/// Serialize a file entry with optional truncation
+/// Count lines matching Python's split('\n') behavior.
 ///
-/// # Arguments
-///
-/// * `entry` - The file entry to serialize
-/// * `truncate_lines` - Maximum lines (0 = no truncation)
-/// * `truncate_mode` - Truncation mode ("simple", "smart", "structure")
-///
-/// # Returns
-///
-/// * Serialized string in Plus/Minus format
-/// Count lines matching Python's split('\n') behavior
-/// Python's split('\n') includes empty string for trailing newline
+/// Python's split('\n') includes empty string for trailing newline.
 fn count_lines_python_style(content: &str) -> usize {
     content.split('\n').count()
 }
@@ -1815,7 +1799,7 @@ fn serialize_claude_xml_entry(path: &str, content: &str, md5: &str, was_truncate
     output.push_str(&format!("  md5=\"{}\"", md5));
 
     if was_truncated {
-        output.push_str(&format!("\n  truncated=\"true\""));
+        output.push_str("\n  truncated=\"true\"");
         output.push_str(&format!("\n  original_lines=\"{}\"", original_lines));
         output.push_str(&format!("\n  final_lines=\"{}\"", final_lines));
     }
@@ -2042,7 +2026,7 @@ pub fn serialize_entries_claude_xml(
 
         writer.write_file(
             &entry.path,
-            &language,
+            language,
             &entry.md5,
             priority,
             &content,
@@ -2170,7 +2154,7 @@ pub fn serialize_entries_claude_xml_with_report(
 
         writer.write_file(
             &entry.path,
-            &language,
+            language,
             &entry.md5,
             priority,
             &content,
@@ -2212,6 +2196,7 @@ fn truncate_for_xml(content: &str, max_lines: usize, mode: &str) -> (String, boo
 }
 
 /// Detect language from content (fallback when path not available)
+#[allow(dead_code)]
 fn detect_language_from_content(content: &str) -> String {
     if content.contains("def ") && content.contains(":") {
         "python".to_string()
@@ -3717,6 +3702,317 @@ This is the last section.
         // Simple truncation keeps first N lines, so middle content should be there
         // but "Final Section" at end would be truncated (expected behavior)
         assert!(result.contains("**Bugfixes**"), "Should keep early content");
+    }
+
+    // ========================================================================
+    // Additional Titanium Coverage Tests
+    // ========================================================================
+
+    #[test]
+    fn test_output_format_parse_all_variants() {
+        // Test all valid format strings
+        assert!(matches!(OutputFormat::parse("plus_minus"), Ok(OutputFormat::PlusMinus)));
+        assert!(matches!(OutputFormat::parse("plusminus"), Ok(OutputFormat::PlusMinus)));
+        assert!(matches!(OutputFormat::parse("pm"), Ok(OutputFormat::PlusMinus)));
+        assert!(matches!(OutputFormat::parse(""), Ok(OutputFormat::PlusMinus)));
+        assert!(matches!(OutputFormat::parse("xml"), Ok(OutputFormat::Xml)));
+        assert!(matches!(OutputFormat::parse("markdown"), Ok(OutputFormat::Markdown)));
+        assert!(matches!(OutputFormat::parse("md"), Ok(OutputFormat::Markdown)));
+        assert!(matches!(OutputFormat::parse("claude-xml"), Ok(OutputFormat::ClaudeXml)));
+        assert!(matches!(OutputFormat::parse("claude_xml"), Ok(OutputFormat::ClaudeXml)));
+        assert!(matches!(OutputFormat::parse("claudexml"), Ok(OutputFormat::ClaudeXml)));
+    }
+
+    #[test]
+    fn test_output_format_parse_case_insensitive() {
+        assert!(matches!(OutputFormat::parse("XML"), Ok(OutputFormat::Xml)));
+        assert!(matches!(OutputFormat::parse("Markdown"), Ok(OutputFormat::Markdown)));
+        assert!(matches!(OutputFormat::parse("CLAUDE-XML"), Ok(OutputFormat::ClaudeXml)));
+    }
+
+    #[test]
+    fn test_output_format_parse_error() {
+        let result = OutputFormat::parse("invalid_format");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Unknown format"));
+        assert!(err.contains("invalid_format"));
+    }
+
+    #[test]
+    fn test_serialize_xml_format() {
+        use std::fs;
+        let temp_dir = std::env::temp_dir().join("pm_encoder_test_xml_format");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+        fs::write(temp_dir.join("test.rs"), "fn main() {}").unwrap();
+
+        let config = EncoderConfig {
+            output_format: OutputFormat::Xml,
+            ..Default::default()
+        };
+
+        let result = serialize_project_with_config(temp_dir.to_str().unwrap(), &config);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        // XML format should contain XML tags
+        assert!(output.contains("<") && output.contains(">"), "XML should contain tags");
+        assert!(output.contains("test.rs"), "Output should contain file path");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_serialize_markdown_format() {
+        use std::fs;
+        let temp_dir = std::env::temp_dir().join("pm_encoder_test_md_format");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+        fs::write(temp_dir.join("test.py"), "print('hello')").unwrap();
+
+        let config = EncoderConfig {
+            output_format: OutputFormat::Markdown,
+            ..Default::default()
+        };
+
+        let result = serialize_project_with_config(temp_dir.to_str().unwrap(), &config);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        // Markdown format uses fenced code blocks
+        assert!(output.contains("```") || output.contains("test.py"));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_serialize_claude_xml_format() {
+        use std::fs;
+        let temp_dir = std::env::temp_dir().join("pm_encoder_test_claude_xml");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+        fs::write(temp_dir.join("lib.rs"), "pub fn hello() {}").unwrap();
+
+        let config = EncoderConfig {
+            output_format: OutputFormat::ClaudeXml,
+            ..Default::default()
+        };
+
+        let result = serialize_project_with_config(temp_dir.to_str().unwrap(), &config);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        // ClaudeXml format should contain XML tags
+        assert!(output.contains("<") && output.contains(">"), "ClaudeXml should contain tags");
+        assert!(output.contains("lib.rs"), "Output should contain file path");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_encoder_config_default_detailed() {
+        // Test EncoderConfig::default() fields
+        let config = EncoderConfig::default();
+        assert_eq!(config.truncate_lines, 0);
+        assert!(!config.frozen);
+        assert!(!config.allow_sensitive);
+        assert!(config.active_lens.is_none());
+        assert!(config.token_budget.is_none());
+    }
+
+    #[test]
+    fn test_file_entry_creation() {
+        // Test FileEntry creation with all fields
+        let entry = FileEntry {
+            path: "test.py".to_string(),
+            content: "print('hello')".to_string(),
+            md5: calculate_md5("print('hello')"),
+            mtime: 12345,
+            ctime: 12340,
+        };
+        assert_eq!(entry.path, "test.py");
+        assert_eq!(entry.content, "print('hello')");
+        assert!(!entry.md5.is_empty());
+    }
+
+    #[test]
+    fn test_parse_token_budget() {
+        // Test token budget parsing
+        assert_eq!(parse_token_budget("1000"), Ok(1000));
+        assert_eq!(parse_token_budget("10k"), Ok(10_000));
+        assert_eq!(parse_token_budget("10K"), Ok(10_000));
+        assert_eq!(parse_token_budget("1M"), Ok(1_000_000));
+        assert_eq!(parse_token_budget("1m"), Ok(1_000_000));
+        assert_eq!(parse_token_budget("100k"), Ok(100_000));
+        assert!(parse_token_budget("invalid").is_err());
+        assert!(parse_token_budget("2.5k").is_err()); // Decimals not supported
+    }
+
+    #[test]
+    fn test_serialize_with_frozen_mode() {
+        use std::fs;
+        let temp_dir = std::env::temp_dir().join("pm_encoder_test_frozen");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+        fs::write(temp_dir.join("test.py"), "x = 1").unwrap();
+
+        let config = EncoderConfig {
+            frozen: true,
+            output_format: OutputFormat::Xml,
+            ..Default::default()
+        };
+
+        let result = serialize_project_with_config(temp_dir.to_str().unwrap(), &config);
+        assert!(result.is_ok());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_serialize_with_token_budget() {
+        use std::fs;
+        let temp_dir = std::env::temp_dir().join("pm_encoder_test_budget");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        // Create multiple files
+        fs::write(temp_dir.join("a.py"), "# a\n").unwrap();
+        fs::write(temp_dir.join("b.py"), "# b\n").unwrap();
+
+        let config = EncoderConfig {
+            token_budget: Some(100),
+            ..Default::default()
+        };
+
+        let result = serialize_project_with_config(temp_dir.to_str().unwrap(), &config);
+        assert!(result.is_ok());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_serialize_with_active_lens() {
+        use std::fs;
+        let temp_dir = std::env::temp_dir().join("pm_encoder_test_lens");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+        fs::write(temp_dir.join("test.rs"), "fn main() {}").unwrap();
+
+        let config = EncoderConfig {
+            active_lens: Some("architecture".to_string()),
+            output_format: OutputFormat::Xml,
+            ..Default::default()
+        };
+
+        let result = serialize_project_with_config(temp_dir.to_str().unwrap(), &config);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        // Just verify it succeeds with a lens active
+        assert!(output.contains("test.rs"), "Output should contain file");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_processed_file_creation() {
+        use crate::core::models::{ProcessedFile, CompressionLevel};
+        let pf = ProcessedFile {
+            path: "test.py".to_string(),
+            content: "x = 1".to_string(),
+            md5: "abc123".to_string(),
+            language: "python".to_string(),
+            priority: 50,
+            tokens: 10,
+            truncated: false,
+            original_tokens: None,
+            compression_level: CompressionLevel::Full,
+        };
+
+        assert_eq!(pf.path, "test.py");
+        assert_eq!(pf.priority, 50);
+        assert!(!pf.truncated);
+    }
+
+    #[test]
+    fn test_config_struct() {
+        // Test the simple Config struct
+        let config = Config {
+            ignore_patterns: vec!["*.log".to_string()],
+            include_patterns: vec!["*.py".to_string()],
+        };
+
+        assert_eq!(config.ignore_patterns.len(), 1);
+        assert_eq!(config.include_patterns.len(), 1);
+    }
+
+    #[test]
+    fn test_lens_manager_basic() {
+        let mut lens_manager = LensManager::new();
+        // Test applying a lens
+        let result = lens_manager.apply_lens("architecture");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_encoder_config_with_patterns() {
+        // Test config with custom patterns
+        let config = EncoderConfig {
+            ignore_patterns: vec!["*.log".to_string(), "*.tmp".to_string()],
+            include_patterns: vec!["*.rs".to_string()],
+            ..Default::default()
+        };
+
+        assert_eq!(config.ignore_patterns.len(), 2);
+        assert!(config.ignore_patterns.contains(&"*.log".to_string()));
+        assert_eq!(config.include_patterns.len(), 1);
+    }
+
+    #[test]
+    fn test_serialization_with_stream_mode() {
+        use std::fs;
+        let temp_dir = std::env::temp_dir().join("pm_encoder_test_stream");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+        fs::write(temp_dir.join("a.py"), "# a").unwrap();
+        fs::write(temp_dir.join("b.py"), "# b").unwrap();
+
+        let config = EncoderConfig {
+            stream: true,
+            ..Default::default()
+        };
+
+        let result = serialize_project_with_config(temp_dir.to_str().unwrap(), &config);
+        assert!(result.is_ok());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_truncate_with_exclude_patterns() {
+        // Test that certain files skip truncation based on patterns
+        let patterns = vec!["*.md".to_string()];
+        assert!(should_skip_truncation("README.md", &patterns));
+        assert!(!should_skip_truncation("main.py", &patterns));
+    }
+
+    #[test]
+    fn test_encoder_config_skeleton_modes() {
+        // Test skeleton mode configurations
+        let auto_config = EncoderConfig {
+            skeleton_mode: SkeletonMode::Auto,
+            ..Default::default()
+        };
+        assert!(matches!(auto_config.skeleton_mode, SkeletonMode::Auto));
+
+        let enabled_config = EncoderConfig {
+            skeleton_mode: SkeletonMode::Enabled,
+            ..Default::default()
+        };
+        assert!(matches!(enabled_config.skeleton_mode, SkeletonMode::Enabled));
+
+        let disabled_config = EncoderConfig {
+            skeleton_mode: SkeletonMode::Disabled,
+            ..Default::default()
+        };
+        assert!(matches!(disabled_config.skeleton_mode, SkeletonMode::Disabled));
     }
 }
 

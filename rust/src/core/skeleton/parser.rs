@@ -187,7 +187,7 @@ impl Skeletonizer {
 
                 // Module declarations
                 if let Some(caps) = RUST_MOD.captures(trimmed) {
-                    result.extend(pending_attrs.drain(..));
+                    result.append(&mut pending_attrs);
                     result.push(line.to_string());
                     if let Some(name) = caps.get(2) {
                         symbols.push(name.as_str().to_string());
@@ -198,7 +198,7 @@ impl Skeletonizer {
 
                 // Constants and statics
                 if RUST_CONST.is_match(trimmed) {
-                    result.extend(pending_attrs.drain(..));
+                    result.append(&mut pending_attrs);
                     result.push(line.to_string());
                     if let Some(caps) = RUST_CONST.captures(trimmed) {
                         if let Some(name) = caps.get(3) {
@@ -211,7 +211,7 @@ impl Skeletonizer {
 
                 // Type aliases
                 if RUST_TYPE.is_match(trimmed) {
-                    result.extend(pending_attrs.drain(..));
+                    result.append(&mut pending_attrs);
                     result.push(line.to_string());
                     if let Some(caps) = RUST_TYPE.captures(trimmed) {
                         if let Some(name) = caps.get(2) {
@@ -224,7 +224,7 @@ impl Skeletonizer {
 
                 // Struct/Enum/Trait definitions
                 if RUST_STRUCT.is_match(trimmed) || RUST_ENUM.is_match(trimmed) || RUST_TRAIT.is_match(trimmed) {
-                    result.extend(pending_attrs.drain(..));
+                    result.append(&mut pending_attrs);
 
                     // Extract symbol name
                     if let Some(caps) = RUST_STRUCT.captures(trimmed) {
@@ -251,7 +251,7 @@ impl Skeletonizer {
 
                 // Impl blocks
                 if RUST_IMPL.is_match(trimmed) {
-                    result.extend(pending_attrs.drain(..));
+                    result.append(&mut pending_attrs);
                     result.push(line.to_string());
                     brace_depth += open_braces - close_braces;
                     i += 1;
@@ -260,7 +260,7 @@ impl Skeletonizer {
 
                 // Function definitions
                 if let Some(caps) = RUST_FN.captures(trimmed) {
-                    result.extend(pending_attrs.drain(..));
+                    result.append(&mut pending_attrs);
 
                     if let Some(name) = caps.get(3) {
                         symbols.push(name.as_str().to_string());
@@ -368,12 +368,12 @@ impl Skeletonizer {
                     // Single-line docstring or end of multi-line
                     in_docstring = false;
                     if self.preserve_docstrings {
-                        result.extend(pending_docstring.drain(..));
+                        result.append(&mut pending_docstring);
                     }
                 } else if trimmed.ends_with("\"\"\"") || trimmed.ends_with("'''") {
                     in_docstring = false;
                     if self.preserve_docstrings {
-                        result.extend(pending_docstring.drain(..));
+                        result.append(&mut pending_docstring);
                     }
                 }
                 i += 1;
@@ -432,7 +432,7 @@ impl Skeletonizer {
                 let def_indent = indent;
 
                 // Check if we're inside a class (method) - def indent must be greater than class indent
-                let is_method = class_indent_stack.last().map_or(false, |&ci| def_indent > ci);
+                let is_method = class_indent_stack.last().is_some_and(|&ci| def_indent > ci);
 
                 if class_indent_stack.is_empty() || is_method || def_indent == 0 {
                     result.push(line.to_string());

@@ -118,7 +118,7 @@ impl<W: Write> XmlWriter<W> {
 
         write!(self.writer, "<context")?;
         for (key, value) in &attrs {
-            write!(self.writer, "\n  {}=\"{}\"", key, escape_xml_attr(&value))?;
+            write!(self.writer, "\n  {}=\"{}\"", key, escape_xml_attr(value))?;
         }
         writeln!(self.writer, ">")?;
 
@@ -224,6 +224,7 @@ impl<W: Write> XmlWriter<W> {
     }
 
     /// Write a single file entry with streaming content
+    #[allow(clippy::too_many_arguments)]
     pub fn write_file(
         &mut self,
         path: &str,
@@ -265,7 +266,7 @@ impl<W: Write> XmlWriter<W> {
         // Write file tag with sorted attributes
         write!(self.writer, "    <file")?;
         for (key, value) in &attrs {
-            write!(self.writer, "\n      {}=\"{}\"", key, escape_xml_attr(&value))?;
+            write!(self.writer, "\n      {}=\"{}\"", key, escape_xml_attr(value))?;
         }
         writeln!(self.writer, ">")?;
 
@@ -506,5 +507,415 @@ mod tests {
         assert!(xml.contains("--include large.rs --truncate 0"));
         assert!(xml.contains("truncated=\"true\""));
         assert!(xml.contains("original_tokens=\"5000\""));
+    }
+
+    // ========================================================================
+    // Additional Coverage Tests
+    // ========================================================================
+
+    #[test]
+    fn test_xml_config_default() {
+        let config = XmlConfig::default();
+        assert_eq!(config.package, "pm_encoder");
+        assert!(!config.frozen);
+        assert!(!config.allow_sensitive);
+        assert!(config.lens.is_none());
+        assert!(config.token_budget.is_none());
+        assert!(config.utilized_tokens.is_none());
+        assert!(config.snapshot_id.is_none());
+    }
+
+    #[test]
+    fn test_xml_error_display_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::Other, "test error");
+        let xml_err = XmlError::Io(io_err);
+        let display = format!("{}", xml_err);
+        assert!(display.contains("IO error"));
+        assert!(display.contains("test error"));
+    }
+
+    #[test]
+    fn test_xml_error_display_invalid_state() {
+        let xml_err = XmlError::InvalidState("bad state".to_string());
+        let display = format!("{}", xml_err);
+        assert!(display.contains("Invalid state"));
+        assert!(display.contains("bad state"));
+    }
+
+    #[test]
+    fn test_xml_error_from_io() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::Other, "io error");
+        let xml_err: XmlError = io_err.into();
+        match xml_err {
+            XmlError::Io(_) => {},
+            _ => panic!("Expected XmlError::Io"),
+        }
+    }
+
+    #[test]
+    fn test_xml_error_is_error_trait() {
+        let xml_err = XmlError::InvalidState("test".to_string());
+        // Check that it implements std::error::Error
+        let _: &dyn std::error::Error = &xml_err;
+    }
+
+    #[test]
+    fn test_write_file_without_files_start() {
+        let mut output = Vec::new();
+        let config = XmlConfig::default();
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&[]).unwrap();
+        // Skip write_files_start
+
+        let result = writer.write_file(
+            "test.rs",
+            "rust",
+            "abc123",
+            100,
+            "content",
+            false,
+            None,
+            None,
+        );
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            XmlError::InvalidState(msg) => {
+                assert!(msg.contains("write_files_start"));
+            }
+            _ => panic!("Expected InvalidState error"),
+        }
+    }
+
+    #[test]
+    fn test_write_files_end_without_start() {
+        let mut output = Vec::new();
+        let config = XmlConfig::default();
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&[]).unwrap();
+        // Skip write_files_start
+
+        let result = writer.write_files_end();
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            XmlError::InvalidState(msg) => {
+                assert!(msg.contains("write_files_start"));
+            }
+            _ => panic!("Expected InvalidState error"),
+        }
+    }
+
+    #[test]
+    fn test_flush_writer() {
+        let mut output = Vec::new();
+        let config = XmlConfig::default();
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        let result = writer.flush();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_into_inner() {
+        let output = Vec::new();
+        let config = XmlConfig::default();
+
+        let writer = XmlWriter::new(output, config);
+        let inner = writer.into_inner();
+        assert!(inner.is_empty()); // Nothing written yet
+    }
+
+    #[test]
+    fn test_attention_map_with_critical_tier() {
+        let mut output = Vec::new();
+        let config = XmlConfig::default();
+
+        let entries = vec![
+            AttentionEntry {
+                path: "critical.rs".to_string(),
+                priority: 99,
+                tokens: 100,
+                truncated: false,
+                dropped: false,
+                utility_score: None,
+            },
+        ];
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&entries).unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        assert!(xml.contains("<priority_tier level=\"critical\">"));
+        assert!(xml.contains("path=\"critical.rs\""));
+    }
+
+    #[test]
+    fn test_attention_map_with_high_tier() {
+        let mut output = Vec::new();
+        let config = XmlConfig::default();
+
+        let entries = vec![
+            AttentionEntry {
+                path: "high.rs".to_string(),
+                priority: 85,
+                tokens: 100,
+                truncated: false,
+                dropped: false,
+                utility_score: Some(0.5), // <= 0.8, so not critical
+            },
+        ];
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&entries).unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        assert!(xml.contains("<priority_tier level=\"high\">"));
+        assert!(xml.contains("path=\"high.rs\""));
+    }
+
+    #[test]
+    fn test_attention_map_with_coldspots() {
+        let mut output = Vec::new();
+        let config = XmlConfig::default();
+
+        let entries = vec![
+            AttentionEntry {
+                path: "dropped.rs".to_string(),
+                priority: 10,
+                tokens: 500,
+                truncated: false,
+                dropped: true,
+                utility_score: None,
+            },
+        ];
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&entries).unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        assert!(xml.contains("<coldspots>"));
+        assert!(xml.contains("path=\"dropped.rs\""));
+        assert!(xml.contains("dropped=\"true\""));
+    }
+
+    #[test]
+    fn test_attention_entry_with_utility_score() {
+        let mut output = Vec::new();
+        let config = XmlConfig::default();
+
+        let entries = vec![
+            AttentionEntry {
+                path: "useful.rs".to_string(),
+                priority: 99,
+                tokens: 100,
+                truncated: false,
+                dropped: false,
+                utility_score: Some(0.95),
+            },
+        ];
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&entries).unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        assert!(xml.contains("utility=\"0.95\""));
+    }
+
+    #[test]
+    fn test_attention_entry_truncated() {
+        let mut output = Vec::new();
+        let config = XmlConfig::default();
+
+        let entries = vec![
+            AttentionEntry {
+                path: "truncated.rs".to_string(),
+                priority: 99,
+                tokens: 100,
+                truncated: true,
+                dropped: false,
+                utility_score: None,
+            },
+        ];
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&entries).unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        assert!(xml.contains("truncated=\"true\""));
+    }
+
+    #[test]
+    fn test_allow_sensitive_path() {
+        let mut output = Vec::new();
+        let config = XmlConfig {
+            allow_sensitive: true,
+            ..Default::default()
+        };
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&[]).unwrap();
+        writer.write_files_start().unwrap();
+        writer.write_file(
+            "/home/user/secret/project/src/main.rs",
+            "rust",
+            "abc",
+            50,
+            "fn main() {}",
+            false,
+            None,
+            None,
+        ).unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        // With allow_sensitive, the full path should be preserved
+        assert!(xml.contains("/home/user/secret/project/src/main.rs"));
+    }
+
+    #[test]
+    fn test_sanitize_path_no_src_or_lib() {
+        // Path without /src/ or /lib/ should use filename only
+        assert_eq!(sanitize_path("/home/user/project/data/file.txt"), "file.txt");
+    }
+
+    #[test]
+    fn test_metadata_with_lens_config() {
+        let mut output = Vec::new();
+        let config = XmlConfig {
+            lens: Some("architecture".to_string()),
+            ..Default::default()
+        };
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&[]).unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        assert!(xml.contains("<lens_config>"));
+        assert!(xml.contains("<name>architecture</name>"));
+        assert!(xml.contains("</lens_config>"));
+    }
+
+    #[test]
+    fn test_metadata_without_frozen_has_timestamp() {
+        let mut output = Vec::new();
+        let config = XmlConfig {
+            frozen: false,
+            ..Default::default()
+        };
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&[]).unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        assert!(xml.contains("<timestamp>"));
+    }
+
+    #[test]
+    fn test_context_start_with_utilized() {
+        let mut output = Vec::new();
+        let config = XmlConfig {
+            utilized_tokens: Some(5000),
+            ..Default::default()
+        };
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        assert!(xml.contains("utilized=\"5000\""));
+    }
+
+    #[test]
+    fn test_write_file_no_truncation_no_zoom() {
+        let mut output = Vec::new();
+        let config = XmlConfig::default();
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&[]).unwrap();
+        writer.write_files_start().unwrap();
+        writer.write_file(
+            "test.rs",
+            "rust",
+            "abc123",
+            50,
+            "fn main() {}",
+            false, // not truncated
+            None,
+            None,
+        ).unwrap();
+        writer.write_files_end().unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        // Should not have zoom_actions for non-truncated files
+        assert!(!xml.contains("<zoom_actions>"));
+    }
+
+    #[test]
+    fn test_write_file_truncated_without_expand_cmd() {
+        let mut output = Vec::new();
+        let config = XmlConfig::default();
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&[]).unwrap();
+        writer.write_files_start().unwrap();
+        writer.write_file(
+            "test.rs",
+            "rust",
+            "abc123",
+            50,
+            "fn main() {}",
+            true, // truncated
+            Some(1000),
+            None, // no zoom command
+        ).unwrap();
+        writer.write_files_end().unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        // Should still have zoom_actions for structure and full
+        assert!(xml.contains("<zoom_actions>"));
+        assert!(xml.contains("type=\"structure\""));
+        assert!(xml.contains("type=\"full\""));
+        // But not expand
+        assert!(!xml.contains("type=\"expand\""));
+    }
+
+    #[test]
+    fn test_attention_map_utility_makes_critical() {
+        let mut output = Vec::new();
+        let config = XmlConfig::default();
+
+        // Even with low priority, high utility should make it critical
+        let entries = vec![
+            AttentionEntry {
+                path: "low_prio_high_util.rs".to_string(),
+                priority: 50, // Low priority
+                tokens: 100,
+                truncated: false,
+                dropped: false,
+                utility_score: Some(0.9), // High utility > 0.8
+            },
+        ];
+
+        let mut writer = XmlWriter::new(&mut output, config);
+        writer.write_context_start().unwrap();
+        writer.write_metadata(&entries).unwrap();
+
+        let xml = String::from_utf8(output).unwrap();
+        assert!(xml.contains("<priority_tier level=\"critical\">"));
     }
 }

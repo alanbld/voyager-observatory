@@ -9,7 +9,7 @@ use crate::core::models::{CompressionLevel, EncoderConfig, FileEntry, OutputForm
 use crate::core::serialization::{get_serializer, Serializer};
 use crate::core::skeleton::{AdaptiveAllocator, FileAllocation, Language, Skeletonizer};
 use crate::core::walker::{DefaultWalker, FileWalker, WalkConfig};
-use crate::core::zoom::{ZoomAction, ZoomConfig, ZoomTarget};
+use crate::core::zoom::{ZoomAction, ZoomConfig, ZoomTarget, ZoomDepth};
 
 /// File tier for prioritized budgeting
 /// Core domain files get budget first, then config, tests last
@@ -86,7 +86,7 @@ impl FileTier {
 
         // Check if the filename matches a config file
         if let Some(filename) = path.rsplit('/').next() {
-            if config_names.iter().any(|c| filename == *c) {
+            if config_names.contains(&filename) {
                 return true;
             }
         }
@@ -402,7 +402,7 @@ impl ContextEngine {
         let skeletonizer = Skeletonizer::new();
 
         // Build file allocations with both full and skeleton token costs
-        let mut allocations: Vec<(ProcessedFile, FileAllocation)> = files
+        let allocations: Vec<(ProcessedFile, FileAllocation)> = files
             .into_iter()
             .map(|file| {
                 let tier = FileTier::classify(&file.path, manifest);
@@ -605,7 +605,7 @@ impl ContextEngine {
     // Zoom helper methods
 
     fn find_function(&self, entries: &[FileEntry], name: &str) -> Vec<FileEntry> {
-        let pattern = format!("fn {}|def {}|function {}", name, name, name);
+        let _pattern = format!("fn {}|def {}|function {}", name, name, name);
         entries.iter()
             .filter(|e| e.content.contains(&format!("fn {}", name)) ||
                        e.content.contains(&format!("def {}", name)) ||
@@ -1110,5 +1110,403 @@ mod tests {
 
         // But test files are still Tests
         assert_eq!(FileTier::classify("test_utils.py", Some(&manifest)), FileTier::Tests);
+    }
+
+    // ========================================================================
+    // Additional Coverage Tests
+    // ========================================================================
+
+    #[test]
+    fn test_engine_default() {
+        let engine = ContextEngine::default();
+        assert_eq!(engine.config().output_format, OutputFormat::PlusMinus);
+    }
+
+    #[test]
+    fn test_engine_with_format() {
+        let engine = ContextEngine::new().with_format(OutputFormat::Xml);
+        assert_eq!(engine.config().output_format, OutputFormat::Xml);
+    }
+
+    #[test]
+    fn test_sort_entries_mtime_asc() {
+        let mut config = EncoderConfig::default();
+        config.sort_by = "mtime".to_string();
+        config.sort_order = "asc".to_string();
+        let engine = ContextEngine::with_config(config);
+
+        let entries = vec![
+            FileEntry { path: "a.txt".to_string(), content: "a".to_string(), md5: "a".to_string(), mtime: 300, ctime: 0 },
+            FileEntry { path: "b.txt".to_string(), content: "b".to_string(), md5: "b".to_string(), mtime: 100, ctime: 0 },
+            FileEntry { path: "c.txt".to_string(), content: "c".to_string(), md5: "c".to_string(), mtime: 200, ctime: 0 },
+        ];
+
+        let sorted = engine.sort_entries(entries);
+        assert_eq!(sorted[0].path, "b.txt"); // mtime 100
+        assert_eq!(sorted[1].path, "c.txt"); // mtime 200
+        assert_eq!(sorted[2].path, "a.txt"); // mtime 300
+    }
+
+    #[test]
+    fn test_sort_entries_mtime_desc() {
+        let mut config = EncoderConfig::default();
+        config.sort_by = "mtime".to_string();
+        config.sort_order = "desc".to_string();
+        let engine = ContextEngine::with_config(config);
+
+        let entries = vec![
+            FileEntry { path: "a.txt".to_string(), content: "a".to_string(), md5: "a".to_string(), mtime: 100, ctime: 0 },
+            FileEntry { path: "b.txt".to_string(), content: "b".to_string(), md5: "b".to_string(), mtime: 300, ctime: 0 },
+        ];
+
+        let sorted = engine.sort_entries(entries);
+        assert_eq!(sorted[0].path, "b.txt"); // mtime 300 (desc)
+        assert_eq!(sorted[1].path, "a.txt"); // mtime 100
+    }
+
+    #[test]
+    fn test_sort_entries_ctime() {
+        let mut config = EncoderConfig::default();
+        config.sort_by = "ctime".to_string();
+        config.sort_order = "asc".to_string();
+        let engine = ContextEngine::with_config(config);
+
+        let entries = vec![
+            FileEntry { path: "a.txt".to_string(), content: "a".to_string(), md5: "a".to_string(), mtime: 0, ctime: 300 },
+            FileEntry { path: "b.txt".to_string(), content: "b".to_string(), md5: "b".to_string(), mtime: 0, ctime: 100 },
+        ];
+
+        let sorted = engine.sort_entries(entries);
+        assert_eq!(sorted[0].path, "b.txt"); // ctime 100
+        assert_eq!(sorted[1].path, "a.txt"); // ctime 300
+    }
+
+    #[test]
+    fn test_sort_entries_ctime_desc() {
+        let mut config = EncoderConfig::default();
+        config.sort_by = "ctime".to_string();
+        config.sort_order = "desc".to_string();
+        let engine = ContextEngine::with_config(config);
+
+        let entries = vec![
+            FileEntry { path: "a.txt".to_string(), content: "a".to_string(), md5: "a".to_string(), mtime: 0, ctime: 100 },
+            FileEntry { path: "b.txt".to_string(), content: "b".to_string(), md5: "b".to_string(), mtime: 0, ctime: 300 },
+        ];
+
+        let sorted = engine.sort_entries(entries);
+        assert_eq!(sorted[0].path, "b.txt"); // ctime 300 (desc)
+    }
+
+    #[test]
+    fn test_sort_entries_name_desc() {
+        let mut config = EncoderConfig::default();
+        config.sort_by = "name".to_string();
+        config.sort_order = "desc".to_string();
+        let engine = ContextEngine::with_config(config);
+
+        let entries = vec![
+            FileEntry::new("a.txt", "a"),
+            FileEntry::new("c.txt", "c"),
+            FileEntry::new("b.txt", "b"),
+        ];
+
+        let sorted = engine.sort_entries(entries);
+        assert_eq!(sorted[0].path, "c.txt");
+        assert_eq!(sorted[1].path, "b.txt");
+        assert_eq!(sorted[2].path, "a.txt");
+    }
+
+    #[test]
+    fn test_sort_entries_unknown_sort_by() {
+        let mut config = EncoderConfig::default();
+        config.sort_by = "unknown".to_string();
+        let engine = ContextEngine::with_config(config);
+
+        let entries = vec![
+            FileEntry::new("b.txt", "b"),
+            FileEntry::new("a.txt", "a"),
+        ];
+
+        // Should fall back to name sorting
+        let sorted = engine.sort_entries(entries);
+        assert_eq!(sorted[0].path, "a.txt");
+        assert_eq!(sorted[1].path, "b.txt");
+    }
+
+    #[test]
+    fn test_detect_language_all_extensions() {
+        assert_eq!(detect_language("test.js"), "javascript");
+        assert_eq!(detect_language("test.ts"), "typescript");
+        assert_eq!(detect_language("test.jsx"), "jsx");
+        assert_eq!(detect_language("test.tsx"), "tsx");
+        assert_eq!(detect_language("test.sh"), "bash");
+        assert_eq!(detect_language("test.bash"), "bash");
+        assert_eq!(detect_language("test.md"), "markdown");
+        assert_eq!(detect_language("test.json"), "json");
+        assert_eq!(detect_language("test.yaml"), "yaml");
+        assert_eq!(detect_language("test.yml"), "yaml");
+        assert_eq!(detect_language("test.toml"), "toml");
+        assert_eq!(detect_language("test.html"), "html");
+        assert_eq!(detect_language("test.css"), "css");
+        assert_eq!(detect_language("test.sql"), "sql");
+        assert_eq!(detect_language("test.go"), "go");
+        assert_eq!(detect_language("test.java"), "java");
+        assert_eq!(detect_language("test.c"), "c");
+        assert_eq!(detect_language("test.cpp"), "cpp");
+        assert_eq!(detect_language("test.cc"), "cpp");
+        assert_eq!(detect_language("test.cxx"), "cpp");
+        assert_eq!(detect_language("test.h"), "cpp");
+        assert_eq!(detect_language("test.hpp"), "cpp");
+        assert_eq!(detect_language("test.rb"), "ruby");
+        assert_eq!(detect_language("test.php"), "php");
+    }
+
+    #[test]
+    fn test_zoom_function_target() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(
+            temp_dir.path().join("src/lib.rs"),
+            "fn target_func() {\n    println!(\"hello\");\n}\n"
+        ).unwrap();
+
+        let engine = ContextEngine::new();
+        let zoom_config = ZoomConfig {
+            target: ZoomTarget::Function("target_func".to_string()),
+            budget: None,
+            depth: ZoomDepth::Full,
+            include_tests: false,
+            context_lines: 0,
+        };
+
+        let result = engine.zoom(temp_dir.path().to_str().unwrap(), &zoom_config);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.contains("target_func"));
+    }
+
+    #[test]
+    fn test_zoom_class_target() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(
+            temp_dir.path().join("src/lib.rs"),
+            "struct MyClass {\n    field: i32,\n}\n"
+        ).unwrap();
+
+        let engine = ContextEngine::new();
+        let zoom_config = ZoomConfig {
+            target: ZoomTarget::Class("MyClass".to_string()),
+            budget: None,
+            depth: ZoomDepth::Full,
+            include_tests: false,
+            context_lines: 0,
+        };
+
+        let result = engine.zoom(temp_dir.path().to_str().unwrap(), &zoom_config);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.contains("MyClass"));
+    }
+
+    #[test]
+    fn test_zoom_module_target() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+        fs::write(
+            temp_dir.path().join("src/utils.rs"),
+            "pub fn helper() {}\n"
+        ).unwrap();
+
+        let engine = ContextEngine::new();
+        let zoom_config = ZoomConfig {
+            target: ZoomTarget::Module("utils".to_string()),
+            budget: None,
+            depth: ZoomDepth::Full,
+            include_tests: false,
+            context_lines: 0,
+        };
+
+        let result = engine.zoom(temp_dir.path().to_str().unwrap(), &zoom_config);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.contains("utils"));
+    }
+
+    #[test]
+    fn test_zoom_file_with_line_range() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(
+            temp_dir.path().join("test.rs"),
+            "line1\nline2\nline3\nline4\nline5\n"
+        ).unwrap();
+
+        let engine = ContextEngine::new();
+        let zoom_config = ZoomConfig {
+            target: ZoomTarget::File {
+                path: "test.rs".to_string(),
+                start_line: Some(2),
+                end_line: Some(4),
+            },
+            budget: None,
+            depth: ZoomDepth::Full,
+            include_tests: false,
+            context_lines: 0,
+        };
+
+        let result = engine.zoom(temp_dir.path().to_str().unwrap(), &zoom_config);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.contains("line2"));
+        assert!(output.contains("line3"));
+        assert!(output.contains("line4"));
+        // line1 and line5 should not be included
+        assert!(!output.contains("line1\n"));
+    }
+
+    #[test]
+    fn test_zoom_invalid_target() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("test.rs"), "fn main() {}").unwrap();
+
+        let engine = ContextEngine::new();
+        let zoom_config = ZoomConfig {
+            target: ZoomTarget::Function("nonexistent".to_string()),
+            budget: None,
+            depth: ZoomDepth::Full,
+            include_tests: false,
+            context_lines: 0,
+        };
+
+        let result = engine.zoom(temp_dir.path().to_str().unwrap(), &zoom_config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_serialize_claude_xml_format() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("test.rs"), "fn main() {}").unwrap();
+
+        let mut config = EncoderConfig::default();
+        config.output_format = OutputFormat::ClaudeXml;
+        let engine = ContextEngine::with_config(config);
+
+        let result = engine.serialize(temp_dir.path().to_str().unwrap());
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.contains("<context"));
+        assert!(output.contains("<metadata>"));
+        assert!(output.contains("<files>"));
+        assert!(output.contains("</context>"));
+    }
+
+    #[test]
+    fn test_apply_budget_with_skeleton_enabled() {
+        use crate::core::models::CompressionLevel;
+
+        let mut config = EncoderConfig::default();
+        config.skeleton_mode = crate::core::models::SkeletonMode::Enabled;
+        let engine = ContextEngine::with_config(config);
+
+        let files = vec![
+            ProcessedFile {
+                path: "src/lib.rs".to_string(),
+                content: "pub fn process() {\n    let x = 1;\n    let y = 2;\n    x + y\n}\n".to_string(),
+                md5: "abc".to_string(),
+                language: "rust".to_string(),
+                priority: 50,
+                tokens: 50,
+                truncated: false,
+                original_tokens: None,
+                compression_level: CompressionLevel::Full,
+            },
+        ];
+
+        // With skeleton mode enabled, files should be compressed
+        let result = engine.apply_budget(files, 100);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_file_tier_with_node_manifest() {
+        use crate::core::manifest::{ProjectManifest, ProjectType};
+        use std::path::PathBuf;
+
+        let manifest = ProjectManifest {
+            root: PathBuf::from("/project"),
+            project_type: ProjectType::Node,
+            manifest_files: vec![PathBuf::from("package.json")],
+            is_workspace: false,
+        };
+
+        // index.js/ts should be Core for Node projects
+        assert_eq!(FileTier::classify("index.js", Some(&manifest)), FileTier::Core);
+        assert_eq!(FileTier::classify("index.ts", Some(&manifest)), FileTier::Core);
+    }
+
+    #[test]
+    fn test_file_tier_other_project_type() {
+        use crate::core::manifest::{ProjectManifest, ProjectType};
+        use std::path::PathBuf;
+
+        let manifest = ProjectManifest {
+            root: PathBuf::from("/project"),
+            project_type: ProjectType::Unknown,
+            manifest_files: vec![],
+            is_workspace: false,
+        };
+
+        // Unknown project type should still classify based on paths
+        assert_eq!(FileTier::classify("src/lib.rs", Some(&manifest)), FileTier::Core);
+        assert_eq!(FileTier::classify("README.md", Some(&manifest)), FileTier::Other);
+    }
+
+    #[test]
+    fn test_process_files_no_truncation() {
+        let engine = ContextEngine::new(); // Default: truncate_lines = 0
+
+        let entries = vec![FileEntry::new("test.py", "line1\nline2\nline3")];
+        let processed = engine.process_files(&entries);
+
+        assert_eq!(processed.len(), 1);
+        assert!(!processed[0].truncated);
+        assert!(processed[0].content.contains("line1"));
+        assert!(processed[0].content.contains("line2"));
+        assert!(processed[0].content.contains("line3"));
+    }
+
+    #[test]
+    fn test_serialize_empty_dir() {
+        let temp_dir = TempDir::new().unwrap();
+        // Don't create any files
+
+        let engine = ContextEngine::new();
+        let result = engine.serialize(temp_dir.path().to_str().unwrap());
+
+        // Should succeed but produce minimal output
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_file_tier_config_more_patterns() {
+        // More config file patterns
+        assert_eq!(FileTier::classify("setup.py", None), FileTier::Config);
+        assert_eq!(FileTier::classify("go.mod", None), FileTier::Config);
+        assert_eq!(FileTier::classify("pom.xml", None), FileTier::Config);
+        assert_eq!(FileTier::classify("build.gradle", None), FileTier::Config);
+        assert_eq!(FileTier::classify("composer.json", None), FileTier::Config);
+        assert_eq!(FileTier::classify("Gemfile", None), FileTier::Config);
+        assert_eq!(FileTier::classify("requirements.txt", None), FileTier::Config);
+        assert_eq!(FileTier::classify("Pipfile", None), FileTier::Config);
+    }
+
+    #[test]
+    fn test_file_tier_test_file_patterns() {
+        // More test file patterns
+        assert_eq!(FileTier::classify("app.test.js", None), FileTier::Tests);
+        assert_eq!(FileTier::classify("app.test.ts", None), FileTier::Tests);
+        assert_eq!(FileTier::classify("app_test.py", None), FileTier::Tests);
+        assert_eq!(FileTier::classify("app_test.rs", None), FileTier::Tests);
+        assert_eq!(FileTier::classify("app_test.go", None), FileTier::Tests);
     }
 }

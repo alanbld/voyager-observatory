@@ -10,6 +10,9 @@
 //! - Delegates to the library for all actual work
 //! - Maintains interface parity with Python implementation
 
+// Exclude from coverage - CLI binary tested via integration tests
+#![cfg_attr(tarpaulin, ignore)]
+
 use clap::{Parser, ValueEnum};
 use pm_encoder::{self, EncoderConfig, LensManager, OutputFormat, parse_token_budget, apply_token_budget};
 use pm_encoder::core::{ContextEngine, ZoomConfig, ZoomTarget, ContextStore, DEFAULT_ALPHA, SkeletonMode};
@@ -313,7 +316,7 @@ fn parse_report_utility(s: &str) -> Result<(String, f64, String), String> {
         format!("Invalid utility score: '{}'. Expected a number between 0.0 and 1.0", score_str)
     })?;
 
-    if score < 0.0 || score > 1.0 {
+    if !(0.0..=1.0).contains(&score) {
         return Err(format!(
             "Utility score must be between 0.0 and 1.0, got: {}",
             score
@@ -593,7 +596,7 @@ fn main() {
     config.active_lens = cli.lens.clone();
 
     // Apply skeleton mode (v2.2.0)
-    config.skeleton_mode = SkeletonMode::from_str(&cli.skeleton).unwrap_or(SkeletonMode::Auto);
+    config.skeleton_mode = SkeletonMode::parse(&cli.skeleton).unwrap_or(SkeletonMode::Auto);
 
     // Streaming mode warning for file output
     if cli.stream && cli.output.is_some() {
@@ -613,7 +616,7 @@ fn main() {
         // Parse action:name format
         let parts: Vec<&str> = session_cmd.splitn(2, ':').collect();
         let action = parts[0];
-        let name = parts.get(1).map(|s| *s);
+        let name = parts.get(1).copied();
 
         match action {
             "create" => {
@@ -843,7 +846,7 @@ fn main() {
         // FRACTAL PROTOCOL v2: Cross-File Symbol Resolution
         // ═══════════════════════════════════════════════════════════════════════════
         // Convert Function/Class/Module targets to File targets with resolved locations
-        use pm_encoder::core::{SymbolResolver, SymbolType};
+        use pm_encoder::core::SymbolResolver;
 
         // Track the original symbol name for excluding from suggestions
         let original_symbol_name: Option<String> = match &zoom_config.target {

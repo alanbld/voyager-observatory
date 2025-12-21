@@ -99,11 +99,9 @@ impl DefaultWalker {
 
             // Check for glob match
             if let Ok(glob) = Glob::new(pattern) {
-                if let Ok(matcher) = glob.compile_matcher().try_into() {
-                    let matcher: globset::GlobMatcher = matcher;
-                    if matcher.is_match(path) {
-                        return true;
-                    }
+                let matcher = glob.compile_matcher();
+                if matcher.is_match(path) {
+                    return true;
                 }
             }
 
@@ -438,7 +436,7 @@ impl SmartWalker {
                     }
 
                     // Only include files (not directories)
-                    if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                    if entry.file_type().is_some_and(|ft| ft.is_file()) {
                         // Check file size
                         if let Ok(meta) = entry.metadata() {
                             if meta.len() > self.config.max_file_size {
@@ -495,13 +493,13 @@ impl SmartWalker {
 
                 // Hygiene check - skip entire subtree for directories
                 if Self::is_hygiene_excluded(path) {
-                    if entry.file_type().map_or(false, |ft| ft.is_dir()) {
+                    if entry.file_type().is_some_and(|ft| ft.is_dir()) {
                         return WalkState::Skip;
                     }
                     return WalkState::Continue;
                 }
 
-                if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                if entry.file_type().is_some_and(|ft| ft.is_file()) {
                     // Check file size
                     if let Ok(meta) = entry.metadata() {
                         if meta.len() > max_file_size {
@@ -530,7 +528,7 @@ impl SmartWalker {
 
     /// Convert walk entries to FileEntry format for compatibility.
     pub fn walk_as_file_entries(&self) -> Result<Vec<FileEntry>> {
-        let walk_entries = self.walk().map_err(|e| EncoderError::invalid_config(e))?;
+        let walk_entries = self.walk().map_err(EncoderError::invalid_config)?;
 
         let mut file_entries = Vec::new();
 

@@ -6,8 +6,10 @@ use crate::core::FileTier;
 
 /// Compression level for file content
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Default)]
 pub enum CompressionLevel {
     /// L0: Full content preserved
+    #[default]
     Full,
     /// L2: Signatures only (bodies stripped)
     Skeleton,
@@ -15,11 +17,6 @@ pub enum CompressionLevel {
     Drop,
 }
 
-impl Default for CompressionLevel {
-    fn default() -> Self {
-        Self::Full
-    }
-}
 
 /// Supported programming languages for skeletonization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

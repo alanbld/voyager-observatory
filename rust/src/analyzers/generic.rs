@@ -1,8 +1,8 @@
-/// Generic regex-based language analyzer
-///
-/// This "Universal Adapter" allows rapid language support through regex configuration.
-/// Instead of implementing separate analyzers for each language, we configure one
-/// generic analyzer with language-specific patterns.
+//! Generic regex-based language analyzer
+//!
+//! This "Universal Adapter" allows rapid language support through regex configuration.
+//! Instead of implementing separate analyzers for each language, we configure one
+//! generic analyzer with language-specific patterns.
 
 use lazy_static::lazy_static;
 use regex::Regex;

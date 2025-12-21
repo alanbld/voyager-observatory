@@ -204,7 +204,7 @@ fn format_with_commas(n: usize) -> String {
     let mut result = String::new();
     let chars: Vec<char> = s.chars().collect();
     for (i, c) in chars.iter().enumerate() {
-        if i > 0 && (chars.len() - i) % 3 == 0 {
+        if i > 0 && (chars.len() - i).is_multiple_of(3) {
             result.push(',');
         }
         result.push(*c);
@@ -342,7 +342,7 @@ fn generate_instruction_content(
     lens_name: &str,
     commands: &[String],
     tree: &[String],
-    context_lines: usize,
+    _context_lines: usize,
     context_bytes: usize,
 ) -> String {
     let mut content = String::new();
@@ -369,7 +369,7 @@ fn generate_instruction_content(
         for cmd in commands {
             content.push_str(&format!("- `{}`\n", cmd));
         }
-        content.push_str("\n");
+        content.push('\n');
     }
 
     // Project Structure (matches Python format: project_name/ followed by tree)

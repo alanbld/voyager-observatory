@@ -151,8 +151,8 @@ pub enum ZoomDepth {
 }
 
 impl ZoomDepth {
-    /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// Parse zoom depth from string
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "signature" | "sig" => Some(ZoomDepth::Signature),
             "implementation" | "impl" => Some(ZoomDepth::Implementation),
@@ -991,9 +991,9 @@ mod tests {
 
     #[test]
     fn test_zoom_depth_from_str() {
-        assert_eq!(ZoomDepth::from_str("signature"), Some(ZoomDepth::Signature));
-        assert_eq!(ZoomDepth::from_str("full"), Some(ZoomDepth::Full));
-        assert_eq!(ZoomDepth::from_str("invalid"), None);
+        assert_eq!(ZoomDepth::parse("signature"), Some(ZoomDepth::Signature));
+        assert_eq!(ZoomDepth::parse("full"), Some(ZoomDepth::Full));
+        assert_eq!(ZoomDepth::parse("invalid"), None);
     }
 
     // ========================================================================

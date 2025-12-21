@@ -143,11 +143,7 @@ impl BudgetReport {
 
     /// Calculate remaining tokens
     pub fn remaining(&self) -> usize {
-        if self.used > self.budget {
-            0
-        } else {
-            self.budget - self.used
-        }
+        self.budget.saturating_sub(self.used)
     }
 
     /// Print a formatted budget report to stderr

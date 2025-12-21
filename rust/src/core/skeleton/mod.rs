@@ -33,6 +33,9 @@ mod allocator;
 mod parser;
 mod types;
 
+#[cfg(test)]
+mod tests;
+
 pub use allocator::AdaptiveAllocator;
 pub use parser::Skeletonizer;
 pub use types::{CompressionLevel, FileAllocation, Language, SkeletonResult};

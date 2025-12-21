@@ -276,7 +276,7 @@ impl PmEncoderServer {
                 let depth = params
                     .depth
                     .as_ref()
-                    .and_then(|d| ZoomDepth::from_str(d))
+                    .and_then(|d| ZoomDepth::parse(d))
                     .unwrap_or(ZoomDepth::Full);
 
                 // Build zoom config
