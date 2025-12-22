@@ -1,0 +1,34 @@
+image: rust:latest
+
+pipelines:
+  tags:
+    'rust-v*':
+      - step:
+          name: Build Multi-Platform (CLI + MCP)
+          script:
+            - apt-get update && apt-get install -y mingw-w64
+            - rustup target add x86_64-unknown-linux-gnu
+            - rustup target add x86_64-pc-windows-gnu
+
+            # --- Linux Build ---
+            - cd rust
+            # Build CLI
+            - cargo build --release --target x86_64-unknown-linux-gnu
+            - mv target/x86_64-unknown-linux-gnu/release/pm_encoder ../pm_encoder-linux-amd64
+            # Build MCP (requires --features mcp)
+            - cargo build --release --target x86_64-unknown-linux-gnu --features mcp
+            - mv target/x86_64-unknown-linux-gnu/release/pm_encoder_mcp ../pm_encoder_mcp-linux-amd64
+
+            # --- Windows Build ---
+            # Build CLI
+            - cargo build --release --target x86_64-pc-windows-gnu
+            - mv target/x86_64-pc-windows-gnu/release/pm_encoder.exe ../pm_encoder-windows-amd64.exe
+            # Build MCP (requires --features mcp)
+            - cargo build --release --target x86_64-pc-windows-gnu --features mcp
+            - mv target/x86_64-pc-windows-gnu/release/pm_encoder_mcp.exe ../pm_encoder_mcp-windows-amd64.exe
+
+          artifacts:
+            - pm_encoder-linux-amd64
+            - pm_encoder_mcp-linux-amd64
+            - pm_encoder-windows-amd64.exe
+            - pm_encoder_mcp-windows-amd64.exe
