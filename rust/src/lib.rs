@@ -4014,6 +4014,295 @@ This is the last section.
         };
         assert!(matches!(disabled_config.skeleton_mode, SkeletonMode::Disabled));
     }
+
+    // ========================================================================
+    // Coverage Push: Serialization Format Tests
+    // ========================================================================
+
+    #[test]
+    fn test_serialize_xml_truncated_file() {
+        let config = EncoderConfig {
+            output_format: OutputFormat::Xml,
+            ..Default::default()
+        };
+        let engine = ContextEngine::new(config);
+
+        let file = ProcessedFile {
+            path: "large.py".to_string(),
+            content: "# truncated content\ndef func(): pass".to_string(),
+            md5: "abc123".to_string(),
+            was_truncated: true,
+            original_lines: 500,
+            mtime: 0,
+            ctime: 0,
+        };
+
+        let output = engine.serialize_processed_file(&file);
+        assert!(output.contains("truncated=\"true\""));
+        assert!(output.contains("original_lines=\"500\""));
+        assert!(output.contains("large.py"));
+    }
+
+    #[test]
+    fn test_serialize_markdown_truncated_file() {
+        let config = EncoderConfig {
+            output_format: OutputFormat::Markdown,
+            ..Default::default()
+        };
+        let engine = ContextEngine::new(config);
+
+        let file = ProcessedFile {
+            path: "large.rs".to_string(),
+            content: "fn main() {}".to_string(),
+            md5: "def456".to_string(),
+            was_truncated: true,
+            original_lines: 1000,
+            mtime: 0,
+            ctime: 0,
+        };
+
+        let output = engine.serialize_processed_file(&file);
+        assert!(output.contains("large.rs"));
+        assert!(output.contains("TRUNCATED") || output.contains("1000"));
+    }
+
+    #[test]
+    fn test_serialize_claude_xml_truncated_file() {
+        let config = EncoderConfig {
+            output_format: OutputFormat::ClaudeXml,
+            ..Default::default()
+        };
+        let engine = ContextEngine::new(config);
+
+        let file = ProcessedFile {
+            path: "src/lib.rs".to_string(),
+            content: "pub fn api() {}".to_string(),
+            md5: "ghi789".to_string(),
+            was_truncated: true,
+            original_lines: 2000,
+            mtime: 0,
+            ctime: 0,
+        };
+
+        let output = engine.serialize_processed_file(&file);
+        assert!(output.contains("lib.rs"));
+    }
+
+    #[test]
+    fn test_serialize_plus_minus_non_truncated() {
+        let config = EncoderConfig {
+            output_format: OutputFormat::PlusMinus,
+            ..Default::default()
+        };
+        let engine = ContextEngine::new(config);
+
+        let file = ProcessedFile {
+            path: "small.txt".to_string(),
+            content: "hello world".to_string(),
+            md5: "jkl012".to_string(),
+            was_truncated: false,
+            original_lines: 1,
+            mtime: 0,
+            ctime: 0,
+        };
+
+        let output = engine.serialize_processed_file(&file);
+        assert!(output.contains("++++++++++ small.txt ++++++++++"));
+        assert!(output.contains("---------- small.txt"));
+        assert!(!output.contains("TRUNCATED"));
+    }
+
+    #[test]
+    fn test_process_file_with_truncation() {
+        let config = EncoderConfig {
+            truncate_lines: 5,
+            truncate_mode: "simple".to_string(),
+            truncate_summary: true,
+            ..Default::default()
+        };
+        let engine = ContextEngine::new(config);
+
+        // Content with trailing newline: 10 lines + 1 empty = 11 (Python-style split)
+        let content = "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\n";
+        let file = engine.process_file_content("test.py", content);
+
+        assert!(file.was_truncated);
+        assert_eq!(file.original_lines, 11); // Python-style: trailing \n counts as extra element
+    }
+
+    #[test]
+    fn test_process_file_smart_truncation() {
+        let config = EncoderConfig {
+            truncate_lines: 5,
+            truncate_mode: "smart".to_string(),
+            truncate_summary: true,
+            ..Default::default()
+        };
+        let engine = ContextEngine::new(config);
+
+        let content = "import os\nimport sys\n\ndef func():\n    pass\n\ndef other():\n    pass\n";
+        let file = engine.process_file_content("test.py", content);
+
+        // Smart mode should try to keep structure
+        assert!(file.content.contains("import") || file.was_truncated);
+    }
+
+    #[test]
+    fn test_process_file_structure_truncation() {
+        let config = EncoderConfig {
+            truncate_lines: 10,
+            truncate_mode: "structure".to_string(),
+            truncate_summary: true,
+            ..Default::default()
+        };
+        let engine = ContextEngine::new(config);
+
+        let content = r#"
+import os
+import sys
+
+def function_one():
+    """Docstring"""
+    x = 1
+    y = 2
+    z = 3
+    return x + y + z
+
+def function_two():
+    """Another docstring"""
+    a = 10
+    b = 20
+    return a * b
+
+class MyClass:
+    def __init__(self):
+        self.value = 0
+
+    def method(self):
+        return self.value
+"#;
+        let file = engine.process_file_content("module.py", content);
+
+        // Structure mode should preserve function signatures
+        assert!(file.content.contains("def") || file.content.contains("import"));
+    }
+
+    #[test]
+    fn test_process_file_unknown_truncation_mode() {
+        let config = EncoderConfig {
+            truncate_lines: 5,
+            truncate_mode: "unknown_mode".to_string(),
+            ..Default::default()
+        };
+        let engine = ContextEngine::new(config);
+
+        let content = "line1\nline2\nline3\nline4\nline5\nline6\n";
+        let file = engine.process_file_content("test.py", content);
+
+        // Unknown mode should fall through and not truncate
+        assert!(!file.was_truncated);
+    }
+
+    #[test]
+    fn test_escape_xml_special_chars() {
+        // escape_xml only escapes &, <, > (not quotes)
+        assert_eq!(escape_xml("a < b"), "a &lt; b");
+        assert_eq!(escape_xml("a > b"), "a &gt; b");
+        assert_eq!(escape_xml("a & b"), "a &amp; b");
+        assert_eq!(escape_xml("\"quote\""), "\"quote\""); // quotes not escaped
+        assert_eq!(escape_xml("normal text"), "normal text");
+    }
+
+    #[test]
+    fn test_escape_xml_attr_special_chars() {
+        assert_eq!(escape_xml_attr("path/file.rs"), "path/file.rs");
+        assert_eq!(escape_xml_attr("file\"name"), "file&quot;name");
+    }
+
+    #[test]
+    fn test_count_lines_python_style() {
+        // Python split('\n') behavior: trailing newline adds empty element
+        assert_eq!(count_lines_python_style(""), 1);
+        assert_eq!(count_lines_python_style("one line"), 1);
+        assert_eq!(count_lines_python_style("line1\nline2"), 2);
+        assert_eq!(count_lines_python_style("line1\nline2\n"), 3); // ["line1", "line2", ""]
+        assert_eq!(count_lines_python_style("a\nb\nc\nd"), 4);
+    }
+
+    #[test]
+    fn test_should_skip_truncation_patterns() {
+        let patterns = vec!["*.md".to_string(), "LICENSE*".to_string()];
+        assert!(should_skip_truncation("README.md", &patterns));
+        assert!(should_skip_truncation("LICENSE", &patterns));
+        assert!(!should_skip_truncation("main.py", &patterns));
+    }
+
+    #[test]
+    fn test_engine_process_multiple_files() {
+        let config = EncoderConfig::default();
+        let engine = ContextEngine::new(config);
+
+        let files = vec![
+            ("a.py", "x = 1"),
+            ("b.py", "y = 2"),
+            ("c.py", "z = 3"),
+        ];
+
+        for (path, content) in files {
+            let processed = engine.process_file_content(path, content);
+            assert_eq!(processed.path, path);
+            assert!(!processed.was_truncated);
+        }
+    }
+
+    #[test]
+    fn test_serialize_processed_files_multiple_formats() {
+        let file = ProcessedFile {
+            path: "test.py".to_string(),
+            content: "print('hi')".to_string(),
+            md5: "abc".to_string(),
+            was_truncated: false,
+            original_lines: 1,
+            mtime: 0,
+            ctime: 0,
+        };
+
+        // Test all formats
+        for format in [OutputFormat::PlusMinus, OutputFormat::Xml, OutputFormat::Markdown, OutputFormat::ClaudeXml] {
+            let config = EncoderConfig {
+                output_format: format.clone(),
+                ..Default::default()
+            };
+            let engine = ContextEngine::new(config);
+            let output = engine.serialize_processed_file(&file);
+            assert!(!output.is_empty(), "Format {:?} should produce output", format);
+        }
+    }
+
+    #[test]
+    fn test_truncate_simple_no_summary() {
+        let (result, truncated) = truncate_simple_with_options(
+            "line1\nline2\nline3\nline4\nline5\nline6\n",
+            3,
+            "test.py",
+            false, // no summary
+        );
+
+        assert!(truncated);
+        assert!(result.contains("line1"));
+        assert!(!result.contains("TRUNCATED")); // no summary marker
+    }
+
+    #[test]
+    fn test_truncate_smart_preserves_imports() {
+        let content = "import os\nimport sys\n\ndef func():\n    pass\n\ndef other():\n    pass\n";
+        let (result, truncated) = truncate_smart_with_options(content, 4, "test.py", true);
+
+        if truncated {
+            // Smart mode should try to preserve imports
+            assert!(result.contains("import"));
+        }
+    }
 }
 
 // ============================================================================

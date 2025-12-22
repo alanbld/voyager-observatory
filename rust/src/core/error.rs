@@ -131,4 +131,58 @@ mod tests {
         assert!(err.to_string().contains("15000"));
         assert!(err.to_string().contains("10000"));
     }
+
+    #[test]
+    fn test_invalid_config_helper() {
+        let err = EncoderError::invalid_config("missing field");
+        assert!(err.to_string().contains("missing field"));
+        assert!(matches!(err, EncoderError::InvalidConfig { .. }));
+    }
+
+    #[test]
+    fn test_xml_error_helper() {
+        let err = EncoderError::xml_error("invalid tag");
+        assert!(err.to_string().contains("invalid tag"));
+        assert!(matches!(err, EncoderError::XmlError { .. }));
+    }
+
+    #[test]
+    fn test_result_ext_context() {
+        let result: Result<()> = Err(EncoderError::invalid_config("test"));
+        let with_ctx = result.context("during processing");
+        assert!(with_ctx.is_err());
+        let err = with_ctx.unwrap_err();
+        assert!(err.to_string().contains("during processing"));
+    }
+
+    #[test]
+    fn test_file_not_found_error() {
+        let err = EncoderError::FileNotFound {
+            path: PathBuf::from("missing.txt"),
+        };
+        assert!(err.to_string().contains("missing.txt"));
+    }
+
+    #[test]
+    fn test_lens_not_found_error() {
+        let err = EncoderError::LensNotFound {
+            name: "unknown_lens".to_string(),
+        };
+        assert!(err.to_string().contains("unknown_lens"));
+    }
+
+    #[test]
+    fn test_invalid_zoom_target_error() {
+        let err = EncoderError::InvalidZoomTarget {
+            target: "bad=target".to_string(),
+        };
+        assert!(err.to_string().contains("bad=target"));
+    }
+
+    #[test]
+    fn test_json_error_conversion() {
+        let json_err: serde_json::Error = serde_json::from_str::<i32>("not json").unwrap_err();
+        let err: EncoderError = json_err.into();
+        assert!(matches!(err, EncoderError::Json(_)));
+    }
 }
