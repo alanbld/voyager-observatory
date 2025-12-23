@@ -45,3 +45,11 @@ pub use search::{
     // Phase 2: Reverse call graph
     UsageLocation, UsageFinder, RelatedContext,
 };
+
+// Phase 2 Week 2: Intent-Driven Exploration
+pub use fractal::{
+    IntentExplorer, ExplorerConfig, ExplorationResult,
+    ExplorationIntent, IntentComposition, IntentResult,
+    ExplorationStep, ReadingDecision, StopReadingEngine,
+    ConceptType,
+};

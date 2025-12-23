@@ -255,6 +255,25 @@ struct Cli {
     /// All logging redirected to stderr.
     #[arg(long = "server")]
     server: bool,
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // INTENT-DRIVEN EXPLORATION (v2.4.0)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Explore the codebase with a specific intent.
+    /// Produces a prioritized exploration path with read/skim/skip decisions.
+    /// Intents: business-logic, debugging, onboarding, security, migration
+    /// Example: pm_encoder . --explore business-logic
+    #[arg(long = "explore", value_name = "INTENT")]
+    explore: Option<String>,
+
+    /// Include test files in exploration (default: false)
+    #[arg(long = "explore-tests")]
+    explore_tests: bool,
+
+    /// Maximum files to analyze for exploration (default: 200)
+    #[arg(long = "explore-max-files", value_name = "N", default_value = "200")]
+    explore_max_files: usize,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -571,6 +590,60 @@ fn main() {
             }
             Err(e) => {
                 eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Handle --explore command (Intent-Driven Exploration v2.4.0)
+    if let Some(intent_str) = &cli.explore {
+        use pm_encoder::core::{IntentExplorer, ExplorerConfig, ExplorationIntent};
+
+        // Parse intent
+        let intent: ExplorationIntent = match intent_str.parse() {
+            Ok(i) => i,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                eprintln!("Valid intents: business-logic, debugging, onboarding, security, migration");
+                std::process::exit(1);
+            }
+        };
+
+        // Build explorer config
+        let config = ExplorerConfig {
+            max_files: cli.explore_max_files,
+            include_tests: cli.explore_tests,
+            ignore_patterns: cli.exclude.clone(),
+            ..Default::default()
+        };
+
+        // Create explorer and run
+        let explorer = IntentExplorer::with_config(&project_root, config);
+        match explorer.explore(intent) {
+            Ok(result) => {
+                // Output format based on --format flag
+                let output = match cli.format {
+                    OutputFormatArg::Xml | OutputFormatArg::ClaudeXml => result.to_xml(),
+                    OutputFormatArg::Markdown => result.to_text(), // Text is markdown-like
+                    OutputFormatArg::PlusMinus => result.to_text(),
+                };
+
+                // Write to file or stdout
+                if let Some(output_path) = &cli.output {
+                    match std::fs::write(output_path, &output) {
+                        Ok(_) => eprintln!("Exploration output written to: {}", output_path.display()),
+                        Err(e) => {
+                            eprintln!("Error writing output: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                } else {
+                    print!("{}", output);
+                }
+                return;
+            }
+            Err(e) => {
+                eprintln!("Exploration error: {}", e);
                 std::process::exit(1);
             }
         }

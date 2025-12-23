@@ -170,6 +170,10 @@ pub use intent::{
     // Reading Decisions
     ReadingDecision,
     StopReadingEngine,
+    // Intent Explorer (High-Level API)
+    IntentExplorer,
+    ExplorerConfig,
+    ExplorationResult,
 };
 
 #[cfg(test)]

@@ -45,6 +45,7 @@
 pub mod primitives;
 pub mod composition;
 pub mod decisions;
+pub mod explorer;
 
 // Re-export commonly used types
 pub use primitives::{
@@ -72,6 +73,12 @@ pub use composition::{
 pub use decisions::{
     ReadingDecision,
     StopReadingEngine,
+};
+
+pub use explorer::{
+    IntentExplorer,
+    ExplorerConfig,
+    ExplorationResult,
 };
 
 #[cfg(test)]

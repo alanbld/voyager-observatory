@@ -25,6 +25,8 @@ use crate::core::{
     SkeletonMode,
     // Phase 2: Rich Context
     UsageFinder, RelatedContext,
+    // Phase 2 Week 2: Intent-Driven Exploration
+    IntentExplorer, ExplorerConfig, ExplorationIntent,
 };
 use crate::{LensManager, parse_token_budget};
 
@@ -349,6 +351,36 @@ impl McpServer {
                         },
                         "required": ["path", "utility"]
                     }
+                },
+                {
+                    "name": "explore_with_intent",
+                    "description": "Explore a codebase with a specific intent (business-logic, debugging, onboarding, security, migration). Returns a prioritized exploration path with read/skim/skip decisions for each code element.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "intent": {
+                                "type": "string",
+                                "description": "Exploration intent: 'business-logic', 'debugging', 'onboarding', 'security', or 'migration'"
+                            },
+                            "path": {
+                                "type": "string",
+                                "description": "Optional: Override project root path (default: server root)"
+                            },
+                            "include_tests": {
+                                "type": "boolean",
+                                "description": "Include test files in exploration (default: false)"
+                            },
+                            "max_files": {
+                                "type": "integer",
+                                "description": "Maximum files to analyze (default: 200)"
+                            },
+                            "format": {
+                                "type": "string",
+                                "description": "Output format: 'text', 'xml', or 'json' (default: 'xml')"
+                            }
+                        },
+                        "required": ["intent"]
+                    }
                 }
             ]
         });
@@ -377,6 +409,7 @@ impl McpServer {
             "session_list" => self.tool_session_list(id),
             "session_create" => self.tool_session_create(id, arguments),
             "report_utility" => self.tool_report_utility(id, arguments),
+            "explore_with_intent" => self.tool_explore_with_intent(id, arguments),
             _ => JsonRpcResponse::error(
                 id,
                 METHOD_NOT_FOUND,
@@ -711,6 +744,69 @@ impl McpServer {
         let current = store.get_utility_score(path);
         tool_success(id, format!("Utility reported for '{}': {:.2} → {:.2} ({})", path, utility, current, reason))
     }
+
+    fn tool_explore_with_intent(&self, id: Value, args: Value) -> JsonRpcResponse {
+        // Parse intent (required)
+        let intent_str = match args.get("intent").and_then(|v| v.as_str()) {
+            Some(i) => i,
+            None => {
+                return JsonRpcResponse::error(
+                    id,
+                    INVALID_PARAMS,
+                    "Missing 'intent' parameter. Valid intents: business-logic, debugging, onboarding, security, migration".to_string(),
+                );
+            }
+        };
+
+        // Parse intent enum
+        let intent: ExplorationIntent = match intent_str.parse() {
+            Ok(i) => i,
+            Err(e) => {
+                return JsonRpcResponse::error(id, INVALID_PARAMS, e);
+            }
+        };
+
+        // Parse optional path override
+        let project_root = args.get("path")
+            .and_then(|v| v.as_str())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.project_root.clone());
+
+        // Parse optional parameters
+        let include_tests = args.get("include_tests")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let max_files = args.get("max_files")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(200);
+
+        let format = args.get("format")
+            .and_then(|v| v.as_str())
+            .unwrap_or("xml");
+
+        // Build explorer config
+        let config = ExplorerConfig {
+            max_files,
+            include_tests,
+            ..Default::default()
+        };
+
+        // Create explorer and run exploration
+        let explorer = IntentExplorer::with_config(&project_root, config);
+        match explorer.explore(intent) {
+            Ok(result) => {
+                let output = match format {
+                    "json" => result.to_json(),
+                    "text" => result.to_text(),
+                    _ => result.to_xml(), // Default to XML for MCP/Claude
+                };
+                tool_success(id, output)
+            }
+            Err(e) => tool_error(id, format!("Exploration failed: {}", e)),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -770,8 +866,8 @@ mod tests {
         let result = resp.result.unwrap();
         let tools = result["tools"].as_array().unwrap();
 
-        // Should have 5 tools
-        assert_eq!(tools.len(), 5);
+        // Should have 6 tools
+        assert_eq!(tools.len(), 6);
 
         // Check tool names
         let tool_names: Vec<&str> = tools.iter()
@@ -782,6 +878,7 @@ mod tests {
         assert!(tool_names.contains(&"session_list"));
         assert!(tool_names.contains(&"session_create"));
         assert!(tool_names.contains(&"report_utility"));
+        assert!(tool_names.contains(&"explore_with_intent"));
     }
 
     #[test]
@@ -1280,6 +1377,166 @@ mod tests {
         ).unwrap();
 
         assert!(resp.result.is_some() || resp.error.is_some());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    // ========================================================================
+    // explore_with_intent Tool Tests
+    // ========================================================================
+
+    #[test]
+    fn test_tool_explore_missing_intent() {
+        let mut server = McpServer::new(PathBuf::from("/tmp"));
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_with_intent","arguments":{}}}"#
+        ).unwrap();
+
+        assert!(resp.error.is_some());
+        let err = resp.error.unwrap();
+        assert!(err.message.contains("intent"));
+    }
+
+    #[test]
+    fn test_tool_explore_invalid_intent() {
+        let temp_dir = std::env::temp_dir().join("pm_mcp_test_explore_bad");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut server = McpServer::new(temp_dir.clone());
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_with_intent","arguments":{"intent":"not-a-real-intent"}}}"#
+        ).unwrap();
+
+        assert!(resp.error.is_some());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_tool_explore_business_logic() {
+        let temp_dir = std::env::temp_dir().join("pm_mcp_test_explore_bl");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(temp_dir.join("src")).unwrap();
+
+        // Create test files with business logic
+        fs::write(temp_dir.join("src/main.rs"), r#"
+pub fn calculate_total(price: f64, discount: f64) -> f64 {
+    price * (1.0 - discount)
+}
+
+pub fn validate_input(input: &str) -> bool {
+    !input.is_empty()
+}
+"#).unwrap();
+
+        let mut server = McpServer::new(temp_dir.clone());
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_with_intent","arguments":{"intent":"business-logic"}}}"#
+        ).unwrap();
+
+        assert!(resp.error.is_none(), "Expected success for business-logic explore");
+        let result = resp.result.unwrap();
+        let content = result["content"][0]["text"].as_str().unwrap();
+
+        // Should contain XML exploration output
+        assert!(content.contains("<exploration") || content.contains("Intent Exploration"),
+            "Should contain exploration output");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_tool_explore_debugging() {
+        let temp_dir = std::env::temp_dir().join("pm_mcp_test_explore_debug");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(temp_dir.join("src")).unwrap();
+
+        fs::write(temp_dir.join("src/lib.rs"), r#"
+pub fn process_data(data: &str) -> Result<(), String> {
+    if data.is_empty() {
+        return Err("Empty data".to_string());
+    }
+    log::info!("Processing: {}", data);
+    Ok(())
+}
+"#).unwrap();
+
+        let mut server = McpServer::new(temp_dir.clone());
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_with_intent","arguments":{"intent":"debugging"}}}"#
+        ).unwrap();
+
+        assert!(resp.error.is_none(), "Expected success for debugging explore");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_tool_explore_with_format() {
+        let temp_dir = std::env::temp_dir().join("pm_mcp_test_explore_fmt");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(temp_dir.join("src")).unwrap();
+        fs::write(temp_dir.join("src/lib.rs"), "pub fn hello() {}").unwrap();
+
+        let mut server = McpServer::new(temp_dir.clone());
+
+        // Test JSON format
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_with_intent","arguments":{"intent":"onboarding","format":"json"}}}"#
+        ).unwrap();
+        assert!(resp.error.is_none());
+        let result = resp.result.unwrap();
+        let content = result["content"][0]["text"].as_str().unwrap();
+        // JSON output should be parseable
+        assert!(serde_json::from_str::<serde_json::Value>(content).is_ok() || content.contains("intent"),
+            "Should be valid JSON or contain intent field");
+
+        // Test text format
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"explore_with_intent","arguments":{"intent":"security","format":"text"}}}"#
+        ).unwrap();
+        assert!(resp.error.is_none());
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_tool_explore_with_options() {
+        let temp_dir = std::env::temp_dir().join("pm_mcp_test_explore_opts");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(temp_dir.join("src")).unwrap();
+        fs::create_dir_all(temp_dir.join("tests")).unwrap();
+        fs::write(temp_dir.join("src/lib.rs"), "pub fn main() {}").unwrap();
+        fs::write(temp_dir.join("tests/test.rs"), "#[test] fn test() {}").unwrap();
+
+        let mut server = McpServer::new(temp_dir.clone());
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_with_intent","arguments":{"intent":"migration","include_tests":true,"max_files":50}}}"#
+        ).unwrap();
+
+        assert!(resp.error.is_none(), "Expected success with options");
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_tool_explore_empty_project() {
+        let temp_dir = std::env::temp_dir().join("pm_mcp_test_explore_empty");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut server = McpServer::new(temp_dir.clone());
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_with_intent","arguments":{"intent":"business-logic"}}}"#
+        ).unwrap();
+
+        // Empty project should still succeed, just with no symbols
+        assert!(resp.error.is_none(), "Empty project should not error");
+        let result = resp.result.unwrap();
+        let content = result["content"][0]["text"].as_str().unwrap();
+        assert!(content.contains("No source files") || content.contains("exploration"),
+            "Should mention no files or contain exploration output");
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
