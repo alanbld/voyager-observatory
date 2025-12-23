@@ -41,6 +41,7 @@
 
 pub mod layers;
 pub mod context;
+pub mod builder;
 
 // Re-export commonly used types
 pub use layers::{
@@ -76,6 +77,21 @@ pub use context::{
     SemanticCluster,
     // Metadata
     ExtractionMetadata,
+};
+
+pub use builder::{
+    // Builder
+    FractalContextBuilder,
+    // Configuration
+    BuilderConfig,
+    ExtractionDepth,
+    // Errors
+    BuilderError,
+    BuilderResult,
+    // Extraction
+    ExtractedSymbol,
+    extract_symbols_regex,
+    detect_language,
 };
 
 #[cfg(test)]
