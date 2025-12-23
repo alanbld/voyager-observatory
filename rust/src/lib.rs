@@ -28,6 +28,7 @@ pub mod core;
 pub mod formats;
 pub mod init;
 pub mod lenses;
+pub mod plugins;
 pub mod server;
 
 pub use lenses::{LensManager, LensConfig, AppliedLens};

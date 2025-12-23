@@ -42,6 +42,7 @@
 pub mod layers;
 pub mod context;
 pub mod builder;
+pub mod navigation;
 
 // Re-export commonly used types
 pub use layers::{
@@ -92,6 +93,19 @@ pub use builder::{
     ExtractedSymbol,
     extract_symbols_regex,
     detect_language,
+};
+
+pub use navigation::{
+    // Navigator
+    FractalNavigator,
+    // Errors
+    NavigationError,
+    NavigationResult,
+    // Types
+    NavigationSnapshot,
+    NavigationStats,
+    SiblingDirection,
+    PanDirection,
 };
 
 #[cfg(test)]
