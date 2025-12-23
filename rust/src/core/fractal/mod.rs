@@ -45,6 +45,7 @@ pub mod builder;
 pub mod navigation;
 pub mod relationships;
 pub mod clustering;
+pub mod intent;
 
 // Re-export commonly used types
 pub use layers::{
@@ -146,6 +147,29 @@ pub use clustering::{
     ShellPatternRecognizer,
     ShellPattern,
     ShellPatternType,
+};
+
+pub use intent::{
+    // Cognitive Primitives
+    CognitivePrimitive,
+    NoiseFilter,
+    NoiseFilterParams,
+    RelevanceScorer,
+    RelevanceScorerParams,
+    ExplorationPlanner,
+    ExplorationPlannerParams,
+    ConceptType,
+    RelevanceScore,
+    ScoredElement,
+    // Intent Composition
+    IntentComposition,
+    ExplorationIntent,
+    IntentResult,
+    ExplorationStep,
+    ConfiguredPrimitive,
+    // Reading Decisions
+    ReadingDecision,
+    StopReadingEngine,
 };
 
 #[cfg(test)]
