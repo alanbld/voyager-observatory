@@ -14,9 +14,14 @@ serde_json = "1.0"
 tokio = { version = "1.0", features = ["full"] }
 thiserror = "1.0"
 bytes = "1.5"
+regex = "1.10"
 
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.0"
 tempfile = "3.10"
 criterion = "0.5"
+
+[[bench]]
+name = "lsp_vs_regex"
+harness = false
