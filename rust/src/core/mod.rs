@@ -12,6 +12,7 @@
 //! - `serialization`: Output format serializers
 //! - `engine`: Main ContextEngine orchestration
 //! - `zoom`: Fractal Protocol zoom actions
+//! - `fractal`: Fractal Context Engine for hierarchical, zoomable context
 
 pub mod models;
 pub mod error;
@@ -23,6 +24,7 @@ pub mod zoom;
 pub mod store;
 pub mod search;
 pub mod skeleton;
+pub mod fractal;
 
 // Re-export commonly used types
 pub use models::{FileEntry, EncoderConfig, ProcessedFile, OutputFormat, Config, SkeletonMode, CompressionLevel};
