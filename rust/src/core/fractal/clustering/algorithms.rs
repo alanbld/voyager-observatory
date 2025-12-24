@@ -141,7 +141,7 @@ impl KMeans {
         }
 
         // Validate dimensions
-        for (i, point) in data.iter().enumerate() {
+        for point in data.iter() {
             if point.len() != n_features {
                 return Err(ClusteringError::DimensionMismatch {
                     expected: n_features,
@@ -155,7 +155,7 @@ impl KMeans {
         let mut labels = vec![0i32; n_samples];
         let mut prev_inertia = f32::INFINITY;
 
-        for iteration in 0..self.max_iter {
+        for _iteration in 0..self.max_iter {
             // Assign points to nearest centroid
             let mut inertia = 0.0;
             for (i, point) in data.iter().enumerate() {
@@ -446,7 +446,7 @@ impl DBSCAN {
         let n_features = data[0].len();
 
         // Validate dimensions
-        for (i, point) in data.iter().enumerate() {
+        for point in data.iter() {
             if point.len() != n_features {
                 return Err(ClusteringError::DimensionMismatch {
                     expected: n_features,

@@ -316,6 +316,7 @@ impl TsType {
 // =============================================================================
 
 /// Plugin for analyzing TypeScript and JavaScript source files.
+#[allow(dead_code)]
 pub struct TypeScriptPlugin {
     /// Pattern for function declarations: `function name(params): ReturnType`
     function_pattern: Regex,

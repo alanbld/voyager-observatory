@@ -568,7 +568,7 @@ impl UnifiedSemanticSubstrate {
 
     /// Merge another substrate into this one
     pub fn merge(&mut self, other: UnifiedSemanticSubstrate) {
-        for (id, concept) in other.concepts {
+        for (_id, concept) in other.concepts {
             self.add_concept(concept);
         }
 

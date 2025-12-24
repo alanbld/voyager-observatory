@@ -86,7 +86,7 @@ mod tests {
     use super::*;
     use crate::core::fractal::{
         ContextLayer, LayerContent, SymbolKind, Visibility, Range,
-        FeatureVector, SymbolVectorizer,
+        SymbolVectorizer,
     };
 
     fn create_test_layers() -> Vec<ContextLayer> {

@@ -114,6 +114,7 @@ impl Default for VectorizerConfig {
 }
 
 /// Converts code elements to feature vectors.
+#[allow(dead_code)]
 pub struct SymbolVectorizer {
     config: VectorizerConfig,
     keyword_weights: HashMap<String, f32>,
@@ -149,7 +150,7 @@ impl SymbolVectorizer {
                 signature,
                 parameters,
                 documentation,
-                visibility,
+                visibility: _,
                 range,
                 ..
             } => {

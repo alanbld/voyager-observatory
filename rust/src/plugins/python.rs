@@ -149,6 +149,7 @@ impl DecoratorCategory {
 // =============================================================================
 
 /// Plugin for analyzing Python source files.
+#[allow(dead_code)]
 pub struct PythonPlugin {
     /// Pattern for function definitions: `def name(args):`
     function_pattern: Regex,
@@ -340,6 +341,7 @@ impl PythonPlugin {
     }
 
     /// Check if symbol has async patterns in its body
+    #[allow(dead_code)]
     fn has_async_patterns(&self, _content: &str, start_line: usize, lines: &[&str]) -> bool {
         // Look at next 20 lines for async patterns
         let end_line = (start_line + 20).min(lines.len());

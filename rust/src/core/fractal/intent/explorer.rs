@@ -320,9 +320,9 @@ impl IntentExplorer {
             .find(|l| l.name() == symbol_name)
             .ok_or_else(|| format!("Symbol '{}' not found", symbol_name))?;
 
-        // Vectorize
+        // Vectorize (future: use for semantic matching)
         let vectorizer = SymbolVectorizer::new();
-        let vector = vectorizer.vectorize_layer(layer);
+        let _vector = vectorizer.vectorize_layer(layer);
 
         // Create stop reading engine
         let engine = StopReadingEngine::new(intent);

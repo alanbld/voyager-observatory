@@ -176,6 +176,7 @@ pub enum ClusterAlgorithm {
 // =============================================================================
 
 /// Engine for semantic clustering of code elements.
+#[allow(dead_code)]
 pub struct ClusterEngine {
     config: ClusterConfig,
     vectorizer: SymbolVectorizer,

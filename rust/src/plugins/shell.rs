@@ -62,6 +62,7 @@ impl ShellDialect {
 // =============================================================================
 
 /// Plugin for analyzing shell scripts.
+#[allow(dead_code)]
 pub struct ShellPlugin {
     /// Pattern for function declarations: `name() {` or `function name {`
     function_pattern: Regex,
@@ -164,6 +165,7 @@ impl ShellPlugin {
     }
 
     /// Check if a line is inside a function body.
+    #[allow(dead_code)]
     fn is_in_function(&self, _content: &str, _line_num: usize) -> bool {
         // Simplified: would need brace matching for accuracy
         false
