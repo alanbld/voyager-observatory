@@ -7,7 +7,8 @@
 //! # Supported Languages
 //!
 //! - **Shell** (bash, sh, zsh, ksh) - Shell script analysis
-//! - More plugins to come: ABL, C#, etc.
+//! - **ABL** (OpenEdge Progress 4GL) - Business application language
+//! - More plugins to come: Python, TypeScript, etc.
 //!
 //! # Plugin Architecture
 //!
@@ -16,14 +17,23 @@
 //! - File information extraction
 //! - Relationship detection (calls, sources)
 //! - Documentation extraction
+//! - **Semantic concept mapping** for intent-driven exploration
+//!
+//! # Semantic Substrate
+//!
+//! Each plugin maps language-specific constructs to our universal semantic space:
+//! - ConceptType classification (Calculation, Validation, etc.)
+//! - 64-dimension feature vector extraction
+//! - Intent-based relevance scoring
 
 pub mod shell;
+pub mod abl;
 
 use std::path::Path;
 
 use thiserror::Error;
 
-use crate::core::fractal::{ExtractedSymbol, Import};
+use crate::core::fractal::{ExtractedSymbol, Import, ConceptType};
 
 // =============================================================================
 // Error Types
@@ -74,6 +84,78 @@ pub trait LanguagePlugin: Send + Sync {
 
     /// Get file metadata.
     fn file_info(&self, content: &str) -> PluginResult<FileInfo>;
+
+    // =========================================================================
+    // Semantic Mapping (for Intent-Driven Exploration)
+    // =========================================================================
+
+    /// Infer the semantic concept type for a symbol.
+    ///
+    /// This method provides language-aware concept classification that goes beyond
+    /// the generic ConceptType::infer. For example:
+    /// - ABL: `PROCEDURE calculate-tax:` → ConceptType::Calculation
+    /// - ABL: `FOR EACH customer:` → ConceptType::Transformation
+    /// - Shell: `cleanup()` function → ConceptType::Infrastructure
+    ///
+    /// Default implementation falls back to the generic ConceptType::infer.
+    fn infer_concept_type(&self, symbol: &ExtractedSymbol, _content: &str) -> ConceptType {
+        // Default: use the generic name-based inference
+        // Subclasses can override for language-specific semantics
+        infer_concept_from_symbol(symbol)
+    }
+
+    /// Calculate semantic relevance boost for a symbol based on language patterns.
+    ///
+    /// Returns a value between -0.5 and 0.5 to adjust the base relevance score.
+    /// For example:
+    /// - ABL: `SUPER:` calls might get a boost for debugging intent
+    /// - Shell: `set -e` might indicate error handling awareness
+    ///
+    /// Default implementation returns 0.0 (no adjustment).
+    fn semantic_relevance_boost(
+        &self,
+        _symbol: &ExtractedSymbol,
+        _intent: &str,
+        _content: &str,
+    ) -> f32 {
+        0.0
+    }
+
+    /// Get language-specific feature dimensions.
+    ///
+    /// Each language can contribute specific features to the 64D feature vector.
+    /// Returns a map of dimension index (0-63) to feature value (0.0-1.0).
+    ///
+    /// Default implementation returns empty (no language-specific features).
+    fn language_features(&self, _symbol: &ExtractedSymbol, _content: &str) -> Vec<(usize, f32)> {
+        Vec::new()
+    }
+}
+
+/// Infer concept type from ExtractedSymbol (helper for default implementation).
+fn infer_concept_from_symbol(symbol: &ExtractedSymbol) -> ConceptType {
+    use crate::core::fractal::{ContextLayer, LayerContent, Visibility};
+
+    // Build a temporary layer to use the standard ConceptType::infer
+    let layer = ContextLayer::new(
+        &symbol.name,
+        LayerContent::Symbol {
+            name: symbol.name.clone(),
+            kind: symbol.kind.clone(),
+            signature: symbol.signature.clone(),
+            return_type: symbol.return_type.clone(),
+            parameters: symbol.parameters.clone(),
+            documentation: symbol.documentation.clone(),
+            visibility: if symbol.signature.contains("pub ") {
+                Visibility::Public
+            } else {
+                Visibility::Private
+            },
+            range: symbol.range.clone(),
+        },
+    );
+
+    ConceptType::infer(&layer)
 }
 
 /// Information about a source file.
@@ -116,6 +198,7 @@ impl PluginRegistry {
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         registry.register(Box::new(shell::ShellPlugin::new()));
+        registry.register(Box::new(abl::AblPlugin::new()));
         registry
     }
 
