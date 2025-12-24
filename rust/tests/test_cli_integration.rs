@@ -410,11 +410,11 @@ fn test_version_output() {
 #[test]
 fn test_missing_project_root() {
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    // No arguments
+    // No arguments - should fail with an error about missing PATH
 
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("PROJECT_ROOT"));
+        .stderr(predicate::str::contains("PATH").or(predicate::str::contains("PROJECT_ROOT")));
 }
 
 #[test]

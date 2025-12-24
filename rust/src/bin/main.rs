@@ -1,279 +1,290 @@
-//! pm_encoder CLI - Command-line interface for the Rust engine
+//! pm_encoder CLI - The Fractal Telescope
 //!
-//! This binary uses Clap for argument parsing, mirroring Python's argparse behavior.
-//! All core logic lives in lib.rs, making it reusable for WASM/Python bindings.
+//! A cognitive augmentation tool for code exploration.
+//! Like a telescope has viewfinder, lenses, and focus controls,
+//! this CLI provides intuitive groups matching how developers think.
 //!
 //! # Design Philosophy
 //!
-//! This CLI follows the "Thin Interface" pattern:
-//! - Clap handles argument parsing and --help/--version
-//! - Delegates to the library for all actual work
-//! - Maintains interface parity with Python implementation
+//! - **Smart defaults**: Auto-focus based on input type
+//! - **Progressive disclosure**: Simple by default, detailed when asked
+//! - **Silent fallbacks**: Never show internal errors to users
+//! - **Backwards compatible**: All existing commands still work
 
 // Exclude from coverage - CLI binary tested via integration tests
 #![cfg_attr(tarpaulin, ignore)]
 
 use clap::{Parser, ValueEnum};
 use pm_encoder::{self, EncoderConfig, LensManager, OutputFormat, parse_token_budget, apply_token_budget};
-use pm_encoder::core::{ContextEngine, ZoomConfig, ZoomTarget, ContextStore, DEFAULT_ALPHA, SkeletonMode};
+use pm_encoder::core::{
+    ContextEngine, ZoomConfig, ZoomTarget, ContextStore, DEFAULT_ALPHA, SkeletonMode,
+    SemanticDepth, DetailLevel,
+};
 use pm_encoder::server::McpServer;
 use std::path::PathBuf;
 
-/// Serialize project files into the Plus/Minus format with intelligent truncation.
+/// 🔭 Fractal Telescope: Cognitive augmentation for code exploration.
+///
+/// Serialize project files with intelligent analysis, auto-focus,
+/// and beautiful output. Works with any codebase size.
 #[derive(Parser, Debug)]
 #[command(name = "pm_encoder")]
 #[command(version = pm_encoder::VERSION)]
-#[command(about = "Serialize project files into the Plus/Minus format with intelligent truncation.")]
-#[command(after_help = "Examples:
-  # Basic serialization
-  pm_encoder . -o output.txt
+#[command(about = "🔭 Fractal Telescope: Cognitive augmentation for code exploration")]
+#[command(after_help = "EXAMPLES:
+  # Basic exploration (auto-focus applies smart defaults)
+  pm_encoder .
 
-  # With truncation (500 lines per file)
-  pm_encoder . --truncate 500 -o output.txt
+  # Explore business logic with intent-driven analysis
+  pm_encoder . --explore business-logic
 
-  # Apply a lens
-  pm_encoder . --lens architecture
+  # Architecture view with token budget
+  pm_encoder . --lens architecture --token-budget 100k
+
+  # Deep dive into a single file (microscope mode)
+  pm_encoder src/lib.rs
+
+  # Zoom into a specific function
+  pm_encoder . --zoom fn=calculate_total
+
+For more examples: https://github.com/alanbld/pm_encoder
 ")]
 struct Cli {
     // ═══════════════════════════════════════════════════════════════════════════
-    // CORE ARGUMENTS
+    // 🔭 THE VIEWFINDER (Essential)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// The root directory of the project to serialize
-    #[arg(value_name = "PROJECT_ROOT")]
+    /// Project directory or file to explore
+    #[arg(value_name = "PATH", help_heading = "🔭 VIEWFINDER (Essential)")]
     project_root: Option<PathBuf>,
 
-    /// Output file path. Defaults to standard output.
-    #[arg(short = 'o', long = "output", value_name = "OUTPUT")]
-    output: Option<PathBuf>,
-
-    /// Path to a JSON configuration file for ignore/include patterns.
-    /// Defaults to ./.pm_encoder_config.json
-    #[arg(short = 'c', long = "config", value_name = "CONFIG")]
-    config: Option<PathBuf>,
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // FILTERING
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// One or more glob patterns for files to include. Overrides config includes.
-    #[arg(long = "include", value_name = "PATTERN", num_args = 0..)]
-    include: Vec<String>,
-
-    /// One or more glob patterns for files/dirs to exclude. Adds to config excludes.
-    #[arg(long = "exclude", value_name = "PATTERN", num_args = 0..)]
-    exclude: Vec<String>,
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // SORTING & STREAMING
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// Sort files by 'name' (default), 'mtime' (modification time), or 'ctime' (creation time).
-    #[arg(long = "sort-by", value_enum, default_value = "name")]
-    sort_by: SortBy,
-
-    /// Sort order: 'asc' (ascending, default) or 'desc' (descending).
-    #[arg(long = "sort-order", value_enum, default_value = "asc")]
-    sort_order: SortOrder,
-
-    /// Enable streaming mode: output files immediately as they're found.
-    /// Disables global sorting for lower Time-To-First-Byte (TTFB).
-    #[arg(long = "stream")]
-    stream: bool,
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TRUNCATION
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// Truncate files exceeding N lines (default: 0 = no truncation)
-    #[arg(long = "truncate", value_name = "N", default_value = "0")]
-    truncate: usize,
-
-    /// Truncation strategy: 'simple' (keep first N lines), 'smart' (language-aware), or 'structure' (signatures only)
-    #[arg(long = "truncate-mode", value_enum, default_value = "simple")]
-    truncate_mode: TruncateMode,
-
-    /// Include analysis summary in truncation marker (default: true)
-    #[arg(long = "truncate-summary", default_value = "true")]
-    truncate_summary: bool,
-
-    /// Disable truncation summary
-    #[arg(long = "no-truncate-summary")]
-    no_truncate_summary: bool,
-
-    /// Never truncate files matching these patterns
-    #[arg(long = "truncate-exclude", value_name = "PATTERN", num_args = 0..)]
-    truncate_exclude: Vec<String>,
-
-    /// Show detailed truncation statistics report
-    #[arg(long = "truncate-stats")]
-    truncate_stats: bool,
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // LENSES
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// Apply a context lens (architecture|debug|security|onboarding|custom)
-    #[arg(long = "lens", value_name = "NAME")]
+    /// What to look for [architecture, debug, security, onboarding, minimal]
+    #[arg(long = "lens", value_name = "LENS", help_heading = "🔭 VIEWFINDER (Essential)")]
     lens: Option<String>,
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // TOKEN BUDGETING (v0.7.0)
-    // ═══════════════════════════════════════════════════════════════════════════
+    /// Output file path (default: stdout)
+    #[arg(short = 'o', long = "output", value_name = "FILE", help_heading = "🔭 VIEWFINDER (Essential)")]
+    output: Option<PathBuf>,
 
-    /// Maximum token budget (e.g., 100000, 100k, 2M). Files are included by priority until budget is reached.
-    #[arg(long = "token-budget", value_name = "BUDGET")]
-    token_budget: Option<String>,
-
-    /// Budget enforcement strategy: 'drop' (skip files), 'truncate' (force structure mode), or 'hybrid' (auto-truncate large files)
-    #[arg(long = "budget-strategy", value_enum, default_value = "drop")]
-    budget_strategy: BudgetStrategy,
-
-    /// Skeleton mode for intelligent code compression: 'auto' (enable if budget set), 'true', or 'false'.
-    /// When enabled, extracts signatures and strips function bodies to fit more files in budget.
-    #[arg(long = "skeleton", value_name = "MODE", default_value = "auto")]
-    skeleton: String,
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // INIT
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// Generate instruction file and CONTEXT.txt for AI CLI integration and exit
-    #[arg(long = "init-prompt")]
-    init_prompt: bool,
-
-    /// Lens to use with --init-prompt (default: architecture)
-    #[arg(long = "init-lens", value_name = "LENS", default_value = "architecture")]
-    init_lens: String,
-
-    /// Target AI for --init-prompt: 'claude' (CLAUDE.md) or 'gemini' (GEMINI_INSTRUCTIONS.txt)
-    #[arg(long = "target", value_enum, default_value = "claude")]
-    target: TargetAI,
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // OUTPUT FORMAT (v0.10.0)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// Output format: 'plus_minus' (default), 'xml', 'markdown', or 'claude-xml'
-    #[arg(long = "format", value_enum, default_value = "plus-minus")]
+    /// Output format [plus-minus, xml, markdown, claude-xml]
+    #[arg(long = "format", value_enum, default_value = "plus-minus", help_heading = "🔭 VIEWFINDER (Essential)")]
     format: OutputFormatArg,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // METADATA DISPLAY (v2.3.0 Chronos)
+    // 🔍 LENS FILTERS (Context Control)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Metadata display mode for file headers.
-    /// - auto: Smart logic (show if >10KB OR recent <30d OR ancient >5y)
-    /// - all: Always show full metadata (forensics/archaeology)
-    /// - none: No metadata (deterministic output for testing)
-    /// - size-only: Show size but not timestamps (bundle analysis)
-    #[arg(short = 'm', long = "metadata", value_enum, default_value = "auto")]
-    metadata: CliMetadataMode,
+    /// Include files matching pattern
+    #[arg(long = "include", value_name = "PATTERN", num_args = 0.., help_heading = "🔍 LENS FILTERS")]
+    include: Vec<String>,
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // DETERMINISM & PRIVACY (v2.0.0)
-    // ═══════════════════════════════════════════════════════════════════════════
+    /// Exclude files matching pattern
+    #[arg(long = "exclude", value_name = "PATTERN", num_args = 0.., help_heading = "🔍 LENS FILTERS")]
+    exclude: Vec<String>,
 
-    /// Frozen mode: bypass context store for deterministic output.
-    /// Enables byte-identical output for CI/CD pipelines and reproducible tests.
-    #[arg(long = "frozen")]
+    /// Analysis depth [quick, balanced, deep]
+    #[arg(long = "semantic-depth", value_enum, default_value = "balanced", help_heading = "🔍 LENS FILTERS")]
+    semantic_depth: SemanticDepthArg,
+
+    /// Use cached analysis (deterministic output)
+    #[arg(long = "frozen", help_heading = "🔍 LENS FILTERS")]
     frozen: bool,
 
-    /// Allow sensitive metadata in output (session notes, absolute paths).
-    /// Default behavior excludes PII for privacy protection.
-    #[arg(long = "allow-sensitive")]
+    /// Include sensitive files in output
+    #[arg(long = "allow-sensitive", help_heading = "🔍 LENS FILTERS")]
     allow_sensitive: bool,
 
+    /// Config file path
+    #[arg(short = 'c', long = "config", value_name = "FILE", help_heading = "🔍 LENS FILTERS")]
+    config: Option<PathBuf>,
+
     // ═══════════════════════════════════════════════════════════════════════════
-    // ZOOM / FRACTAL PROTOCOL (v2.0.0)
+    // 🔬 MAGNIFICATION (Zoom Control)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Zoom into a specific target for detailed context.
-    /// Format: <TYPE>=<TARGET>
-    /// Types:
-    ///   fn=<name>           - Zoom to function definition
-    ///   class=<name>        - Zoom to class/struct definition
-    ///   mod=<name>          - Zoom to module
-    ///   file=<path>         - Zoom to entire file
-    ///   file=<path>:L1-L2   - Zoom to file lines L1 to L2
-    #[arg(long = "zoom", value_name = "TARGET")]
+    /// Zoom into target: fn=name, class=name, file=path[:lines]
+    #[arg(long = "zoom", value_name = "TARGET", help_heading = "🔬 MAGNIFICATION")]
     zoom: Option<String>,
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // FRACTAL PROTOCOL v2: ZOOM SESSIONS (v1.1.0)
-    // ═══════════════════════════════════════════════════════════════════════════
+    /// Show skeleton only (signatures without bodies)
+    #[arg(long = "skeleton", value_name = "MODE", default_value = "auto", help_heading = "🔬 MAGNIFICATION")]
+    skeleton: String,
 
-    /// Manage zoom sessions. Actions: create, load, list, delete, show
-    /// Examples:
-    ///   --zoom-session create:debug-investigation
-    ///   --zoom-session load:my-session
-    ///   --zoom-session list
-    ///   --zoom-session delete:old-session
-    ///   --zoom-session show
-    #[arg(long = "zoom-session", value_name = "ACTION:NAME")]
-    zoom_session: Option<String>,
+    /// Truncate files to N lines (0 = no truncation)
+    #[arg(long = "truncate", value_name = "LINES", default_value = "0", help_heading = "🔬 MAGNIFICATION")]
+    truncate: usize,
 
-    /// Collapse a zoomed target back to structure view.
-    /// Opposite of --zoom (bidirectional zoom).
-    /// Example: --zoom-collapse function=main
-    #[arg(long = "zoom-collapse", value_name = "TARGET")]
-    zoom_collapse: Option<String>,
+    /// Truncation mode [simple, smart, structure]
+    #[arg(long = "truncate-mode", value_enum, default_value = "simple", help_heading = "🔬 MAGNIFICATION")]
+    truncate_mode: TruncateMode,
 
-    /// Undo the last zoom action in the active session
-    #[arg(long = "zoom-undo")]
-    zoom_undo: bool,
-
-    /// Redo the last undone zoom action in the active session
-    #[arg(long = "zoom-redo")]
-    zoom_redo: bool,
-
-    /// Show Context Health summary after serialization
-    #[arg(long = "health")]
-    health: bool,
+    /// Never truncate files matching pattern
+    #[arg(long = "truncate-exclude", value_name = "PATTERN", num_args = 0.., help_heading = "🔬 MAGNIFICATION")]
+    truncate_exclude: Vec<String>,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // CONTEXT STORE / LEARNING (v2.2.0)
+    // 🔋 POWER GRID (Token Budget)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Report utility for a file to train the learning system.
-    /// Format: "path/to/file:score:reason" where score is 0.0-1.0.
-    /// Example: --report-utility "src/lib.rs:0.95:core logic"
-    #[arg(long = "report-utility", value_name = "FILE:SCORE:REASON")]
-    report_utility: Option<String>,
+    /// Maximum tokens for output (e.g., 100k, 2M)
+    #[arg(long = "token-budget", value_name = "BUDGET", help_heading = "🔋 POWER GRID")]
+    token_budget: Option<String>,
 
-    /// Enable privacy hashing for context store paths.
-    /// When enabled, file paths are hashed before storing.
-    #[arg(long = "store-privacy")]
-    store_privacy: bool,
+    /// Budget strategy [drop, truncate, hybrid]
+    #[arg(long = "budget-strategy", value_enum, default_value = "drop", help_heading = "🔋 POWER GRID")]
+    budget_strategy: BudgetStrategy,
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // MCP SERVER MODE (v2.3.0)
+    // 💡 OBSERVATION LOGS (Intelligence)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Run as MCP (Model Context Protocol) server over stdio.
-    /// Speaks JSON-RPC 2.0: reads requests from stdin, writes responses to stdout.
-    /// All logging redirected to stderr.
-    #[arg(long = "server")]
-    server: bool,
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // INTENT-DRIVEN EXPLORATION (v2.4.0)
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// Explore the codebase with a specific intent.
-    /// Produces a prioritized exploration path with read/skim/skip decisions.
-    /// Intents: business-logic, debugging, onboarding, security, migration
-    /// Example: pm_encoder . --explore business-logic
-    #[arg(long = "explore", value_name = "INTENT")]
+    /// Explore with intent [business-logic, debugging, onboarding, security, migration]
+    #[arg(long = "explore", value_name = "INTENT", help_heading = "💡 EXPLORATION")]
     explore: Option<String>,
 
-    /// Include test files in exploration (default: false)
-    #[arg(long = "explore-tests")]
+    /// Output detail level [summary, smart, detailed]
+    #[arg(long = "detail", value_enum, default_value = "smart", help_heading = "💡 EXPLORATION")]
+    detail: DetailLevelArg,
+
+    /// Show technical reasoning behind decisions
+    #[arg(long = "explain-reasoning", help_heading = "💡 EXPLORATION")]
+    explain_reasoning: bool,
+
+    /// Show system health summary
+    #[arg(long = "health", help_heading = "💡 EXPLORATION")]
+    health: bool,
+
+    /// Include test files in exploration
+    #[arg(long = "explore-tests", help_heading = "💡 EXPLORATION")]
     explore_tests: bool,
 
-    /// Maximum files to analyze for exploration (default: 200)
-    #[arg(long = "explore-max-files", value_name = "N", default_value = "200")]
+    /// Maximum files for exploration analysis
+    #[arg(long = "explore-max-files", value_name = "N", default_value = "200", help_heading = "💡 EXPLORATION")]
     explore_max_files: usize,
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ⚙️ ADVANCED OPTIONS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Manage zoom sessions [create:name, load:name, list, delete:name, show]
+    #[arg(long = "zoom-session", value_name = "ACTION:NAME", help_heading = "⚙️ ADVANCED")]
+    zoom_session: Option<String>,
+
+    /// Undo last zoom action
+    #[arg(long = "zoom-undo", help_heading = "⚙️ ADVANCED")]
+    zoom_undo: bool,
+
+    /// Redo last undone zoom
+    #[arg(long = "zoom-redo", help_heading = "⚙️ ADVANCED")]
+    zoom_redo: bool,
+
+    /// Collapse zoom target back to structure
+    #[arg(long = "zoom-collapse", value_name = "TARGET", help_heading = "⚙️ ADVANCED")]
+    zoom_collapse: Option<String>,
+
+    /// Report file utility for learning [path:score:reason]
+    #[arg(long = "report-utility", value_name = "FILE:SCORE:REASON", help_heading = "⚙️ ADVANCED")]
+    report_utility: Option<String>,
+
+    /// Enable privacy hashing for paths
+    #[arg(long = "store-privacy", help_heading = "⚙️ ADVANCED")]
+    store_privacy: bool,
+
+    /// Sort files by [name, mtime, ctime]
+    #[arg(long = "sort-by", value_enum, default_value = "name", help_heading = "⚙️ ADVANCED")]
+    sort_by: SortBy,
+
+    /// Sort order [asc, desc]
+    #[arg(long = "sort-order", value_enum, default_value = "asc", help_heading = "⚙️ ADVANCED")]
+    sort_order: SortOrder,
+
+    /// Enable streaming mode (lower latency)
+    #[arg(long = "stream", help_heading = "⚙️ ADVANCED")]
+    stream: bool,
+
+    /// Metadata mode [auto, all, none, size-only]
+    #[arg(short = 'm', long = "metadata", value_enum, default_value = "auto", help_heading = "⚙️ ADVANCED")]
+    metadata: CliMetadataMode,
+
+    /// Include truncation summary
+    #[arg(long = "truncate-summary", default_value = "true", help_heading = "⚙️ ADVANCED")]
+    truncate_summary: bool,
+
+    /// Disable truncation summary
+    #[arg(long = "no-truncate-summary", help_heading = "⚙️ ADVANCED")]
+    no_truncate_summary: bool,
+
+    /// Show truncation statistics
+    #[arg(long = "truncate-stats", help_heading = "⚙️ ADVANCED")]
+    truncate_stats: bool,
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 🚀 SPECIAL MODES
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Run as MCP server (JSON-RPC 2.0 over stdio)
+    #[arg(long = "server", help_heading = "🚀 SPECIAL MODES")]
+    server: bool,
+
+    /// Generate AI instruction files and exit
+    #[arg(long = "init-prompt", help_heading = "🚀 SPECIAL MODES")]
+    init_prompt: bool,
+
+    /// Lens for init-prompt
+    #[arg(long = "init-lens", value_name = "LENS", default_value = "architecture", help_heading = "🚀 SPECIAL MODES")]
+    init_lens: String,
+
+    /// Target AI [claude, gemini]
+    #[arg(long = "target", value_enum, default_value = "claude", help_heading = "🚀 SPECIAL MODES")]
+    target: TargetAI,
+}
+
+// =============================================================================
+// New Enums for Telescope UX
+// =============================================================================
+
+/// Semantic analysis depth.
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum SemanticDepthArg {
+    /// Fast pattern matching (10ms)
+    Quick,
+    /// Balanced analysis with timeout (500ms)
+    #[default]
+    Balanced,
+    /// Full semantic analysis (no timeout)
+    Deep,
+}
+
+impl From<SemanticDepthArg> for SemanticDepth {
+    fn from(arg: SemanticDepthArg) -> Self {
+        match arg {
+            SemanticDepthArg::Quick => SemanticDepth::Quick,
+            SemanticDepthArg::Balanced => SemanticDepth::Balanced,
+            SemanticDepthArg::Deep => SemanticDepth::Deep,
+        }
+    }
+}
+
+/// Output detail level.
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum DetailLevelArg {
+    /// Minimal output with key insights
+    Summary,
+    /// Progressive disclosure (default)
+    #[default]
+    Smart,
+    /// Full technical details
+    Detailed,
+}
+
+impl From<DetailLevelArg> for DetailLevel {
+    fn from(arg: DetailLevelArg) -> Self {
+        match arg {
+            DetailLevelArg::Summary => DetailLevel::Summary,
+            DetailLevelArg::Smart => DetailLevel::Smart,
+            DetailLevelArg::Detailed => DetailLevel::Detailed,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]

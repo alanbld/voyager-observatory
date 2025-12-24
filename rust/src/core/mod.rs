@@ -25,6 +25,8 @@ pub mod store;
 pub mod search;
 pub mod skeleton;
 pub mod fractal;
+pub mod orchestrator;
+pub mod presenter;
 
 // Re-export commonly used types
 pub use models::{FileEntry, EncoderConfig, ProcessedFile, OutputFormat, Config, SkeletonMode, CompressionLevel};
@@ -52,4 +54,15 @@ pub use fractal::{
     ExplorationIntent, IntentComposition, IntentResult,
     ExplorationStep, ReadingDecision, StopReadingEngine,
     ConceptType,
+};
+
+// Phase 2 Week 3: Fractal Telescope UX
+pub use orchestrator::{
+    SmartOrchestrator, AutoFocus, InputType,
+    SmartDefaults, SemanticDepth, DetailLevel,
+    AnalysisStrategy, FallbackSystem,
+};
+pub use presenter::{
+    IntelligentPresenter, EmojiFormatter, Theme,
+    SemanticTransparency,
 };

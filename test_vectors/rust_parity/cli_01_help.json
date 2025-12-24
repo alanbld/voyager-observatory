@@ -23,7 +23,7 @@
       "--truncate",
       "--truncate-mode",
       "--lens",
-      "PROJECT_ROOT"
+      "PATH"
     ],
     "stdout_contains_any": [
       "Plus/Minus format",
