@@ -171,6 +171,146 @@ impl IntelligentPresenter {
     pub fn detail_level(&self) -> DetailLevel {
         self.detail_level
     }
+
+    // =========================================================================
+    // Voyager Mission Log Format
+    // =========================================================================
+
+    /// Format a complete Voyager Mission Log summary.
+    ///
+    /// This creates the immersive "Observatory" experience with:
+    /// - Telescope pointing at project
+    /// - Two hemispheres detection (top languages)
+    /// - Spectral filter (lens) status
+    /// - Fuel gauge (token budget)
+    /// - Points of interest
+    /// - Transmission status
+    pub fn format_mission_log(
+        &self,
+        project_name: &str,
+        hemispheres: (&str, Option<&str>),
+        lens: &str,
+        confidence: f32,
+        tokens_used: usize,
+        token_budget: usize,
+        poi_count: usize,
+        nebula_name: Option<&str>,
+    ) -> String {
+        let mut output = String::new();
+
+        // Line 1: Observatory pointing
+        output.push_str(&format!(
+            "{} Observatory pointed at {}.\n",
+            self.emoji_formatter.telescope(),
+            project_name
+        ));
+
+        // Line 2: Two hemispheres
+        let hemisphere_str = match hemispheres.1 {
+            Some(lang2) => format!("{} | {}", hemispheres.0, lang2),
+            None => hemispheres.0.to_string(),
+        };
+        output.push_str(&format!(
+            "{} Two hemispheres detected: {}.\n",
+            self.emoji_formatter.notable_star(),
+            hemisphere_str
+        ));
+
+        // Line 3: Spectral filter
+        let confidence_label = if confidence > 0.8 {
+            "High Confidence"
+        } else if confidence > 0.5 {
+            "Medium Confidence"
+        } else {
+            "Low Confidence"
+        };
+        output.push_str(&format!(
+            "{} Spectral Filter '{}' applied ({}).\n",
+            self.emoji_formatter.view_emoji(),
+            capitalize_first(lens),
+            confidence_label
+        ));
+
+        // Line 4: Fuel gauge
+        let fuel_pct = if token_budget > 0 {
+            (tokens_used as f64 / token_budget as f64 * 100.0) as usize
+        } else {
+            0
+        };
+        output.push_str(&format!(
+            "{} Fuel: {} / {} tokens ({}%).\n",
+            self.emoji_formatter.fuel(),
+            format_number(tokens_used),
+            format_number(token_budget),
+            fuel_pct
+        ));
+
+        // Line 5: Points of interest
+        if poi_count > 0 {
+            let nebula_str = nebula_name.unwrap_or("primary cluster");
+            output.push_str(&format!(
+                "{} {} Points of Interest identified in the '{}'.\n",
+                self.emoji_formatter.gem(),
+                poi_count,
+                nebula_str
+            ));
+        }
+
+        // Line 6: Transmission
+        output.push_str(&format!(
+            "{} Teleporting context sample to LLM base...\n",
+            self.emoji_formatter.transmit()
+        ));
+
+        output
+    }
+
+    /// Detect the two hemispheres (top 2 languages) from a language distribution.
+    pub fn detect_hemispheres(languages: &[(String, usize)]) -> (String, Option<String>) {
+        let mut sorted: Vec<_> = languages.to_vec();
+        sorted.sort_by(|a, b| b.1.cmp(&a.1));
+
+        let primary = sorted.first()
+            .map(|(lang, _)| format_language_name(lang))
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        let secondary = sorted.get(1)
+            .map(|(lang, _)| format_language_name(lang));
+
+        (primary, secondary)
+    }
+}
+
+/// Format a language name for display.
+fn format_language_name(lang: &str) -> String {
+    match lang.to_lowercase().as_str() {
+        "rust" => "Logic: Rust".to_string(),
+        "python" => "Logic: Python".to_string(),
+        "typescript" => "Interface: TypeScript".to_string(),
+        "javascript" => "Interface: JavaScript".to_string(),
+        "html" | "css" => "Presentation: Web".to_string(),
+        "shell" | "bash" => "Automation: Shell".to_string(),
+        "go" => "Logic: Go".to_string(),
+        "java" => "Logic: Java".to_string(),
+        "c" | "cpp" => "Systems: C/C++".to_string(),
+        "sql" => "Data: SQL".to_string(),
+        "markdown" => "Docs: Markdown".to_string(),
+        "json" | "yaml" | "toml" => "Config: Structured".to_string(),
+        _ => format!("Code: {}", capitalize_first(lang)),
+    }
+}
+
+/// Format a number with thousand separators.
+fn format_number(n: usize) -> String {
+    let s = n.to_string();
+    let mut result = String::new();
+    for (i, c) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(c);
+    }
+    result.chars().rev().collect()
 }
 
 /// Capitalize the first letter of a string.
@@ -251,5 +391,225 @@ mod tests {
         assert_eq!(capitalize_first("hello"), "Hello");
         assert_eq!(capitalize_first(""), "");
         assert_eq!(capitalize_first("a"), "A");
+    }
+
+    // =========================================================================
+    // Voyager Mission Log Tests (Stage 3)
+    // =========================================================================
+
+    #[test]
+    fn test_mission_log_contains_telescope_emoji() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "my_project",
+            ("Logic: Rust", Some("Interface: TypeScript")),
+            "architecture",
+            0.85,
+            50_000,
+            100_000,
+            15,
+            Some("Core Engine"),
+        );
+
+        // Verify telescope emoji at start
+        assert!(log.contains("🔭"), "Mission log should contain telescope emoji");
+        assert!(log.contains("Observatory pointed at my_project"));
+    }
+
+    #[test]
+    fn test_mission_log_contains_hemispheres() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "project",
+            ("Logic: Rust", Some("Interface: TypeScript")),
+            "debug",
+            0.7,
+            25_000,
+            50_000,
+            10,
+            None,
+        );
+
+        assert!(log.contains("✨"), "Mission log should contain notable star emoji");
+        assert!(log.contains("Two hemispheres detected"));
+        assert!(log.contains("Logic: Rust | Interface: TypeScript"));
+    }
+
+    #[test]
+    fn test_mission_log_contains_spectral_filter() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "project",
+            ("Logic: Python", None),
+            "security",
+            0.9,
+            10_000,
+            20_000,
+            5,
+            None,
+        );
+
+        assert!(log.contains("🔭"), "Mission log should contain view emoji");
+        assert!(log.contains("Spectral Filter 'Security' applied"));
+        assert!(log.contains("High Confidence"));
+    }
+
+    #[test]
+    fn test_mission_log_fuel_gauge() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "project",
+            ("Logic: Go", None),
+            "minimal",
+            0.5,
+            50_000,
+            100_000,
+            3,
+            None,
+        );
+
+        assert!(log.contains("🔋"), "Mission log should contain fuel emoji");
+        assert!(log.contains("Fuel:"));
+        assert!(log.contains("50,000"));
+        assert!(log.contains("100,000"));
+        assert!(log.contains("50%"));
+    }
+
+    #[test]
+    fn test_mission_log_points_of_interest() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "project",
+            ("Logic: Java", None),
+            "architecture",
+            0.8,
+            75_000,
+            100_000,
+            12,
+            Some("Service Layer"),
+        );
+
+        assert!(log.contains("💎"), "Mission log should contain gem emoji");
+        assert!(log.contains("12 Points of Interest"));
+        assert!(log.contains("'Service Layer'"));
+    }
+
+    #[test]
+    fn test_mission_log_transmission() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "project",
+            ("Automation: Shell", None),
+            "auto",
+            0.6,
+            5_000,
+            10_000,
+            2,
+            None,
+        );
+
+        assert!(log.contains("📡"), "Mission log should contain transmit emoji");
+        assert!(log.contains("Teleporting context sample to LLM base"));
+    }
+
+    #[test]
+    fn test_detect_hemispheres_single_language() {
+        let languages = vec![("rust".to_string(), 50)];
+        let (primary, secondary) = IntelligentPresenter::detect_hemispheres(&languages);
+
+        assert_eq!(primary, "Logic: Rust");
+        assert!(secondary.is_none());
+    }
+
+    #[test]
+    fn test_detect_hemispheres_multiple_languages() {
+        let languages = vec![
+            ("typescript".to_string(), 30),
+            ("python".to_string(), 25),
+            ("shell".to_string(), 10),
+        ];
+        let (primary, secondary) = IntelligentPresenter::detect_hemispheres(&languages);
+
+        assert_eq!(primary, "Interface: TypeScript");
+        assert_eq!(secondary, Some("Logic: Python".to_string()));
+    }
+
+    #[test]
+    fn test_detect_hemispheres_empty() {
+        let languages: Vec<(String, usize)> = vec![];
+        let (primary, secondary) = IntelligentPresenter::detect_hemispheres(&languages);
+
+        assert_eq!(primary, "Unknown");
+        assert!(secondary.is_none());
+    }
+
+    #[test]
+    fn test_format_language_name_categories() {
+        // Logic languages
+        assert_eq!(format_language_name("rust"), "Logic: Rust");
+        assert_eq!(format_language_name("python"), "Logic: Python");
+        assert_eq!(format_language_name("go"), "Logic: Go");
+        assert_eq!(format_language_name("java"), "Logic: Java");
+
+        // Interface languages
+        assert_eq!(format_language_name("typescript"), "Interface: TypeScript");
+        assert_eq!(format_language_name("javascript"), "Interface: JavaScript");
+
+        // Presentation
+        assert_eq!(format_language_name("html"), "Presentation: Web");
+        assert_eq!(format_language_name("css"), "Presentation: Web");
+
+        // Automation
+        assert_eq!(format_language_name("shell"), "Automation: Shell");
+        assert_eq!(format_language_name("bash"), "Automation: Shell");
+
+        // Systems
+        assert_eq!(format_language_name("c"), "Systems: C/C++");
+        assert_eq!(format_language_name("cpp"), "Systems: C/C++");
+
+        // Data
+        assert_eq!(format_language_name("sql"), "Data: SQL");
+
+        // Config
+        assert_eq!(format_language_name("json"), "Config: Structured");
+        assert_eq!(format_language_name("yaml"), "Config: Structured");
+        assert_eq!(format_language_name("toml"), "Config: Structured");
+
+        // Docs
+        assert_eq!(format_language_name("markdown"), "Docs: Markdown");
+
+        // Unknown
+        assert_eq!(format_language_name("cobol"), "Code: Cobol");
+    }
+
+    #[test]
+    fn test_format_number_with_separators() {
+        assert_eq!(format_number(0), "0");
+        assert_eq!(format_number(100), "100");
+        assert_eq!(format_number(1_000), "1,000");
+        assert_eq!(format_number(10_000), "10,000");
+        assert_eq!(format_number(100_000), "100,000");
+        assert_eq!(format_number(1_000_000), "1,000,000");
+    }
+
+    #[test]
+    fn test_mission_log_no_jargon() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "project",
+            ("Logic: Rust", None),
+            "architecture",
+            0.9,
+            50_000,
+            100_000,
+            10,
+            Some("Core"),
+        );
+
+        // Verify no technical jargon in default output
+        assert!(!log.contains("Substrate"));
+        assert!(!log.contains("EMA"));
+        assert!(!log.contains("vectorize"));
+        assert!(!log.contains("semantic"));
     }
 }

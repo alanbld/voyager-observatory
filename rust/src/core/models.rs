@@ -339,6 +339,9 @@ pub struct ProcessedFile {
     pub original_tokens: Option<usize>,
     /// Compression level (Full, Skeleton, Drop)
     pub compression_level: CompressionLevel,
+    /// Utility score from Observer's Journal (0.0-1.0)
+    /// Stars with utility >= 0.8 are "bright" and display ⭐
+    pub utility: Option<f64>,
 }
 
 impl ProcessedFile {
@@ -354,6 +357,29 @@ impl ProcessedFile {
             truncated: false,
             original_tokens: None,
             compression_level: CompressionLevel::Full,
+            utility: None,
+        }
+    }
+
+    /// Set utility score from journal
+    pub fn with_utility(mut self, utility: f64) -> Self {
+        self.utility = Some(utility);
+        self
+    }
+
+    /// Check if this is a "bright star" (utility >= 0.8)
+    pub fn is_bright_star(&self) -> bool {
+        self.utility.map(|u| u >= 0.8).unwrap_or(false)
+    }
+
+    /// Get the brightness indicator for output
+    pub fn brightness_indicator(&self) -> &'static str {
+        match self.utility {
+            Some(u) if u >= 0.9 => "🌟 ",  // Very bright
+            Some(u) if u >= 0.8 => "⭐ ",  // Bright
+            Some(u) if u >= 0.5 => "✨ ",  // Notable
+            Some(_) => "",                 // Dim
+            None => "",                    // Unknown
         }
     }
 
@@ -378,6 +404,23 @@ impl ProcessedFile {
     /// Check if file is skeletonized
     pub fn is_skeleton(&self) -> bool {
         self.compression_level == CompressionLevel::Skeleton
+    }
+}
+
+impl Default for ProcessedFile {
+    fn default() -> Self {
+        Self {
+            path: String::new(),
+            content: String::new(),
+            md5: String::new(),
+            language: String::new(),
+            priority: 0,
+            tokens: 0,
+            truncated: false,
+            original_tokens: None,
+            compression_level: CompressionLevel::Full,
+            utility: None,
+        }
     }
 }
 

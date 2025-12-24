@@ -171,6 +171,117 @@ impl EmojiFormatter {
     }
 
     // =========================================================================
+    // Voyager Observatory Emojis (DeepSeek Spectrum)
+    // =========================================================================
+
+    /// Telescope emoji for primary entry points.
+    pub fn telescope(&self) -> &'static str {
+        match self.theme {
+            Theme::Plain => "[START]",
+            Theme::Minimal => ">>",
+            Theme::Full => "🔭",
+        }
+    }
+
+    /// Shooting star for recently explored files.
+    pub fn shooting_star(&self) -> &'static str {
+        match self.theme {
+            Theme::Plain => "[RECENT]",
+            Theme::Minimal => "*",
+            Theme::Full => "🌠",
+        }
+    }
+
+    /// Dizzy star for TODO/FIXME markers.
+    pub fn todo_marker(&self) -> &'static str {
+        match self.theme {
+            Theme::Plain => "[TODO]",
+            Theme::Minimal => "!",
+            Theme::Full => "💫",
+        }
+    }
+
+    /// Very bright star (utility >= 0.9).
+    pub fn very_bright_star(&self) -> &'static str {
+        match self.theme {
+            Theme::Plain => "[****]",
+            Theme::Minimal => "****",
+            Theme::Full => "🌟",
+        }
+    }
+
+    /// Bright star (utility >= 0.8).
+    pub fn bright_star(&self) -> &'static str {
+        match self.theme {
+            Theme::Plain => "[***]",
+            Theme::Minimal => "***",
+            Theme::Full => "⭐",
+        }
+    }
+
+    /// Notable star (utility >= 0.5).
+    pub fn notable_star(&self) -> &'static str {
+        match self.theme {
+            Theme::Plain => "[**]",
+            Theme::Minimal => "**",
+            Theme::Full => "✨",
+        }
+    }
+
+    /// Galaxy/nebula indicator.
+    pub fn galaxy(&self) -> &'static str {
+        match self.theme {
+            Theme::Plain => "[MAP]",
+            Theme::Minimal => "@@",
+            Theme::Full => "🌌",
+        }
+    }
+
+    /// Fuel/token budget indicator.
+    pub fn fuel(&self) -> &'static str {
+        match self.theme {
+            Theme::Plain => "[FUEL]",
+            Theme::Minimal => "##",
+            Theme::Full => "🔋",
+        }
+    }
+
+    /// Gem/point of interest indicator.
+    pub fn gem(&self) -> &'static str {
+        match self.theme {
+            Theme::Plain => "[POI]",
+            Theme::Minimal => "<>",
+            Theme::Full => "💎",
+        }
+    }
+
+    /// Transmit/teleport indicator.
+    pub fn transmit(&self) -> &'static str {
+        match self.theme {
+            Theme::Plain => "[TX]",
+            Theme::Minimal => ">>",
+            Theme::Full => "📡",
+        }
+    }
+
+    /// Brightness indicator based on utility.
+    pub fn brightness_indicator(&self, utility: f64) -> &'static str {
+        if utility >= 0.9 {
+            self.very_bright_star()
+        } else if utility >= 0.8 {
+            self.bright_star()
+        } else if utility >= 0.5 {
+            self.notable_star()
+        } else {
+            match self.theme {
+                Theme::Plain => "[*]",
+                Theme::Minimal => "*",
+                Theme::Full => "·",
+            }
+        }
+    }
+
+    // =========================================================================
     // Status Indicators
     // =========================================================================
 

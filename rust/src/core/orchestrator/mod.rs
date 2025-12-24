@@ -15,10 +15,12 @@
 
 pub mod auto_focus;
 pub mod fallback;
+pub mod journal;
 pub mod smart_defaults;
 
 pub use auto_focus::{AutoFocus, InputType};
 pub use fallback::{AnalysisStrategy, FallbackSystem};
+pub use journal::{ObserversJournal, MarkedStar, ExplorationEntry, FadedNebula};
 pub use smart_defaults::{SmartDefaults, SemanticDepth, DetailLevel};
 
 use std::path::Path;

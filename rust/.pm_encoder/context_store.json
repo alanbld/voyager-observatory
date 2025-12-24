@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "files": {
+    "src/core/search.rs": {
+      "score": 0.5900000000000001,
+      "access_count": 6,
+      "last_accessed": "2025-12-20T17:53:23.762879280+00:00",
+      "tags": []
+    },
+    "src/core/zoom.rs": {
+      "score": 0.515,
+      "access_count": 1,
+      "last_accessed": "2025-12-20T17:42:08.753359504+00:00",
+      "tags": []
+    }
+  },
+  "lens_profiles": {},
+  "paths_hashed": false
+}

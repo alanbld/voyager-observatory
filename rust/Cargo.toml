@@ -13,10 +13,17 @@ name = "pm_encoder"
 path = "src/lib.rs"
 crate-type = ["cdylib", "rlib"]
 
+# Primary binary: The Voyager Observatory command
+[[bin]]
+name = "vo"
+path = "src/bin/vo.rs"
+
+# Alias for backwards compatibility
 [[bin]]
 name = "pm_encoder"
-path = "src/bin/main.rs"
+path = "src/bin/pm_encoder.rs"
 
+# MCP Server binary
 [[bin]]
 name = "pm_encoder_mcp"
 path = "src/bin/mcp_server.rs"

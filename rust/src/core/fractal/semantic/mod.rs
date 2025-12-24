@@ -87,7 +87,7 @@ use std::fmt;
 use std::str::FromStr;
 
 /// Supported languages for multi-language analysis
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Language {
     ABL,
     Python,

@@ -1,0 +1,15 @@
+[
+  {
+    "repo_name": "requests",
+    "repo_url": "https://github.com/psf/requests",
+    "match": false,
+    "failure_type": "artifact_mismatch",
+    "diff_summary": "Artifacts differ: CLAUDE.md=True, CONTEXT.txt=True",
+    "python_exit_code": 0,
+    "rust_exit_code": 0,
+    "python_time_ms": 828,
+    "rust_time_ms": 280,
+    "claude_md_diff_lines": 36,
+    "context_txt_diff_lines": 100
+  }
+]

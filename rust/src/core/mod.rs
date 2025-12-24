@@ -27,6 +27,7 @@ pub mod skeleton;
 pub mod fractal;
 pub mod orchestrator;
 pub mod presenter;
+pub mod celestial;
 
 // Re-export commonly used types
 pub use models::{FileEntry, EncoderConfig, ProcessedFile, OutputFormat, Config, SkeletonMode, CompressionLevel};
@@ -61,8 +62,17 @@ pub use orchestrator::{
     SmartOrchestrator, AutoFocus, InputType,
     SmartDefaults, SemanticDepth, DetailLevel,
     AnalysisStrategy, FallbackSystem,
+    // Observer's Journal
+    ObserversJournal, MarkedStar, ExplorationEntry, FadedNebula,
 };
 pub use presenter::{
     IntelligentPresenter, EmojiFormatter, Theme,
     SemanticTransparency,
+};
+
+// Phase 3: Spectral Synthesis (Celestial Navigation)
+pub use celestial::{
+    NebulaNamer, NebulaName, NamingStrategy,
+    ConstellationMapper, Nebula, CelestialMap, Star, FileInfo,
+    NavigationCompass, NavigationSuggestion, ExplorationHint, SuggestionAction,
 };

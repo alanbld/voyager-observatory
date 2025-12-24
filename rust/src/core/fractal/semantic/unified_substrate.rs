@@ -4,7 +4,7 @@
 //! Provides a language-agnostic representation of concepts that enables
 //! cross-language exploration and comparison.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +16,7 @@ use crate::core::fractal::{ConceptType, ContextLayer, FeatureVector, Visibility}
 // =============================================================================
 
 /// Unique identifier for a concept in the unified substrate
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ConceptId(String);
 
 impl ConceptId {
@@ -57,7 +57,7 @@ impl std::fmt::Display for ConceptId {
 }
 
 /// Universal concept types (language-agnostic)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum UniversalConceptType {
     /// Mathematical or business calculations
     Calculation,
@@ -302,23 +302,24 @@ impl LanguageContribution {
 // =============================================================================
 
 /// The unified semantic substrate for multi-language analysis
+/// Uses BTreeMap for deterministic iteration order across platforms.
 #[derive(Debug, Clone)]
 pub struct UnifiedSemanticSubstrate {
-    /// All unified concepts
-    concepts: HashMap<ConceptId, UnifiedConcept>,
-    /// Language contributions
-    language_contributions: HashMap<Language, LanguageContribution>,
+    /// All unified concepts (BTreeMap for deterministic order)
+    concepts: BTreeMap<ConceptId, UnifiedConcept>,
+    /// Language contributions (BTreeMap for deterministic order)
+    language_contributions: BTreeMap<Language, LanguageContribution>,
     /// Cross-language equivalences (concept_id -> equivalent concept_ids)
-    equivalences: HashMap<ConceptId, Vec<ConceptId>>,
+    equivalences: BTreeMap<ConceptId, Vec<ConceptId>>,
 }
 
 impl UnifiedSemanticSubstrate {
     /// Create a new empty substrate
     pub fn new() -> Self {
         Self {
-            concepts: HashMap::new(),
-            language_contributions: HashMap::new(),
-            equivalences: HashMap::new(),
+            concepts: BTreeMap::new(),
+            language_contributions: BTreeMap::new(),
+            equivalences: BTreeMap::new(),
         }
     }
 
@@ -364,7 +365,7 @@ impl UnifiedSemanticSubstrate {
     }
 
     /// Get language contributions
-    pub fn language_contributions(&self) -> &HashMap<Language, LanguageContribution> {
+    pub fn language_contributions(&self) -> &BTreeMap<Language, LanguageContribution> {
         &self.language_contributions
     }
 
@@ -413,16 +414,16 @@ impl UnifiedSemanticSubstrate {
     }
 
     /// Get concept distribution across languages
-    pub fn get_language_breakdown(&self) -> HashMap<Language, usize> {
+    pub fn get_language_breakdown(&self) -> BTreeMap<Language, usize> {
         self.language_contributions
             .iter()
             .map(|(lang, contrib)| (*lang, contrib.concepts.len()))
             .collect()
     }
 
-    /// Get universal type distribution
-    pub fn get_type_distribution(&self) -> HashMap<UniversalConceptType, usize> {
-        let mut dist = HashMap::new();
+    /// Get universal type distribution (deterministic order)
+    pub fn get_type_distribution(&self) -> BTreeMap<UniversalConceptType, usize> {
+        let mut dist = BTreeMap::new();
         for concept in self.concepts.values() {
             *dist.entry(concept.universal_type).or_insert(0) += 1;
         }
@@ -566,16 +567,32 @@ impl UnifiedSemanticSubstrate {
         substrate
     }
 
-    /// Merge another substrate into this one
+    /// Merge another substrate into this one.
+    ///
+    /// Memory-efficient: Uses BTreeMap's efficient merge for O(n log n) complexity.
+    /// The incoming substrate's concepts and equivalences are integrated into
+    /// this substrate's deterministically ordered collections.
     pub fn merge(&mut self, other: UnifiedSemanticSubstrate) {
-        for (_id, concept) in other.concepts {
-            self.add_concept(concept);
+        // Merge concepts - update language contributions as we go
+        for (id, concept) in other.concepts {
+            let language = concept.language();
+            let concept_type = concept.universal_type;
+
+            // Update language contribution for each concept
+            self.language_contributions
+                .entry(language)
+                .or_insert_with(LanguageContribution::new)
+                .add_concept(id.clone(), concept_type);
+
+            self.concepts.insert(id, concept);
         }
 
-        for (concept_a, equivalents) in other.equivalences {
-            for concept_b in equivalents {
-                self.register_equivalence(&concept_a, &concept_b);
-            }
+        // Merge equivalences - extend existing vectors efficiently
+        for (concept_a, mut equivalents) in other.equivalences {
+            self.equivalences
+                .entry(concept_a)
+                .or_insert_with(Vec::new)
+                .append(&mut equivalents);
         }
     }
 }
@@ -739,5 +756,331 @@ mod tests {
             validation_score > logging_score,
             "Validation should score higher for business-logic intent"
         );
+    }
+
+    // =========================================================================
+    // Phase 1: Coverage Blitz - from_layers() tests
+    // =========================================================================
+
+    use crate::core::fractal::{
+        LayerContent, Range, SymbolKind, Visibility as LayerVisibility, ZoomLevel,
+    };
+    use crate::core::fractal::clustering::vectorizer::{VectorMetadata, FeatureType};
+
+    fn create_symbol_layer(
+        name: &str,
+        kind: SymbolKind,
+        signature: &str,
+        doc: Option<&str>,
+    ) -> ContextLayer {
+        ContextLayer::new(
+            format!("layer_{}", name),
+            LayerContent::Symbol {
+                name: name.to_string(),
+                kind,
+                signature: signature.to_string(),
+                return_type: None,
+                parameters: vec![],
+                documentation: doc.map(|s| s.to_string()),
+                visibility: LayerVisibility::Public,
+                range: Range { start_line: 1, start_col: 0, end_line: 10, end_col: 0 },
+            },
+        )
+    }
+
+    fn create_feature_vector(dim: usize) -> FeatureVector {
+        FeatureVector {
+            values: vec![0.5; dim],
+            metadata: VectorMetadata {
+                source_id: "test_layer".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 1.0,
+                feature_types: vec![FeatureType::Structural],
+            },
+        }
+    }
+
+    #[test]
+    fn test_from_layers_single_symbol() {
+        let layers = vec![create_symbol_layer(
+            "calculate_tax",
+            SymbolKind::Function,
+            "fn calculate_tax(amount: f64) -> f64",
+            Some("Calculate tax for an amount"),
+        )];
+        let vectors = vec![create_feature_vector(64)];
+
+        let substrate = UnifiedSemanticSubstrate::from_layers(
+            &layers,
+            &vectors,
+            Language::Rust,
+            "tax.rs",
+        );
+
+        assert_eq!(substrate.concept_count(), 1);
+        let concepts: Vec<_> = substrate.concepts().collect();
+        assert_eq!(concepts[0].name, "calculate_tax");
+        assert_eq!(concepts[0].language(), Language::Rust);
+    }
+
+    #[test]
+    fn test_from_layers_multiple_symbols() {
+        let layers = vec![
+            create_symbol_layer("validate_input", SymbolKind::Function, "fn validate_input()", None),
+            create_symbol_layer("process_data", SymbolKind::Function, "fn process_data()", None),
+            create_symbol_layer("UserConfig", SymbolKind::Struct, "struct UserConfig", None),
+        ];
+        let vectors = vec![
+            create_feature_vector(64),
+            create_feature_vector(64),
+            create_feature_vector(64),
+        ];
+
+        let substrate = UnifiedSemanticSubstrate::from_layers(
+            &layers,
+            &vectors,
+            Language::Rust,
+            "main.rs",
+        );
+
+        assert_eq!(substrate.concept_count(), 3);
+        assert_eq!(substrate.languages(), vec![Language::Rust]);
+    }
+
+    #[test]
+    fn test_from_layers_with_async_detection() {
+        let layers = vec![create_symbol_layer(
+            "fetch_data",
+            SymbolKind::Function,
+            "async fn fetch_data() -> Result<Data>",
+            None,
+        )];
+        let vectors = vec![create_feature_vector(64)];
+
+        let substrate = UnifiedSemanticSubstrate::from_layers(
+            &layers,
+            &vectors,
+            Language::Rust,
+            "api.rs",
+        );
+
+        let concept = substrate.concepts().next().unwrap();
+        assert!(concept.properties.is_async);
+    }
+
+    #[test]
+    fn test_from_layers_empty_input() {
+        let layers: Vec<ContextLayer> = vec![];
+        let vectors: Vec<FeatureVector> = vec![];
+
+        let substrate = UnifiedSemanticSubstrate::from_layers(
+            &layers,
+            &vectors,
+            Language::Python,
+            "empty.py",
+        );
+
+        assert_eq!(substrate.concept_count(), 0);
+    }
+
+    #[test]
+    fn test_from_layers_non_symbol_layer_skipped() {
+        // Create a file-level layer (not a Symbol)
+        let file_layer = ContextLayer::new(
+            "file_layer",
+            LayerContent::File {
+                path: std::path::PathBuf::from("test.rs"),
+                language: "rust".to_string(),
+                size_bytes: 100,
+                line_count: 10,
+                symbol_count: 0,
+                imports: vec![],
+            },
+        );
+        let layers = vec![file_layer];
+        let vectors = vec![create_feature_vector(64)];
+
+        let substrate = UnifiedSemanticSubstrate::from_layers(
+            &layers,
+            &vectors,
+            Language::Rust,
+            "test.rs",
+        );
+
+        // File-level layers should be skipped
+        assert_eq!(substrate.concept_count(), 0);
+    }
+
+    // =========================================================================
+    // Phase 1: Coverage Blitz - merge() tests
+    // =========================================================================
+
+    #[test]
+    fn test_merge_empty_substrates() {
+        let mut substrate_a = UnifiedSemanticSubstrate::new();
+        let substrate_b = UnifiedSemanticSubstrate::new();
+
+        substrate_a.merge(substrate_b);
+
+        assert_eq!(substrate_a.concept_count(), 0);
+    }
+
+    #[test]
+    fn test_merge_into_empty() {
+        let mut substrate_a = UnifiedSemanticSubstrate::new();
+        let mut substrate_b = UnifiedSemanticSubstrate::new();
+
+        substrate_b.add_concept(create_test_concept(
+            "func_b",
+            Language::Python,
+            UniversalConceptType::Calculation,
+        ));
+
+        substrate_a.merge(substrate_b);
+
+        assert_eq!(substrate_a.concept_count(), 1);
+    }
+
+    #[test]
+    fn test_merge_combines_concepts() {
+        let mut substrate_a = UnifiedSemanticSubstrate::new();
+        substrate_a.add_concept(create_test_concept(
+            "func_a",
+            Language::Rust,
+            UniversalConceptType::Validation,
+        ));
+
+        let mut substrate_b = UnifiedSemanticSubstrate::new();
+        substrate_b.add_concept(create_test_concept(
+            "func_b",
+            Language::Python,
+            UniversalConceptType::Calculation,
+        ));
+
+        substrate_a.merge(substrate_b);
+
+        assert_eq!(substrate_a.concept_count(), 2);
+        assert_eq!(substrate_a.languages().len(), 2);
+    }
+
+    #[test]
+    fn test_merge_preserves_equivalences() {
+        let mut substrate_a = UnifiedSemanticSubstrate::new();
+        let concept_a1 = create_test_concept("func_a1", Language::Rust, UniversalConceptType::Calculation);
+        let concept_a2 = create_test_concept("func_a2", Language::Rust, UniversalConceptType::Calculation);
+        let id_a1 = concept_a1.id.clone();
+        let id_a2 = concept_a2.id.clone();
+        substrate_a.add_concept(concept_a1);
+        substrate_a.add_concept(concept_a2);
+        substrate_a.register_equivalence(&id_a1, &id_a2);
+
+        let mut substrate_b = UnifiedSemanticSubstrate::new();
+        let concept_b1 = create_test_concept("func_b1", Language::Python, UniversalConceptType::Validation);
+        let concept_b2 = create_test_concept("func_b2", Language::Python, UniversalConceptType::Validation);
+        let id_b1 = concept_b1.id.clone();
+        let id_b2 = concept_b2.id.clone();
+        substrate_b.add_concept(concept_b1);
+        substrate_b.add_concept(concept_b2);
+        substrate_b.register_equivalence(&id_b1, &id_b2);
+
+        substrate_a.merge(substrate_b);
+
+        // Both sets of equivalences should be preserved
+        // Note: register_equivalence creates bidirectional links, so after merge
+        // id_a1 has id_a2 as equivalent (and vice versa via the other direction)
+        // The merge adds equivalences from substrate_b, maintaining the existing ones
+        assert!(substrate_a.find_equivalents(&id_a1).len() >= 1, "id_a1 should have at least one equivalent");
+        assert!(substrate_a.find_equivalents(&id_b1).len() >= 1, "id_b1 should have at least one equivalent");
+
+        // Verify the concepts themselves were merged
+        assert_eq!(substrate_a.concept_count(), 4);
+    }
+
+    #[test]
+    fn test_merge_updates_language_contributions() {
+        let mut substrate_a = UnifiedSemanticSubstrate::new();
+        substrate_a.add_concept(create_test_concept(
+            "rust_func",
+            Language::Rust,
+            UniversalConceptType::Calculation,
+        ));
+
+        let mut substrate_b = UnifiedSemanticSubstrate::new();
+        substrate_b.add_concept(create_test_concept(
+            "py_func",
+            Language::Python,
+            UniversalConceptType::Validation,
+        ));
+        substrate_b.add_concept(create_test_concept(
+            "ts_func",
+            Language::TypeScript,
+            UniversalConceptType::Service,
+        ));
+
+        substrate_a.merge(substrate_b);
+
+        let breakdown = substrate_a.get_language_breakdown();
+        assert_eq!(breakdown.get(&Language::Rust), Some(&1));
+        assert_eq!(breakdown.get(&Language::Python), Some(&1));
+        assert_eq!(breakdown.get(&Language::TypeScript), Some(&1));
+    }
+
+    // =========================================================================
+    // Phase 1: Coverage Blitz - similarity_to() edge cases
+    // =========================================================================
+
+    #[test]
+    fn test_similarity_identical_types() {
+        assert_eq!(
+            UniversalConceptType::Service.similarity_to(&UniversalConceptType::Service),
+            1.0
+        );
+        assert_eq!(
+            UniversalConceptType::Unknown.similarity_to(&UniversalConceptType::Unknown),
+            1.0
+        );
+    }
+
+    #[test]
+    fn test_similarity_service_endpoint_high() {
+        let sim = UniversalConceptType::Service.similarity_to(&UniversalConceptType::Endpoint);
+        assert!(sim >= 0.7, "Service-Endpoint similarity should be high: {}", sim);
+    }
+
+    #[test]
+    fn test_similarity_data_structure_database_moderate() {
+        let sim = UniversalConceptType::DataStructure.similarity_to(&UniversalConceptType::DatabaseOperation);
+        assert!(sim >= 0.4 && sim <= 0.6, "DataStructure-Database similarity should be moderate: {}", sim);
+    }
+
+    #[test]
+    fn test_similarity_config_infrastructure_related() {
+        let sim = UniversalConceptType::Configuration.similarity_to(&UniversalConceptType::Infrastructure);
+        assert!(sim >= 0.5, "Config-Infrastructure should be related: {}", sim);
+    }
+
+    #[test]
+    fn test_similarity_observability_error_handling() {
+        let sim = UniversalConceptType::Observability.similarity_to(&UniversalConceptType::ErrorHandling);
+        assert!(sim > 0.2 && sim < 0.6, "Observability-ErrorHandling moderate: {}", sim);
+    }
+
+    #[test]
+    fn test_similarity_unknown_always_low() {
+        assert!(UniversalConceptType::Unknown.similarity_to(&UniversalConceptType::Calculation) <= 0.2);
+        assert!(UniversalConceptType::Unknown.similarity_to(&UniversalConceptType::Service) <= 0.2);
+    }
+
+    #[test]
+    fn test_similarity_testing_validation_low() {
+        let sim = UniversalConceptType::Testing.similarity_to(&UniversalConceptType::Validation);
+        assert!(sim <= 0.4, "Testing-Validation should be low-moderate: {}", sim);
+    }
+
+    #[test]
+    fn test_similarity_unrelated_types_low() {
+        // Testing vs Calculation - unrelated
+        let sim = UniversalConceptType::Testing.similarity_to(&UniversalConceptType::Calculation);
+        assert!(sim <= 0.3, "Testing-Calculation should be low: {}", sim);
     }
 }

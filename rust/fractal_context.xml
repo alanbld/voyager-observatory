@@ -1,0 +1,158 @@
+<exploration intent="onboarding">
+  <summary>
+    Found 771 relevant elements (filtered 0 of 771 total). Estimated reading time: 40 minutes.
+  </summary>
+  <insights>
+    <insight>Dominant concept type: Unknown</insight>
+    <insight>Found 20 highly relevant elements (>80% score)</insight>
+    <insight>Recommended starting point: decide (Decision)</insight>
+    <insight>Time split: 40 min deep reading, 0 min skimming</insight>
+  </insights>
+  <exploration_path>
+    <step decision="read" relevance="1.00">
+      <symbol>decide</symbol>
+      <path>./src/core/fractal/intent/primitives.rs::decide</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Decision</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>should_ignore</symbol>
+      <path>./src/core/fractal/intent/explorer.rs::should_ignore</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Decision</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>calculate_total</symbol>
+      <path>./src/core/fractal/intent/explorer.rs::calculate_total</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Calculation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>validate_input</symbol>
+      <path>./src/core/fractal/intent/explorer.rs::validate_input</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Validation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>ExplorerConfig</symbol>
+      <path>./src/core/fractal/intent/explorer.rs::ExplorerConfig</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Configuration</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>should_read</symbol>
+      <path>./src/core/fractal/intent/decisions.rs::should_read</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Decision</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>decide</symbol>
+      <path>./src/core/fractal/intent/decisions.rs::decide</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Decision</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>ConfiguredPrimitive</symbol>
+      <path>./src/core/fractal/intent/composition.rs::ConfiguredPrimitive</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Configuration</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>has_node</symbol>
+      <path>./src/core/fractal/relationships/call_graph.rs::has_node</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Validation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>has_cycles</symbol>
+      <path>./src/core/fractal/relationships/call_graph.rs::has_cycles</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Validation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>calculate_max_depth</symbol>
+      <path>./src/core/fractal/relationships/call_graph.rs::calculate_max_depth</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Calculation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>BuilderConfig</symbol>
+      <path>./src/core/fractal/builder.rs::BuilderConfig</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Configuration</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>can_zoom_in</symbol>
+      <path>./src/core/fractal/layers.rs::can_zoom_in</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Validation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>can_zoom_out</symbol>
+      <path>./src/core/fractal/layers.rs::can_zoom_out</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Validation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>has_children</symbol>
+      <path>./src/core/fractal/layers.rs::has_children</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Validation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>has_parent</symbol>
+      <path>./src/core/fractal/layers.rs::has_parent</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Validation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>can_go_back</symbol>
+      <path>./src/core/fractal/navigation.rs::can_go_back</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Validation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>can_go_forward</symbol>
+      <path>./src/core/fractal/navigation.rs::can_go_forward</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Validation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>is_at_root</symbol>
+      <path>./src/core/fractal/navigation.rs::is_at_root</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Validation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+    <step decision="read" relevance="1.00">
+      <symbol>has_children</symbol>
+      <path>./src/core/fractal/navigation.rs::has_children</path>
+      <reason>High relevance to your goal</reason>
+      <concept>Validation</concept>
+      <time_minutes>2</time_minutes>
+    </step>
+  </exploration_path>
+  <metadata>
+    <files_analyzed>17</files_analyzed>
+    <symbols_extracted>771</symbols_extracted>
+    <estimated_minutes>40</estimated_minutes>
+  </metadata>
+</exploration>

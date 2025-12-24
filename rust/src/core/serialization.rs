@@ -216,15 +216,18 @@ impl Serializer for PlusMinusSerializer {
     fn serialize_file(&self, file: &ProcessedFile) -> String {
         let mut output = String::new();
 
-        // Build header with optional [SKELETON] tag
+        // Get brightness indicator from journal utility
+        let brightness = file.brightness_indicator();
+
+        // Build header with optional brightness indicator and [SKELETON] tag
         let header = if file.compression_level == CompressionLevel::Skeleton {
             if let Some(orig) = file.original_tokens {
-                format!("+++ {} [SKELETON] (original: {} tokens)\n", file.path, orig)
+                format!("+++ {}{} [SKELETON] (original: {} tokens)\n", brightness, file.path, orig)
             } else {
-                format!("+++ {} [SKELETON]\n", file.path)
+                format!("+++ {}{} [SKELETON]\n", brightness, file.path)
             }
         } else {
-            format!("+++ {}\n", file.path)
+            format!("+++ {}{}\n", brightness, file.path)
         };
 
         output.push_str(&header);
@@ -269,6 +272,12 @@ impl Serializer for XmlSerializer {
     fn serialize_file(&self, file: &ProcessedFile) -> String {
         let mut output = String::new();
 
+        // Build brightness attribute from journal utility
+        let brightness_attr = match file.utility {
+            Some(u) => format!(" utility=\"{:.2}\" bright=\"{}\"", u, file.is_bright_star()),
+            None => String::new(),
+        };
+
         // Build file element with skeleton attributes if applicable
         let skeleton_attr = if file.compression_level == CompressionLevel::Skeleton {
             if let Some(orig) = file.original_tokens {
@@ -281,10 +290,11 @@ impl Serializer for XmlSerializer {
         };
 
         output.push_str(&format!(
-            "<file path=\"{}\" md5=\"{}\" language=\"{}\"{}>\n",
+            "<file path=\"{}\" md5=\"{}\" language=\"{}\"{}{}>\n",
             Self::escape_xml(&file.path),
             file.md5,
             file.language,
+            brightness_attr,
             skeleton_attr
         ));
         output.push_str(&Self::escape_xml(&file.content));
@@ -356,15 +366,18 @@ impl Serializer for MarkdownSerializer {
         let lang = Self::detect_language(&file.path);
         let mut output = String::new();
 
-        // Build header with optional [SKELETON] tag
+        // Get brightness indicator from journal utility
+        let brightness = file.brightness_indicator();
+
+        // Build header with optional brightness and [SKELETON] tag
         let header = if file.compression_level == CompressionLevel::Skeleton {
             if let Some(orig) = file.original_tokens {
-                format!("## {} [SKELETON] (original: {} tokens)\n\n", file.path, orig)
+                format!("## {}{} [SKELETON] (original: {} tokens)\n\n", brightness, file.path, orig)
             } else {
-                format!("## {} [SKELETON]\n\n", file.path)
+                format!("## {}{} [SKELETON]\n\n", brightness, file.path)
             }
         } else {
-            format!("## {}\n\n", file.path)
+            format!("## {}{}\n\n", brightness, file.path)
         };
 
         output.push_str(&header);

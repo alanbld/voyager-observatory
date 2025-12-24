@@ -792,6 +792,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
             ProcessedFile {
                 path: "small.py".to_string(),
@@ -803,6 +804,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
         ];
 
@@ -874,6 +876,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
             ProcessedFile {
                 path: "src/main.rs".to_string(),
@@ -885,6 +888,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
             ProcessedFile {
                 path: "README.md".to_string(),
@@ -896,6 +900,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
         ];
 
@@ -925,6 +930,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
             ProcessedFile {
                 path: "tests/test.py".to_string(),  // Tests
@@ -936,6 +942,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
             ProcessedFile {
                 path: "Cargo.toml".to_string(),  // Config
@@ -947,6 +954,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
             ProcessedFile {
                 path: "src/lib.rs".to_string(),  // Core
@@ -958,6 +966,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
         ];
 
@@ -987,6 +996,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
             ProcessedFile {
                 path: "src/lib.rs".to_string(),
@@ -998,6 +1008,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
             ProcessedFile {
                 path: "Cargo.toml".to_string(),
@@ -1009,6 +1020,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
             ProcessedFile {
                 path: "tests/test.py".to_string(),
@@ -1020,6 +1032,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
         ];
 
@@ -1058,6 +1071,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
             ProcessedFile {
                 path: "src/high_priority.rs".to_string(),
@@ -1069,6 +1083,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
         ];
 
@@ -1422,6 +1437,7 @@ mod tests {
                 truncated: false,
                 original_tokens: None,
                 compression_level: CompressionLevel::Full,
+                utility: None,
             },
         ];
 

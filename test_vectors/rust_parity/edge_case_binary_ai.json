@@ -1,0 +1,36 @@
+{
+  "name": "edge_case_binary_ai",
+  "description": "Test handling of .ai (Adobe Illustrator) files - discovered by pm_coach on psf/requests",
+  "category": "edge_case",
+  "validation_mode": "behavior",
+  "notes": "Adobe Illustrator files may not contain null bytes but still aren't valid UTF-8. Engine must skip them gracefully.",
+  "python_validated": true,
+  "rust_status": "must_skip",
+  "fixture_type": "bytes",
+  "fixture": {
+    "files": [
+      {
+        "path": "src/main.py",
+        "content": "print('hello')\n"
+      },
+      {
+        "path": "assets/logo.ai",
+        "content_base64": "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCg==",
+        "is_binary": true,
+        "description": "Simulated .ai file (PDF-based, no null bytes in header)"
+      }
+    ]
+  },
+  "expected": {
+    "behavior": "binary_file_skipped",
+    "output_contains": ["src/main.py"],
+    "output_not_contains": ["logo.ai"],
+    "exit_code": 0
+  },
+  "reproduction": {
+    "discovered_by": "pm_coach v0.1.0",
+    "source_repo": "https://github.com/psf/requests",
+    "original_file": "ext/requests-logo.ai",
+    "date": "2025-12-16"
+  }
+}

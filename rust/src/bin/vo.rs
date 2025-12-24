@@ -18,36 +18,44 @@ use clap::{Parser, ValueEnum};
 use pm_encoder::{self, EncoderConfig, LensManager, OutputFormat, parse_token_budget, apply_token_budget};
 use pm_encoder::core::{
     ContextEngine, ZoomConfig, ZoomTarget, ContextStore, DEFAULT_ALPHA, SkeletonMode,
-    SemanticDepth, DetailLevel,
+    SemanticDepth, DetailLevel, ObserversJournal,
+    IntelligentPresenter,
 };
 use pm_encoder::server::McpServer;
 use std::path::PathBuf;
+use std::collections::HashMap;
 
-/// 🔭 Fractal Telescope: Cognitive augmentation for code exploration.
+/// 🌌 Voyager Observatory: Navigate the code galaxy with ease.
 ///
-/// Serialize project files with intelligent analysis, auto-focus,
-/// and beautiful output. Works with any codebase size.
+/// An intuitive instrument for code exploration with semantic analysis,
+/// constellation mapping, and the Observer's Journal.
 #[derive(Parser, Debug)]
-#[command(name = "pm_encoder")]
+#[command(name = "vo")]
 #[command(version = pm_encoder::VERSION)]
-#[command(about = "🔭 Fractal Telescope: Cognitive augmentation for code exploration")]
+#[command(about = "🌌 Voyager Observatory: Navigate the code galaxy")]
 #[command(after_help = "EXAMPLES:
-  # Basic exploration (auto-focus applies smart defaults)
-  pm_encoder .
+  # Start exploring (auto-focus applies smart defaults)
+  vo .
 
-  # Explore business logic with intent-driven analysis
-  pm_encoder . --explore business-logic
+  # Explore business logic constellations
+  vo . --explore business-logic
 
-  # Architecture view with token budget
-  pm_encoder . --lens architecture --token-budget 100k
+  # Map the architecture nebulae
+  vo . --lens architecture --token-budget 100k
 
-  # Deep dive into a single file (microscope mode)
-  pm_encoder src/lib.rs
+  # Deep dive into a single star (microscope mode)
+  vo src/lib.rs
+
+  # Mark a star as important in your journal
+  vo --mark src/core/engine.rs
+
+  # View your exploration journal
+  vo --journal
 
   # Zoom into a specific function
-  pm_encoder . --zoom fn=calculate_total
+  vo . --zoom fn=calculate_total
 
-For more examples: https://github.com/alanbld/pm_encoder
+The code galaxy awaits. 🌌
 ")]
 struct Cli {
     // ═══════════════════════════════════════════════════════════════════════════
@@ -217,6 +225,22 @@ struct Cli {
     /// Show truncation statistics
     #[arg(long = "truncate-stats", help_heading = "⚙️ ADVANCED")]
     truncate_stats: bool,
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 📓 OBSERVER'S JOURNAL
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Mark a star (file) as important in your journal
+    #[arg(long = "mark", value_name = "PATH", help_heading = "📓 JOURNAL")]
+    mark: Option<String>,
+
+    /// View your exploration journal
+    #[arg(long = "journal", help_heading = "📓 JOURNAL")]
+    journal: bool,
+
+    /// Clear the journal (start fresh)
+    #[arg(long = "journal-clear", help_heading = "📓 JOURNAL")]
+    journal_clear: bool,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // 🚀 SPECIAL MODES
@@ -513,7 +537,91 @@ fn print_context_health(output: &str, file_count: usize) {
     eprintln!("======================");
 }
 
-fn main() {
+/// Print Voyager Mission Log to stderr
+///
+/// The immersive narrative summary showing:
+/// - Observatory pointing at project
+/// - Two hemispheres detected (top languages)
+/// - Spectral filter (lens) applied
+/// - Fuel gauge (token usage)
+/// - Points of interest
+/// - Transmission status
+fn print_mission_log(
+    project_name: &str,
+    output: &str,
+    lens: Option<&str>,
+    token_budget: Option<usize>,
+    file_count: usize,
+) {
+    let presenter = IntelligentPresenter::new();
+
+    // Detect languages from output (count file extensions)
+    let mut lang_counts: HashMap<String, usize> = HashMap::new();
+    for line in output.lines() {
+        // Match both formats:
+        // "++++++++++ path/file.rs ++++++++++" (standard)
+        // "++++++++++ file.rs checksum file.rs ----------" (with metadata)
+        if line.starts_with("++++++++++ ") {
+            // Extract file path from marker (first token after +++++++++)
+            let rest = line.trim_start_matches("++++++++++ ");
+            let path = rest.split_whitespace().next().unwrap_or("");
+            if let Some(ext) = std::path::Path::new(path).extension() {
+                let ext_str = ext.to_string_lossy().to_lowercase();
+                let lang = match ext_str.as_str() {
+                    "rs" => "rust",
+                    "py" | "pyw" => "python",
+                    "ts" | "tsx" => "typescript",
+                    "js" | "jsx" => "javascript",
+                    "sh" | "bash" => "shell",
+                    "go" => "go",
+                    "java" => "java",
+                    "c" | "cpp" | "h" | "hpp" => "c",
+                    "sql" => "sql",
+                    "json" | "yaml" | "yml" | "toml" => "config",
+                    "md" => "markdown",
+                    _ => "other",
+                };
+                *lang_counts.entry(lang.to_string()).or_insert(0) += 1;
+            }
+        }
+    }
+
+    // Convert to sorted vec
+    let mut languages: Vec<_> = lang_counts.into_iter().collect();
+    languages.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Detect hemispheres
+    let hemispheres = IntelligentPresenter::detect_hemispheres(&languages);
+
+    // Calculate token usage
+    let tokens_used = output.len() / 4; // Rough estimate
+    let budget = token_budget.unwrap_or(tokens_used);
+
+    // Determine lens confidence (default high if lens was applied)
+    let confidence = if lens.is_some() { 0.85 } else { 0.7 };
+
+    // Identify dominant cluster (simplified - just use file count)
+    let poi_count = file_count.min(20); // Cap at 20 POI for display
+
+    // Print the mission log
+    let log = presenter.format_mission_log(
+        project_name,
+        (hemispheres.0.as_str(), hemispheres.1.as_deref()),
+        lens.unwrap_or("auto"),
+        confidence,
+        tokens_used,
+        budget,
+        poi_count,
+        Some("primary constellation"),
+    );
+
+    eprintln!();
+    eprint!("{}", log);
+}
+
+/// Main entry point for the Voyager Observatory CLI.
+/// This is public so it can be called from the pm_encoder compatibility wrapper.
+pub fn run() {
     // Fix broken pipe panic when piping to head/tail/etc.
     // Reset SIGPIPE to default behavior (terminate quietly)
     #[cfg(unix)]
@@ -543,6 +651,67 @@ fn main() {
         if let Err(e) = server.run() {
             eprintln!("MCP server error: {}", e);
             std::process::exit(1);
+        }
+        return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 📓 OBSERVER'S JOURNAL COMMANDS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Handle --journal (view exploration history)
+    if cli.journal {
+        let journal_root = cli.project_root.clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+        let journal = ObserversJournal::load(&journal_root);
+        print!("{}", journal.display());
+        return;
+    }
+
+    // Handle --journal-clear (reset journal)
+    if cli.journal_clear {
+        let journal_root = cli.project_root.clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+        let journal = ObserversJournal::new();
+        match journal.save(&journal_root) {
+            Ok(_) => {
+                eprintln!("📓 Journal cleared. A new chapter begins.");
+                eprintln!("   Path: {}", ObserversJournal::default_path(&journal_root).display());
+            }
+            Err(e) => {
+                eprintln!("Error clearing journal: {}", e);
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    // Handle --mark PATH (mark a star as important)
+    if let Some(path_to_mark) = &cli.mark {
+        let journal_root = cli.project_root.clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+        let mut journal = ObserversJournal::load(&journal_root);
+
+        // Default utility of 0.9 for manually marked stars (bright by default)
+        const MARK_DEFAULT_UTILITY: f64 = 0.9;
+        journal.mark_star(path_to_mark, MARK_DEFAULT_UTILITY);
+
+        match journal.save(&journal_root) {
+            Ok(_) => {
+                eprintln!("⭐ Marked star: {}", path_to_mark);
+                eprintln!("   Utility: {:.0}% (bright)", MARK_DEFAULT_UTILITY * 100.0);
+
+                // Show current bright stars count
+                let bright_count = journal.all_bright_stars().len();
+                eprintln!("   Total bright stars: {}", bright_count);
+            }
+            Err(e) => {
+                eprintln!("Error saving journal: {}", e);
+                std::process::exit(1);
+            }
         }
         return;
     }
@@ -1319,6 +1488,20 @@ fn main() {
         if cli.health {
             print_context_health(&output, entries.len());
         }
+
+        // Print Voyager Mission Log (to stderr)
+        let project_name = project_root.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("project");
+        let token_budget_parsed = cli.token_budget.as_ref()
+            .and_then(|b| parse_token_budget(b).ok());
+        print_mission_log(
+            project_name,
+            &output,
+            cli.lens.as_deref(),
+            token_budget_parsed,
+            entries.len(),
+        );
         return;
     }
 
@@ -1332,8 +1515,8 @@ fn main() {
             }
 
             // Batch mode: write to file or stdout
-            if let Some(output_path) = cli.output {
-                match std::fs::write(&output_path, &output) {
+            if let Some(ref output_path) = cli.output {
+                match std::fs::write(output_path, &output) {
                     Ok(_) => {
                         eprintln!("Output written to: {}", output_path.display());
                     }
@@ -1352,10 +1535,31 @@ fn main() {
                 let file_count = output.matches("++++++++++ ").count();
                 print_context_health(&output, file_count);
             }
+
+            // Print Voyager Mission Log (to stderr)
+            let project_name = project_root.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("project");
+            let file_count = output.matches("++++++++++ ").count();
+            let token_budget_parsed = cli.token_budget.as_ref()
+                .and_then(|b| parse_token_budget(b).ok());
+            print_mission_log(
+                project_name,
+                &output,
+                cli.lens.as_deref(),
+                token_budget_parsed,
+                file_count,
+            );
         }
         Err(e) => {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
     }
+}
+
+/// Binary entry point - delegates to run().
+#[allow(dead_code)]  // Used as entry point for vo binary, but appears unused when included as module
+fn main() {
+    run();
 }

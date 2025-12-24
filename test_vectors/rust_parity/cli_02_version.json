@@ -9,15 +9,16 @@
   },
   "expected": {
     "exit_code": 0,
-    "stdout_regex": "pm_encoder \\d+\\.\\d+\\.\\d+",
-    "stdout_contains": [
-      "pm_encoder"
+    "stdout_regex": "(pm_encoder|vo) \\d+\\.\\d+\\.\\d+",
+    "stdout_contains_any": [
+      "pm_encoder",
+      "vo"
     ],
     "stderr": "",
-    "reference_output": "pm_encoder 1.5.0"
+    "reference_output": "vo 1.0.0"
   },
   "validation_mode": "regex",
-  "notes": "Version format must be 'pm_encoder X.Y.Z'",
+  "notes": "Version format: 'pm_encoder X.Y.Z' or 'vo X.Y.Z' (Voyager Observatory)",
   "python_validated": true,
-  "rust_status": "pending"
+  "rust_status": "passing"
 }

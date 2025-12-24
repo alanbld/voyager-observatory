@@ -42,6 +42,12 @@ pub use core::{
     // SmartWalker with boundary intelligence
     SmartWalker, SmartWalkConfig, WalkEntry,
     ProjectManifest, ProjectType,
+    // Celestial Navigation (Spectral Synthesis)
+    NebulaNamer, NebulaName, NamingStrategy,
+    ConstellationMapper, Nebula, CelestialMap, Star, FileInfo,
+    NavigationCompass, NavigationSuggestion, ExplorationHint, SuggestionAction,
+    // Voyager Observatory Presenter
+    IntelligentPresenter, EmojiFormatter, Theme,
 };
 
 /// A file entry with its content and metadata
@@ -3997,6 +4003,7 @@ This is the last section.
             truncated: false,
             original_tokens: None,
             compression_level: CompressionLevel::Full,
+            utility: None,
         };
 
         assert_eq!(pf.path, "test.py");
