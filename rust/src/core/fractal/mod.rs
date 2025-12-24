@@ -46,6 +46,7 @@ pub mod navigation;
 pub mod relationships;
 pub mod clustering;
 pub mod intent;
+pub mod semantic;
 
 // Re-export commonly used types
 pub use layers::{
@@ -174,6 +175,36 @@ pub use intent::{
     IntentExplorer,
     ExplorerConfig,
     ExplorationResult,
+};
+
+pub use semantic::{
+    // Unified Substrate
+    UnifiedSemanticSubstrate,
+    UnifiedConcept,
+    ConceptId,
+    UniversalConceptType,
+    LanguageSpecificData,
+    UnifiedProperties,
+    // Cross-Language Alignment
+    CrossLanguageAligner,
+    CrossLanguageEquivalent,
+    CrossLanguageRelationship,
+    EquivalenceClass,
+    // Normalization
+    FeatureNormalizer,
+    NormalizationStrategy,
+    LanguageNormalizationConfig,
+    // Multi-Language Project
+    MultiLanguageProject,
+    MultiLanguageExplorer,
+    MultiLanguageExplorationResult,
+    CrossLanguageExplorationStep,
+    CrossLanguageInsight,
+    LanguageBreakdown,
+    ProjectLanguageStats,
+    // Language & Context
+    Language,
+    UserContext,
 };
 
 #[cfg(test)]
