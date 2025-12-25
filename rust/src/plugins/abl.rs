@@ -32,8 +32,7 @@
 
 use std::collections::HashMap;
 
-use regex::Regex;
-
+use crate::core::regex_engine::{CompiledRegex, global_engine};
 use crate::core::fractal::{
     ExtractedSymbol, Import, Range, SymbolKind, Parameter, ConceptType, Visibility,
 };
@@ -106,74 +105,101 @@ impl AblDefineType {
 /// Plugin for analyzing ABL (OpenEdge Progress 4GL) source files.
 pub struct AblPlugin {
     /// Pattern for PROCEDURE declarations
-    procedure_pattern: Regex,
+    procedure_pattern: CompiledRegex,
     /// Pattern for FUNCTION declarations
-    function_pattern: Regex,
+    function_pattern: CompiledRegex,
     /// Pattern for DEFINE statements
-    define_pattern: Regex,
+    define_pattern: CompiledRegex,
     /// Pattern for FOR EACH blocks
-    for_each_pattern: Regex,
+    for_each_pattern: CompiledRegex,
     /// Pattern for RUN statements
-    run_pattern: Regex,
+    run_pattern: CompiledRegex,
     /// Pattern for {include} directives
-    include_pattern: Regex,
+    include_pattern: CompiledRegex,
     /// Pattern for CLASS declarations
-    class_pattern: Regex,
+    class_pattern: CompiledRegex,
     /// Pattern for METHOD declarations
-    method_pattern: Regex,
+    method_pattern: CompiledRegex,
     /// Pattern for TRIGGER declarations
-    trigger_pattern: Regex,
+    trigger_pattern: CompiledRegex,
+    /// Pattern for parameter extraction (cached)
+    param_pattern: CompiledRegex,
+    /// Patterns for block end detection (cached)
+    end_procedure_pattern: CompiledRegex,
+    end_function_pattern: CompiledRegex,
+    end_method_pattern: CompiledRegex,
+    end_class_pattern: CompiledRegex,
 }
 
 impl AblPlugin {
     pub fn new() -> Self {
+        let engine = global_engine();
         Self {
             // PROCEDURE name [PERSISTENT|EXTERNAL]:
-            procedure_pattern: Regex::new(
+            procedure_pattern: engine.compile(
                 r"(?mi)^\s*PROCEDURE\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*(?:(EXTERNAL|PERSISTENT))?\s*:"
-            ).unwrap(),
+            ).expect("Invalid ABL procedure pattern"),
 
             // FUNCTION name RETURNS type [FORWARD]:
-            function_pattern: Regex::new(
+            function_pattern: engine.compile(
                 r"(?mi)^\s*FUNCTION\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s+RETURNS\s+(\w+(?:\s+EXTENT)?)"
-            ).unwrap(),
+            ).expect("Invalid ABL function pattern"),
 
             // DEFINE [NEW [SHARED]] [PRIVATE|PROTECTED|PUBLIC] [STATIC]
             //        INPUT|OUTPUT|INPUT-OUTPUT|RETURN PARAMETER |
             //        TEMP-TABLE | BUFFER | VARIABLE | STREAM | etc.
-            define_pattern: Regex::new(
+            define_pattern: engine.compile(
                 r"(?mi)^\s*DEFINE\s+(?:(?:NEW\s+)?SHARED\s+)?(?:PRIVATE\s+|PROTECTED\s+|PUBLIC\s+)?(?:STATIC\s+)?(?:(INPUT|OUTPUT|INPUT-OUTPUT|RETURN)\s+)?(?:PARAMETER\s+)?(TEMP-TABLE|BUFFER|VARIABLE|STREAM|WORK-TABLE|DATASET|DATA-SOURCE|QUERY|FRAME|EVENT|PROPERTY)\s+([a-zA-Z_][a-zA-Z0-9_-]*)"
-            ).unwrap(),
+            ).expect("Invalid ABL define pattern"),
 
             // FOR EACH table [WHERE ...]:
-            for_each_pattern: Regex::new(
+            for_each_pattern: engine.compile(
                 r"(?mi)\bFOR\s+(?:FIRST|LAST|EACH)\s+([a-zA-Z_][a-zA-Z0-9_-]*)"
-            ).unwrap(),
+            ).expect("Invalid ABL for-each pattern"),
 
             // RUN procedure [PERSISTENT|ON SERVER ...]:
-            run_pattern: Regex::new(
+            run_pattern: engine.compile(
                 r"(?mi)\bRUN\s+([a-zA-Z_][a-zA-Z0-9_.-]*(?:\.p|\.w)?)"
-            ).unwrap(),
+            ).expect("Invalid ABL run pattern"),
 
             // {include-file.i} or {include-file.i param}
-            include_pattern: Regex::new(
+            include_pattern: engine.compile(
                 r"\{([^}]+\.i)(?:\s+[^}]*)?\}"
-            ).unwrap(),
+            ).expect("Invalid ABL include pattern"),
 
             // CLASS namespace.ClassName [INHERITS parent] [IMPLEMENTS interfaces]:
-            class_pattern: Regex::new(
+            class_pattern: engine.compile(
                 r"(?mi)^\s*CLASS\s+([\w.]+)\s*(?:INHERITS\s+([\w.]+))?"
-            ).unwrap(),
+            ).expect("Invalid ABL class pattern"),
 
             // METHOD [PRIVATE|PROTECTED|PUBLIC] [STATIC] [OVERRIDE] type name:
-            method_pattern: Regex::new(
+            method_pattern: engine.compile(
                 r"(?mi)^\s*METHOD\s+(?:PRIVATE\s+|PROTECTED\s+|PUBLIC\s+)?(?:STATIC\s+)?(?:OVERRIDE\s+)?(\w+)\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*\("
-            ).unwrap(),
+            ).expect("Invalid ABL method pattern"),
 
             // ON event OF table [trigger]:
-            trigger_pattern: Regex::new(
+            trigger_pattern: engine.compile(
                 r"(?mi)^\s*ON\s+(WRITE|CREATE|DELETE|FIND|ASSIGN)\s+OF\s+([a-zA-Z_][a-zA-Z0-9_-]*)"
-            ).unwrap(),
+            ).expect("Invalid ABL trigger pattern"),
+
+            // DEFINE INPUT|OUTPUT|INPUT-OUTPUT PARAMETER name AS type (cached for performance)
+            param_pattern: engine.compile(
+                r"(?mi)DEFINE\s+(INPUT|OUTPUT|INPUT-OUTPUT)\s+PARAMETER\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s+AS\s+(\w+)"
+            ).expect("Invalid ABL param pattern"),
+
+            // Block end patterns (cached for performance - previously compiled inline)
+            end_procedure_pattern: engine.compile(
+                r"(?mi)^\s*END\s+PROCEDURE\s*\."
+            ).expect("Invalid ABL end procedure pattern"),
+            end_function_pattern: engine.compile(
+                r"(?mi)^\s*END\s+FUNCTION\s*\."
+            ).expect("Invalid ABL end function pattern"),
+            end_method_pattern: engine.compile(
+                r"(?mi)^\s*END\s+METHOD\s*\."
+            ).expect("Invalid ABL end method pattern"),
+            end_class_pattern: engine.compile(
+                r"(?mi)^\s*END\s+CLASS\s*\."
+            ).expect("Invalid ABL end class pattern"),
         }
     }
 
@@ -227,12 +253,8 @@ impl AblPlugin {
         let block = &content[proc_start..proc_end.min(content.len())];
         let mut params = Vec::new();
 
-        // Match DEFINE INPUT|OUTPUT|INPUT-OUTPUT PARAMETER name AS type
-        let param_re = Regex::new(
-            r"(?mi)DEFINE\s+(INPUT|OUTPUT|INPUT-OUTPUT)\s+PARAMETER\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s+AS\s+(\w+)"
-        ).unwrap();
-
-        for cap in param_re.captures_iter(block) {
+        // Use cached pattern instead of compiling on each call
+        for cap in self.param_pattern.captures_iter(block) {
             params.push(Parameter {
                 name: cap[2].to_string(),
                 type_hint: Some(format!("{} {}", &cap[1], &cap[3])),
@@ -246,11 +268,12 @@ impl AblPlugin {
     /// Find the end of a procedure/function block.
     fn find_block_end(&self, content: &str, start: usize, block_type: &str) -> usize {
         let search = &content[start..];
+        // Use cached patterns instead of compiling on each call
         let end_pattern = match block_type {
-            "PROCEDURE" => Regex::new(r"(?mi)^\s*END\s+PROCEDURE\s*\.").unwrap(),
-            "FUNCTION" => Regex::new(r"(?mi)^\s*END\s+FUNCTION\s*\.").unwrap(),
-            "METHOD" => Regex::new(r"(?mi)^\s*END\s+METHOD\s*\.").unwrap(),
-            "CLASS" => Regex::new(r"(?mi)^\s*END\s+CLASS\s*\.").unwrap(),
+            "PROCEDURE" => &self.end_procedure_pattern,
+            "FUNCTION" => &self.end_function_pattern,
+            "METHOD" => &self.end_method_pattern,
+            "CLASS" => &self.end_class_pattern,
             _ => return start + 100, // Default heuristic
         };
 

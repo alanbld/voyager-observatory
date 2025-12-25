@@ -9,8 +9,7 @@
 
 use std::collections::HashMap;
 
-use regex::Regex;
-
+use crate::core::regex_engine::{CompiledRegex, global_engine};
 use crate::core::fractal::{ExtractedSymbol, Import, Range, SymbolKind, Visibility};
 
 use super::{FileInfo, LanguagePlugin, PluginResult};
@@ -65,52 +64,53 @@ impl ShellDialect {
 #[allow(dead_code)]
 pub struct ShellPlugin {
     /// Pattern for function declarations: `name() {` or `function name {`
-    function_pattern: Regex,
+    function_pattern: CompiledRegex,
     /// Pattern for variables: `NAME=value`
-    variable_pattern: Regex,
+    variable_pattern: CompiledRegex,
     /// Pattern for exports: `export NAME=value`
-    export_pattern: Regex,
+    export_pattern: CompiledRegex,
     /// Pattern for source/dot commands: `source file` or `. file`
-    source_pattern: Regex,
+    source_pattern: CompiledRegex,
     /// Pattern for shebang: `#!/bin/bash`
-    shebang_pattern: Regex,
+    shebang_pattern: CompiledRegex,
     /// Pattern for local variables: `local NAME=value`
-    local_pattern: Regex,
+    local_pattern: CompiledRegex,
     /// Pattern for readonly variables: `readonly NAME=value`
-    readonly_pattern: Regex,
+    readonly_pattern: CompiledRegex,
 }
 
 impl ShellPlugin {
     pub fn new() -> Self {
+        let engine = global_engine();
         Self {
             // Function: name() { or function name or function name()
-            function_pattern: Regex::new(
+            function_pattern: engine.compile(
                 r"(?m)^[ \t]*(?:function\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*\)\s*\{|^[ \t]*function\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\s*\(\s*\))?\s*\{"
-            ).unwrap(),
+            ).expect("Invalid shell function pattern"),
             // Variable assignment: NAME=value (not local, not export)
-            variable_pattern: Regex::new(
+            variable_pattern: engine.compile(
                 r"(?m)^[ \t]*([A-Z_][A-Z0-9_]*)=(.*)$"
-            ).unwrap(),
+            ).expect("Invalid shell variable pattern"),
             // Export: export NAME=value or export NAME
-            export_pattern: Regex::new(
+            export_pattern: engine.compile(
                 r"(?m)^[ \t]*export\s+([A-Z_][A-Z0-9_]*)(?:=(.*))?$"
-            ).unwrap(),
+            ).expect("Invalid shell export pattern"),
             // Source command: source file or . file
-            source_pattern: Regex::new(
+            source_pattern: engine.compile(
                 r#"(?m)^[ \t]*(?:source|\.)\s+["']?([^"'\s]+)["']?"#
-            ).unwrap(),
+            ).expect("Invalid shell source pattern"),
             // Shebang: #!/bin/bash or #!/usr/bin/env bash
-            shebang_pattern: Regex::new(
+            shebang_pattern: engine.compile(
                 r"^#!\s*(?:/usr/bin/env\s+)?(?:/(?:usr/)?(?:local/)?bin/)?(\w+)"
-            ).unwrap(),
+            ).expect("Invalid shell shebang pattern"),
             // Local variable: local NAME=value
-            local_pattern: Regex::new(
+            local_pattern: engine.compile(
                 r"(?m)^[ \t]*local\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:=(.*))?$"
-            ).unwrap(),
+            ).expect("Invalid shell local pattern"),
             // Readonly: readonly NAME=value
-            readonly_pattern: Regex::new(
+            readonly_pattern: engine.compile(
                 r"(?m)^[ \t]*readonly\s+([A-Z_][A-Z0-9_]*)(?:=(.*))?$"
-            ).unwrap(),
+            ).expect("Invalid shell readonly pattern"),
         }
     }
 

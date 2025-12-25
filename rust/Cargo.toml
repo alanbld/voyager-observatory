@@ -97,6 +97,11 @@ mockall = "0.12"
 tempfile = "3.10"
 assert_cmd = "2.0"
 predicates = "3.1"
+criterion = "0.5"
+
+[[bench]]
+name = "regex_engine"
+harness = false
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tarpaulin)'] }

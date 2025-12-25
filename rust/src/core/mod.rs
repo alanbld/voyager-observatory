@@ -16,6 +16,7 @@
 //! - `syntax`: Tree-sitter based AST parsing (Phase 1A)
 //! - `plugin`: Plugin ecosystem reservation (Phase 2)
 //! - `ast_bridge`: Bridge to voyager-ast structural optics
+//! - `metrics`: AST-based code metrics collection (Phase 3 foundation)
 
 pub mod models;
 pub mod error;
@@ -34,6 +35,8 @@ pub mod celestial;
 pub mod syntax;
 pub mod plugin;
 pub mod ast_bridge;
+pub mod metrics;
+pub mod regex_engine;
 
 // Re-export commonly used types
 pub use models::{FileEntry, EncoderConfig, ProcessedFile, OutputFormat, Config, SkeletonMode, CompressionLevel};
@@ -94,4 +97,10 @@ pub use syntax::{
 // voyager-ast integration (Structural Optics)
 pub use ast_bridge::{
     AstBridge, Star as AstStar, StarKind, FileSummary, StarSummary,
+};
+
+// Phase 0 Hardening: Centralized Regex Engine
+pub use regex_engine::{
+    RegexEngine, CompiledRegex, RegexError, MatchRange, MatchResult,
+    PatternSet, compile, is_match, find_all, replace_all, global_engine,
 };
