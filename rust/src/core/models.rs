@@ -159,6 +159,8 @@ pub struct EncoderConfig {
     pub skeleton_mode: SkeletonMode,
     /// Metadata display mode for file headers (Chronos v2.3)
     pub metadata_mode: MetadataMode,
+    /// Follow symbolic links (default: false, skip broken symlinks silently)
+    pub follow_symlinks: bool,
 }
 
 /// Skeleton mode configuration
@@ -252,6 +254,7 @@ impl Default for EncoderConfig {
             token_budget: None,
             skeleton_mode: SkeletonMode::Auto,
             metadata_mode: MetadataMode::Auto,
+            follow_symlinks: false,
         }
     }
 }

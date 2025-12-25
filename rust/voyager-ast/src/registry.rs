@@ -3,7 +3,9 @@
 //! The registry manages all language adapters and provides a unified interface
 //! for parsing files across languages.
 
-use crate::adapters::{LanguageAdapter, RustTreeSitterAdapter};
+use crate::adapters::{
+    LanguageAdapter, PythonTreeSitterAdapter, RustTreeSitterAdapter, TypeScriptTreeSitterAdapter,
+};
 use crate::error::{AstError, Result};
 use crate::ir::{File, LanguageId, Span, UnknownNode};
 use crate::provider::{
@@ -26,12 +28,14 @@ impl AdapterRegistry {
             adapters: BTreeMap::new(),
         };
 
-        // Register built-in adapters
+        // Register built-in adapters - Core Fleet (Phase 1B)
         registry.register(Box::new(RustTreeSitterAdapter::new()));
-
-        // TODO: Add more adapters as they are implemented
-        // registry.register(Box::new(PythonTreeSitterAdapter::new()));
-        // registry.register(Box::new(TypeScriptTreeSitterAdapter::new()));
+        registry.register(Box::new(PythonTreeSitterAdapter::new()));
+        registry.register(Box::new(TypeScriptTreeSitterAdapter::new()));      // .ts, .mts, .cts
+        registry.register(Box::new(TypeScriptTreeSitterAdapter::tsx()));       // .tsx
+        registry.register(Box::new(TypeScriptTreeSitterAdapter::javascript())); // .js, .mjs, .cjs
+        // Note: JSX (.jsx) uses same JavaScript grammar but with different LanguageId
+        // For now, JSX files will use JavaScript adapter
 
         registry
     }
@@ -310,9 +314,14 @@ impl AstProvider for TreeSitterProvider {
     }
 
     fn supported_languages(&self) -> &[LanguageId] {
-        // Return a static slice for now
-        // In a more complete implementation, this would be dynamic
-        static LANGUAGES: &[LanguageId] = &[LanguageId::Rust];
+        // Core Fleet (Phase 1B): Rust, Python, TypeScript, TSX, JavaScript
+        static LANGUAGES: &[LanguageId] = &[
+            LanguageId::Rust,
+            LanguageId::Python,
+            LanguageId::TypeScript,
+            LanguageId::Tsx,
+            LanguageId::JavaScript,
+        ];
         LANGUAGES
     }
 }
@@ -446,12 +455,17 @@ mod tests {
     #[test]
     fn test_registry_creation() {
         let registry = AdapterRegistry::new();
+        // Core Fleet (Phase 1B)
         assert!(registry.supports(LanguageId::Rust));
+        assert!(registry.supports(LanguageId::Python));
+        assert!(registry.supports(LanguageId::TypeScript));
+        assert!(registry.supports(LanguageId::Tsx));
+        assert!(registry.supports(LanguageId::JavaScript));
         assert!(!registry.supports(LanguageId::Unknown));
     }
 
     #[test]
-    fn test_provider_parse() {
+    fn test_provider_parse_rust() {
         let provider = TreeSitterProvider::new();
         let source = r#"
 pub fn hello() {
@@ -461,6 +475,69 @@ pub fn hello() {
         let file = provider.parse_file(source, LanguageId::Rust).unwrap();
         assert_eq!(file.declarations.len(), 1);
         assert_eq!(file.declarations[0].name, "hello");
+    }
+
+    #[test]
+    fn test_provider_parse_python() {
+        let provider = TreeSitterProvider::new();
+        let source = r#"
+def greet(name):
+    """Say hello to someone."""
+    print(f"Hello, {name}!")
+
+class Greeter:
+    def __init__(self, default_name):
+        self.default_name = default_name
+"#;
+        let file = provider.parse_file(source, LanguageId::Python).unwrap();
+        assert_eq!(file.declarations.len(), 2, "Expected 2 declarations (function + class)");
+        assert_eq!(file.declarations[0].name, "greet");
+        assert_eq!(file.declarations[1].name, "Greeter");
+    }
+
+    #[test]
+    fn test_provider_parse_typescript() {
+        let provider = TreeSitterProvider::new();
+        let source = r#"
+interface User {
+    name: string;
+    age: number;
+}
+
+function createUser(name: string, age: number): User {
+    return { name, age };
+}
+
+class UserManager {
+    private users: User[] = [];
+
+    addUser(user: User): void {
+        this.users.push(user);
+    }
+}
+"#;
+        let file = provider.parse_file(source, LanguageId::TypeScript).unwrap();
+        assert!(file.declarations.len() >= 3, "Expected at least 3 declarations (interface + function + class)");
+    }
+
+    #[test]
+    fn test_provider_parse_javascript() {
+        let provider = TreeSitterProvider::new();
+        let source = r#"
+function add(a, b) {
+    return a + b;
+}
+
+const multiply = (a, b) => a * b;
+
+class Calculator {
+    constructor() {
+        this.result = 0;
+    }
+}
+"#;
+        let file = provider.parse_file(source, LanguageId::JavaScript).unwrap();
+        assert!(file.declarations.len() >= 2, "Expected at least 2 declarations");
     }
 
     #[test]

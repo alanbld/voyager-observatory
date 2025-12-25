@@ -210,6 +210,10 @@ struct Cli {
     #[arg(long = "stream", help_heading = "⚙️ ADVANCED")]
     stream: bool,
 
+    /// Follow symbolic links (default: skip broken symlinks silently)
+    #[arg(long = "follow-symlinks", help_heading = "⚙️ ADVANCED")]
+    follow_symlinks: bool,
+
     /// Metadata mode [auto, all, none, size-only]
     #[arg(short = 'm', long = "metadata", value_enum, default_value = "auto", help_heading = "⚙️ ADVANCED")]
     metadata: CliMetadataMode,
@@ -869,6 +873,7 @@ pub fn run() {
     };
 
     config.stream = cli.stream;
+    config.follow_symlinks = cli.follow_symlinks;
 
     // Apply truncation settings
     config.truncate_lines = cli.truncate;
@@ -1256,6 +1261,7 @@ pub fn run() {
             token_budget: config.token_budget,
             skeleton_mode: config.skeleton_mode,
             metadata_mode: config.metadata_mode,
+            follow_symlinks: config.follow_symlinks,
         });
 
         match engine.zoom(project_root.to_str().unwrap(), &zoom_config) {

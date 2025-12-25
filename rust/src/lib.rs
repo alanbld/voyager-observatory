@@ -149,6 +149,8 @@ pub struct EncoderConfig {
     pub skeleton_mode: SkeletonMode,
     /// Metadata display mode: 'auto', 'all', 'none', 'size-only' (v2.3.0 Chronos)
     pub metadata_mode: MetadataMode,
+    /// Follow symbolic links (default: false, skip broken symlinks silently)
+    pub follow_symlinks: bool,
 }
 
 impl Default for EncoderConfig {
@@ -180,6 +182,7 @@ impl Default for EncoderConfig {
             token_budget: None, // No budget by default
             skeleton_mode: SkeletonMode::Auto, // Auto-enable if budget is set
             metadata_mode: MetadataMode::Auto, // Smart metadata display (v2.3.0)
+            follow_symlinks: false, // Skip broken symlinks silently by default
         }
     }
 }
@@ -925,8 +928,18 @@ pub fn walk_directory_iter(
             let entry = match result {
                 Ok(e) => e,
                 Err(e) => {
-                    // Skip entries we can't read (permission denied, etc.)
-                    eprintln!("Warning: {}", e);
+                    // Check if this is a broken symlink (silently skip)
+                    let error_str = e.to_string();
+                    let is_not_found = error_str.contains("No such file or directory")
+                        || error_str.contains("cannot access")
+                        || e.io_error().map_or(false, |io| {
+                            io.kind() == std::io::ErrorKind::NotFound
+                        });
+
+                    // Only warn about real errors (not broken symlinks)
+                    if !is_not_found {
+                        eprintln!("Warning: {}", e);
+                    }
                     return None;
                 }
             };
@@ -2692,6 +2705,7 @@ impl Config {
             token_budget: Some(100_000),
             skeleton_mode: SkeletonMode::Auto,
             metadata_mode: MetadataMode::Auto,
+            follow_symlinks: false,
         };
 
         assert_eq!(config.truncate_lines, 500);

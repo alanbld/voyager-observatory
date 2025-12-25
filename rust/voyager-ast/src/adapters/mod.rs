@@ -2,16 +2,26 @@
 //!
 //! Each language requires an adapter that translates Tree-sitter parse trees
 //! into our language-agnostic IR. Adapters implement the `LanguageAdapter` trait.
+//!
+//! # Core Fleet (Phase 1B)
+//!
+//! - **Rust**: Full support for functions, structs, enums, traits, impl blocks
+//! - **Python**: Functions (def/async), classes, imports, decorators, docstrings
+//! - **TypeScript/JavaScript**: Functions, classes, interfaces, types, imports/exports
 
 pub mod rust_adapter;
+pub mod python_adapter;
+pub mod typescript_adapter;
 
 use crate::error::Result;
 use crate::ir::{
     Block, Comment, Declaration, ImportLike, LanguageId, Span, UnknownNode, Visibility,
 };
 
-// Re-export the Rust adapter
+// Re-export all adapters
 pub use rust_adapter::RustTreeSitterAdapter;
+pub use python_adapter::PythonTreeSitterAdapter;
+pub use typescript_adapter::TypeScriptTreeSitterAdapter;
 
 /// Trait for language-specific adapters
 ///

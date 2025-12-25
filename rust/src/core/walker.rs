@@ -474,8 +474,22 @@ impl SmartWalker {
                     }
                 }
                 Err(e) => {
-                    // Log but don't fail on permission errors, etc.
-                    eprintln!("[WARN] Walk error: {}", e);
+                    // Check if this is a broken symlink error (silently skip when not following symlinks)
+                    // The error message typically contains "No such file or directory"
+                    // or the IO error kind is NotFound
+                    let error_str = e.to_string();
+                    let is_not_found = error_str.contains("No such file or directory")
+                        || error_str.contains("cannot access")
+                        || e.io_error().map_or(false, |io| {
+                            io.kind() == std::io::ErrorKind::NotFound
+                        });
+
+                    // When not following symlinks, silently skip broken symlinks
+                    // When following symlinks, report all errors including broken links
+                    if self.config.follow_symlinks || !is_not_found {
+                        eprintln!("[WARN] Walk error: {}", e);
+                    }
+                    // else: silently skip broken symlinks (default behavior)
                 }
             }
         }
@@ -937,5 +951,107 @@ mod tests {
         assert!(config.respect_gitignore);
         assert!(!config.include_hidden);
         assert_eq!(config.max_file_size, 1_048_576);
+    }
+
+    // ========================================================================
+    // Symlink Handling Tests
+    // ========================================================================
+
+    #[cfg(unix)]
+    #[test]
+    fn test_smart_walker_skips_broken_symlinks_silently() {
+        use std::os::unix::fs::symlink;
+
+        let tmp = TempDir::new().unwrap();
+
+        // Create a normal file
+        fs::create_dir_all(tmp.path().join("src")).unwrap();
+        fs::write(tmp.path().join("src/main.rs"), "fn main() {}").unwrap();
+
+        // Create a broken symlink (points to non-existent file)
+        let broken_link = tmp.path().join("broken_link");
+        symlink("/nonexistent/path/that/does/not/exist", &broken_link).unwrap();
+
+        // Verify the broken link exists as a symlink
+        assert!(broken_link.symlink_metadata().is_ok());
+        assert!(broken_link.read_link().is_ok());
+        assert!(!broken_link.exists()); // Target doesn't exist
+
+        // Walk should complete successfully without warnings for broken symlinks
+        let config = SmartWalkConfig {
+            follow_symlinks: false, // Default: skip broken symlinks silently
+            ..Default::default()
+        };
+        let walker = SmartWalker::with_config(tmp.path(), config);
+        let entries = walker.walk().unwrap();
+
+        // Should find the normal file
+        assert!(entries.iter().any(|e| e.relative_path.to_string_lossy().contains("main.rs")));
+
+        // Should not include the broken symlink (it's not a valid file)
+        assert!(!entries.iter().any(|e| e.relative_path.to_string_lossy().contains("broken_link")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_smart_walker_follows_valid_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let tmp = TempDir::new().unwrap();
+
+        // Create a normal file
+        fs::create_dir_all(tmp.path().join("src")).unwrap();
+        let target_file = tmp.path().join("src/target.txt");
+        fs::write(&target_file, "target content").unwrap();
+
+        // Create a valid symlink to the file
+        let valid_link = tmp.path().join("link_to_target.txt");
+        symlink(&target_file, &valid_link).unwrap();
+
+        // Verify the symlink is valid
+        assert!(valid_link.exists());
+
+        // Walk with follow_symlinks = true
+        let config = SmartWalkConfig {
+            follow_symlinks: true,
+            ..Default::default()
+        };
+        let walker = SmartWalker::with_config(tmp.path(), config);
+        let entries = walker.walk().unwrap();
+
+        // Should find both the target and the symlink
+        let paths: Vec<_> = entries.iter()
+            .map(|e| e.relative_path.to_string_lossy().to_string())
+            .collect();
+
+        assert!(paths.iter().any(|p| p.contains("target.txt")));
+        // Note: With follow_links enabled, the symlink may or may not appear
+        // depending on the ignore crate's behavior, but no error should occur
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_smart_walker_with_symlink_to_directory() {
+        use std::os::unix::fs::symlink;
+
+        let tmp = TempDir::new().unwrap();
+
+        // Create a directory with a file
+        fs::create_dir_all(tmp.path().join("real_dir")).unwrap();
+        fs::write(tmp.path().join("real_dir/file.txt"), "content").unwrap();
+
+        // Create a symlink to the directory
+        let dir_link = tmp.path().join("linked_dir");
+        symlink(tmp.path().join("real_dir"), &dir_link).unwrap();
+
+        // Walk should work without errors
+        let walker = SmartWalker::new(tmp.path());
+        let result = walker.walk();
+
+        assert!(result.is_ok());
+        let entries = result.unwrap();
+
+        // Should find the file in the real directory
+        assert!(entries.iter().any(|e| e.relative_path.to_string_lossy().contains("real_dir")));
     }
 }

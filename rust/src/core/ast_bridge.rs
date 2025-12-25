@@ -362,9 +362,39 @@ struct Point {
     #[test]
     fn test_unsupported_language() {
         let bridge = AstBridge::new();
-        // Python is not yet supported in voyager-ast (only Rust adapter exists)
-        let result = bridge.analyze_file("def foo(): pass", LanguageId::Python);
+        // Go is not yet supported in voyager-ast (Phase 1B Core Fleet: Rust, Python, TypeScript, JavaScript)
+        let result = bridge.analyze_file("package main\nfunc main() {}", LanguageId::Go);
         assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_python_analysis() {
+        let bridge = AstBridge::new();
+        // Python is supported (Phase 1B Core Fleet)
+        let result = bridge.analyze_file("def greet(name): pass\nclass User: pass", LanguageId::Python);
+        assert!(result.is_some());
+        let file = result.unwrap();
+        assert!(file.declarations.len() >= 2, "Expected at least function and class, got {}", file.declarations.len());
+    }
+
+    #[test]
+    fn test_typescript_analysis() {
+        let bridge = AstBridge::new();
+        // TypeScript is supported (Phase 1B Core Fleet)
+        let result = bridge.analyze_file("function greet(name: string): void {}\ninterface User { name: string; }", LanguageId::TypeScript);
+        assert!(result.is_some());
+        let file = result.unwrap();
+        assert!(file.declarations.len() >= 2, "Expected at least function and interface, got {}", file.declarations.len());
+    }
+
+    #[test]
+    fn test_javascript_analysis() {
+        let bridge = AstBridge::new();
+        // JavaScript is supported (Phase 1B Core Fleet)
+        let result = bridge.analyze_file("function greet(name) { return 'Hello ' + name; }\nclass Calculator {}", LanguageId::JavaScript);
+        assert!(result.is_some());
+        let file = result.unwrap();
+        assert!(file.declarations.len() >= 2, "Expected at least function and class, got {}", file.declarations.len());
     }
 
     #[test]

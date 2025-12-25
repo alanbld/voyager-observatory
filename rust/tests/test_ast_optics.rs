@@ -520,17 +520,14 @@ fn test_voyager_ast_graceful_fallback() {
 
     let bridge = AstBridge::new();
 
-    // Languages without adapters should return None, not panic
-    let result = bridge.analyze_file("def foo(): pass", LanguageId::Python);
+    // Go is not yet supported - should return None gracefully, not panic
+    let result = bridge.analyze_file("package main\nfunc main() {}", LanguageId::Go);
+    assert!(result.is_none(), "Go should not be supported yet");
 
-    // This is expected to return None for unsupported languages
-    // (unless Python adapter is implemented)
-    // The key is that it doesn't panic
-    if result.is_none() {
-        // Expected for languages without adapters - graceful fallback
-    } else {
-        // If it does return something, verify it has some structure
-        let file = result.unwrap();
-        assert!(!file.path.is_empty() || file.declarations.is_empty());
-    }
+    // Python is now supported (Phase 1B Core Fleet) - should return valid AST
+    let result = bridge.analyze_file("def foo(): pass", LanguageId::Python);
+    assert!(result.is_some(), "Python should be supported");
+    let file = result.unwrap();
+    assert!(!file.declarations.is_empty(), "Python should extract declarations");
+    assert!(file.declarations.iter().any(|d| d.name == "foo"), "Should extract 'foo' function");
 }
