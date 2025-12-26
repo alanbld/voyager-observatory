@@ -17,6 +17,7 @@ pub use emoji_formatter::{EmojiFormatter, Theme};
 pub use transparency::SemanticTransparency;
 
 use crate::core::orchestrator::DetailLevel;
+use crate::core::census::{GalaxyCensus, HealthRating, CensusMetrics};
 
 // =============================================================================
 // Intelligent Presenter
@@ -263,6 +264,342 @@ impl IntelligentPresenter {
         ));
 
         output
+    }
+
+    // =========================================================================
+    // Governance Report (Phase 1C: Celestial Census)
+    // =========================================================================
+
+    /// Format a Governance Report from the Celestial Census.
+    ///
+    /// This adds health indicators to the Mission Log using celestial terminology:
+    /// - ⭐ Healthy: Balanced star/nebula ratio
+    /// - ✅ Stable: Low dark matter, good structure
+    /// - ⚠️ High Dark Matter: Significant unparsed or complex regions
+    /// - 🔴 Critical: Red Giants detected (large files with issues)
+    pub fn format_governance_report(&self, galaxy: &GalaxyCensus) -> String {
+        let mut output = String::new();
+
+        // Header
+        output.push_str("\n");
+        output.push_str(&format!(
+            "{} Governance Report\n",
+            self.emoji_formatter.notable_star()
+        ));
+        output.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+        // Overall health rating
+        if let Some(rating) = &galaxy.rating {
+            output.push_str(&format!(
+                "{} Overall Health: {}\n",
+                self.format_health_indicator(rating),
+                rating.description()
+            ));
+        }
+
+        // Summary metrics
+        output.push_str("\n");
+        output.push_str(&format!(
+            "{} Stars (Logic): {} ({} functions, {} methods)\n",
+            self.emoji_formatter.notable_star(),
+            galaxy.totals.stars.count,
+            galaxy.totals.stars.functions,
+            galaxy.totals.stars.methods
+        ));
+        output.push_str(&format!(
+            "{} Nebulae (Docs): {} lines ({:.0}% coverage)\n",
+            self.emoji_formatter.gem(),
+            galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines,
+            galaxy.totals.derived.nebula_ratio * 100.0
+        ));
+        output.push_str(&format!(
+            "{} Dark Matter: {} regions ({} volcanic)\n",
+            self.format_dark_matter_indicator(&galaxy.totals),
+            galaxy.totals.dark_matter.unknown_regions,
+            galaxy.totals.dark_matter.volcanic_regions
+        ));
+
+        // Constellation breakdown (if detailed)
+        if matches!(self.detail_level, DetailLevel::Detailed | DetailLevel::Smart) {
+            output.push_str("\n");
+            output.push_str(&format!(
+                "{} Constellations ({}):\n",
+                self.emoji_formatter.view_emoji(),
+                galaxy.constellations.len()
+            ));
+
+            for (path, constellation) in &galaxy.constellations {
+                let indicator = if let Some(rating) = &constellation.rating {
+                    self.format_health_indicator(rating)
+                } else {
+                    "  ".to_string()
+                };
+
+                output.push_str(&format!(
+                    "  {} {}: {} stars, {} files\n",
+                    indicator,
+                    path,
+                    constellation.totals.stars.count,
+                    constellation.file_count
+                ));
+
+                // Show Red Giants (if any)
+                if !constellation.red_giants.is_empty() && matches!(self.detail_level, DetailLevel::Detailed) {
+                    for rg in &constellation.red_giants {
+                        output.push_str(&format!(
+                            "      {} Red Giant: {}\n",
+                            self.emoji_formatter.insight_emoji(),
+                            rg
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Recommendations
+        output.push_str("\n");
+        output.push_str(&format!(
+            "{} Recommendations:\n",
+            self.emoji_formatter.hint_emoji()
+        ));
+
+        // Generate recommendations based on metrics
+        let recommendations = self.generate_recommendations(galaxy);
+        for rec in recommendations.iter().take(3) {
+            output.push_str(&format!("  {} {}\n", self.emoji_formatter.bullet(), rec));
+        }
+
+        output
+    }
+
+    /// Format a health indicator emoji for a rating.
+    pub fn format_health_indicator(&self, rating: &HealthRating) -> String {
+        match rating {
+            HealthRating::Healthy => "⭐".to_string(),
+            HealthRating::Stable => "✅".to_string(),
+            HealthRating::HighDarkMatter => "⚠️".to_string(),
+            HealthRating::Critical => "🔴".to_string(),
+        }
+    }
+
+    /// Format dark matter indicator based on severity.
+    fn format_dark_matter_indicator(&self, metrics: &CensusMetrics) -> String {
+        if metrics.dark_matter.unknown_regions == 0 && metrics.dark_matter.volcanic_regions == 0 {
+            "✨".to_string()  // Clean
+        } else if metrics.derived.dark_matter_ratio < 0.05 {
+            "🌑".to_string()  // Minor dark matter
+        } else {
+            "⚫".to_string()  // Significant dark matter
+        }
+    }
+
+    /// Generate recommendations based on census metrics.
+    fn generate_recommendations(&self, galaxy: &GalaxyCensus) -> Vec<String> {
+        let mut recs = Vec::new();
+
+        // Check documentation coverage
+        if galaxy.totals.derived.nebula_ratio < 0.2 {
+            recs.push("Increase documentation coverage (currently below 20%)".to_string());
+        }
+
+        // Check for volcanic regions
+        if galaxy.totals.dark_matter.volcanic_regions > 5 {
+            recs.push(format!(
+                "Review {} volcanic regions (deep nesting > 4 levels)",
+                galaxy.totals.dark_matter.volcanic_regions
+            ));
+        }
+
+        // Check for unknown regions
+        if galaxy.totals.dark_matter.unknown_regions > 0 {
+            recs.push(format!(
+                "Investigate {} unparsed regions (possible syntax issues)",
+                galaxy.totals.dark_matter.unknown_regions
+            ));
+        }
+
+        // Check stellar density
+        if galaxy.totals.derived.stellar_density > 30.0 {
+            recs.push(format!(
+                "Consider refactoring - high stellar density ({:.1} stars/1k LOC)",
+                galaxy.totals.derived.stellar_density
+            ));
+        }
+
+        // Count red giants
+        let red_giant_count: usize = galaxy.constellations.values()
+            .map(|c| c.red_giants.len())
+            .sum();
+        if red_giant_count > 0 {
+            recs.push(format!(
+                "Review {} Red Giants (large files with high complexity or low docs)",
+                red_giant_count
+            ));
+        }
+
+        // Default recommendation if all looks good
+        if recs.is_empty() {
+            recs.push("Codebase health is good - continue current practices".to_string());
+        }
+
+        recs
+    }
+
+    // =========================================================================
+    // Phase 2: Temporal Narrative (Chronos Engine)
+    // =========================================================================
+
+    /// Format a temporal narrative for the Mission Log.
+    ///
+    /// Adds the "Geological Strata" story to the output with celestial terminology:
+    /// - ⏳ Temporal Scan: History depth and observer count
+    /// - 🌋 Volcanic Activity: High churn regions (Supernovas, Tectonic Shifts)
+    /// - 📜 Ancient Stars: Dormant core files in deep strata
+    ///
+    /// # Arguments
+    /// * `galaxy_age_days` - Total age of the repository in days
+    /// * `total_observations` - Total number of chronos events (commits)
+    /// * `observer_count` - Number of unique observers (contributors)
+    /// * `supernovas` - Files with extreme recent activity
+    /// * `tectonic_shifts` - High-risk files (churn + complexity)
+    /// * `ancient_stars` - Dormant but core files
+    #[cfg(feature = "temporal")]
+    pub fn format_temporal_narrative(
+        &self,
+        galaxy_age_days: u64,
+        total_observations: usize,
+        observer_count: usize,
+        supernovas: &[crate::core::temporal::Supernova],
+        tectonic_shifts: &[crate::core::temporal::TectonicShift],
+        ancient_stars: &[crate::core::temporal::AncientStar],
+    ) -> String {
+        use std::fmt::Write;
+        let mut output = String::new();
+
+        // Header
+        writeln!(output).ok();
+        writeln!(output, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━").ok();
+
+        // Line 1: Temporal Scan summary
+        let years = galaxy_age_days as f64 / 365.0;
+        let years_str = if years >= 1.0 {
+            format!("{:.1} years", years)
+        } else {
+            format!("{} days", galaxy_age_days)
+        };
+        writeln!(
+            output,
+            "⏳ Temporal Scan: {} of history analyzed ({} observations by {} observers).",
+            years_str, total_observations, observer_count
+        ).ok();
+
+        // Line 2: Volcanic activity (Supernovas + Tectonic Shifts)
+        let volcanic_count = supernovas.len() + tectonic_shifts.len();
+        if volcanic_count > 0 {
+            if !supernovas.is_empty() {
+                let nova_names: Vec<&str> = supernovas.iter()
+                    .take(2)
+                    .map(|s| s.path.rsplit('/').next().unwrap_or(&s.path))
+                    .collect();
+                let nova_summary = if supernovas.len() > 2 {
+                    format!("{} and {} others", nova_names.join(", "), supernovas.len() - 2)
+                } else {
+                    nova_names.join(", ")
+                };
+                writeln!(
+                    output,
+                    "🌋 Volcanic Activity: {} Supernova{} detected ({}). Active refactoring zone!",
+                    supernovas.len(),
+                    if supernovas.len() == 1 { "" } else { "s" },
+                    nova_summary
+                ).ok();
+            }
+
+            if !tectonic_shifts.is_empty() {
+                let shift_count = tectonic_shifts.len();
+                let high_risk_count = tectonic_shifts.iter().filter(|s| s.risk_score > 0.7).count();
+                if high_risk_count > 0 {
+                    writeln!(
+                        output,
+                        "⚠️  Tectonic Stress: {} shift{} identified ({} high-risk). Consider stabilization.",
+                        shift_count,
+                        if shift_count == 1 { "" } else { "s" },
+                        high_risk_count
+                    ).ok();
+                } else {
+                    writeln!(
+                        output,
+                        "🌍 Minor Tectonic Shifts: {} region{} with elevated churn.",
+                        shift_count,
+                        if shift_count == 1 { "" } else { "s" }
+                    ).ok();
+                }
+            }
+        } else {
+            writeln!(output, "🌍 Geological Stability: No volcanic activity detected.").ok();
+        }
+
+        // Line 3: Ancient Stars (dormant core files)
+        let core_ancient: Vec<_> = ancient_stars.iter().filter(|a| a.is_core).collect();
+        if !core_ancient.is_empty() {
+            writeln!(
+                output,
+                "📜 {} Ancient Star{} identified in the deep strata (core files dormant > 2 years).",
+                core_ancient.len(),
+                if core_ancient.len() == 1 { "" } else { "s" }
+            ).ok();
+
+            // Show top 2 ancient stars in detailed mode
+            if matches!(self.detail_level, DetailLevel::Detailed) {
+                for ancient in core_ancient.iter().take(2) {
+                    let file_name = ancient.path.rsplit('/').next().unwrap_or(&ancient.path);
+                    writeln!(
+                        output,
+                        "   📜 {} (dormant {} days, {} stars)",
+                        file_name, ancient.dormant_days, ancient.star_count
+                    ).ok();
+                }
+            }
+        } else if !ancient_stars.is_empty() {
+            writeln!(
+                output,
+                "📜 {} dormant file{} in archaeological strata (non-core, low priority).",
+                ancient_stars.len(),
+                if ancient_stars.len() == 1 { "" } else { "s" }
+            ).ok();
+        }
+
+        output
+    }
+
+    /// Format a temporal narrative (non-temporal fallback - empty output).
+    #[cfg(not(feature = "temporal"))]
+    pub fn format_temporal_narrative<S, T, A>(
+        &self,
+        _galaxy_age_days: u64,
+        _total_observations: usize,
+        _observer_count: usize,
+        _supernovas: &[S],
+        _tectonic_shifts: &[T],
+        _ancient_stars: &[A],
+    ) -> String {
+        String::new()
+    }
+
+    /// Format temporal narrative from a TemporalCensus (convenience method).
+    #[cfg(feature = "temporal")]
+    pub fn format_temporal_narrative_from_census(
+        &self,
+        census: &crate::core::temporal::TemporalCensus,
+    ) -> String {
+        self.format_temporal_narrative(
+            census.galaxy_age_days,
+            census.total_observations,
+            census.observer_count,
+            &census.supernovas,
+            &census.tectonic_shifts,
+            &census.ancient_stars,
+        )
     }
 
     /// Detect the two hemispheres (top 2 languages) from a language distribution.
@@ -611,5 +948,381 @@ mod tests {
         assert!(!log.contains("EMA"));
         assert!(!log.contains("vectorize"));
         assert!(!log.contains("semantic"));
+    }
+
+    // =========================================================================
+    // Governance Report Tests (Phase 1C)
+    // =========================================================================
+
+    #[test]
+    fn test_format_health_indicator() {
+        let presenter = IntelligentPresenter::new();
+
+        assert_eq!(presenter.format_health_indicator(&HealthRating::Healthy), "⭐");
+        assert_eq!(presenter.format_health_indicator(&HealthRating::Stable), "✅");
+        assert_eq!(presenter.format_health_indicator(&HealthRating::HighDarkMatter), "⚠️");
+        assert_eq!(presenter.format_health_indicator(&HealthRating::Critical), "🔴");
+    }
+
+    #[test]
+    fn test_governance_report_contains_header() {
+        use crate::core::census::{GalaxyCensus, CelestialCensus};
+
+        let presenter = IntelligentPresenter::new();
+        let mut galaxy = GalaxyCensus::new(".".to_string());
+        galaxy.finalize();
+
+        let report = presenter.format_governance_report(&galaxy);
+
+        assert!(report.contains("Governance Report"));
+        assert!(report.contains("━━━"));
+    }
+
+    #[test]
+    fn test_governance_report_shows_stars() {
+        use crate::core::census::{GalaxyCensus, CensusMetrics, StarMetrics};
+
+        let presenter = IntelligentPresenter::new();
+        let mut galaxy = GalaxyCensus::new(".".to_string());
+
+        // Add file with known star count
+        let mut metrics = CensusMetrics::default();
+        metrics.stars = StarMetrics {
+            count: 10,
+            functions: 6,
+            methods: 4,
+            types: 2,
+            constants: 1,
+        };
+        galaxy.add_file("src/test.rs", metrics);
+        galaxy.finalize();
+
+        let report = presenter.format_governance_report(&galaxy);
+
+        assert!(report.contains("Stars (Logic)"));
+        assert!(report.contains("10"));
+        assert!(report.contains("6 functions"));
+        assert!(report.contains("4 methods"));
+    }
+
+    #[test]
+    fn test_governance_report_shows_nebulae() {
+        use crate::core::census::{GalaxyCensus, CensusMetrics, NebulaeMetrics};
+
+        let presenter = IntelligentPresenter::new();
+        let mut galaxy = GalaxyCensus::new(".".to_string());
+
+        let mut metrics = CensusMetrics::default();
+        metrics.nebulae = NebulaeMetrics {
+            doc_lines: 50,
+            comment_lines: 20,
+            documented_stars: 5,
+            total_stars: 10,
+        };
+        metrics.total_lines = 100;
+        galaxy.add_file("src/lib.rs", metrics);
+        galaxy.finalize();
+
+        let report = presenter.format_governance_report(&galaxy);
+
+        assert!(report.contains("Nebulae (Docs)"));
+        assert!(report.contains("70 lines"));  // 50 + 20
+    }
+
+    #[test]
+    fn test_governance_report_shows_dark_matter() {
+        use crate::core::census::{GalaxyCensus, CensusMetrics, DarkMatterMetrics};
+
+        let presenter = IntelligentPresenter::new();
+        let mut galaxy = GalaxyCensus::new(".".to_string());
+
+        let mut metrics = CensusMetrics::default();
+        metrics.dark_matter = DarkMatterMetrics {
+            unknown_regions: 3,
+            unknown_bytes: 150,
+            volcanic_regions: 2,
+            max_nesting_depth: 6,
+            parameter_heavy: 1,
+        };
+        metrics.total_lines = 100;
+        galaxy.add_file("src/complex.rs", metrics);
+        galaxy.finalize();
+
+        let report = presenter.format_governance_report(&galaxy);
+
+        assert!(report.contains("Dark Matter"));
+        assert!(report.contains("3 regions"));
+        assert!(report.contains("2 volcanic"));
+    }
+
+    #[test]
+    fn test_governance_report_recommendations() {
+        use crate::core::census::{GalaxyCensus, CensusMetrics, DarkMatterMetrics};
+
+        let presenter = IntelligentPresenter::new();
+        let mut galaxy = GalaxyCensus::new(".".to_string());
+
+        // Create metrics that trigger recommendations
+        let mut metrics = CensusMetrics::default();
+        metrics.dark_matter = DarkMatterMetrics {
+            unknown_regions: 5,
+            unknown_bytes: 500,
+            volcanic_regions: 10,
+            max_nesting_depth: 8,
+            parameter_heavy: 3,
+        };
+        metrics.total_lines = 500;
+        galaxy.add_file("src/messy.rs", metrics);
+        galaxy.finalize();
+
+        let report = presenter.format_governance_report(&galaxy);
+
+        assert!(report.contains("Recommendations"));
+        // Should have recommendations for volcanic regions and unknown regions
+        assert!(report.contains("volcanic regions") || report.contains("unparsed regions"));
+    }
+
+    #[test]
+    fn test_governance_report_healthy_codebase() {
+        use crate::core::census::{GalaxyCensus, CensusMetrics, NebulaeMetrics, StarMetrics};
+
+        let presenter = IntelligentPresenter::new();
+        let mut galaxy = GalaxyCensus::new(".".to_string());
+
+        // Create healthy metrics
+        let mut metrics = CensusMetrics::default();
+        metrics.stars = StarMetrics {
+            count: 5,
+            functions: 5,
+            methods: 0,
+            types: 0,
+            constants: 0,
+        };
+        metrics.nebulae = NebulaeMetrics {
+            doc_lines: 20,
+            comment_lines: 10,
+            documented_stars: 4,
+            total_stars: 5,
+        };
+        metrics.total_lines = 200;
+        galaxy.add_file("src/clean.rs", metrics);
+        galaxy.finalize();
+
+        let report = presenter.format_governance_report(&galaxy);
+
+        // Should have positive recommendation
+        assert!(report.contains("Recommendations"));
+    }
+
+    // =========================================================================
+    // Temporal Narrative Tests (Phase 2)
+    // =========================================================================
+
+    #[cfg(feature = "temporal")]
+    mod temporal_tests {
+        use super::*;
+        use crate::core::temporal::{Supernova, TectonicShift, AncientStar};
+
+        #[test]
+        fn test_temporal_narrative_contains_time_emoji() {
+            let presenter = IntelligentPresenter::new();
+            let narrative = presenter.format_temporal_narrative(
+                730,  // 2 years
+                500,
+                5,
+                &[],
+                &[],
+                &[],
+            );
+
+            assert!(narrative.contains("⏳"), "Should contain hourglass emoji");
+            assert!(narrative.contains("Temporal Scan"));
+            assert!(narrative.contains("2.0 years"));
+            assert!(narrative.contains("500 observations"));
+            assert!(narrative.contains("5 observers"));
+        }
+
+        #[test]
+        fn test_temporal_narrative_short_history_shows_days() {
+            let presenter = IntelligentPresenter::new();
+            let narrative = presenter.format_temporal_narrative(
+                45,  // Less than a year
+                20,
+                2,
+                &[],
+                &[],
+                &[],
+            );
+
+            assert!(narrative.contains("45 days"));
+            assert!(!narrative.contains("years"));
+        }
+
+        #[test]
+        fn test_temporal_narrative_supernovas() {
+            let presenter = IntelligentPresenter::new();
+            let supernovas = vec![
+                Supernova {
+                    path: "src/core/engine.rs".to_string(),
+                    observations_30d: 35,
+                    observer_count: 3,
+                    lines_changed: 1000,
+                    warning: "High activity".to_string(),
+                },
+            ];
+
+            let narrative = presenter.format_temporal_narrative(
+                365,
+                100,
+                3,
+                &supernovas,
+                &[],
+                &[],
+            );
+
+            assert!(narrative.contains("🌋"), "Should contain volcano emoji");
+            assert!(narrative.contains("Volcanic Activity"));
+            assert!(narrative.contains("1 Supernova"));
+            assert!(narrative.contains("engine.rs"));
+        }
+
+        #[test]
+        fn test_temporal_narrative_multiple_supernovas() {
+            let presenter = IntelligentPresenter::new();
+            let supernovas = vec![
+                Supernova {
+                    path: "src/a.rs".to_string(),
+                    observations_30d: 40,
+                    observer_count: 2,
+                    lines_changed: 500,
+                    warning: "".to_string(),
+                },
+                Supernova {
+                    path: "src/b.rs".to_string(),
+                    observations_30d: 35,
+                    observer_count: 2,
+                    lines_changed: 400,
+                    warning: "".to_string(),
+                },
+                Supernova {
+                    path: "src/c.rs".to_string(),
+                    observations_30d: 32,
+                    observer_count: 1,
+                    lines_changed: 300,
+                    warning: "".to_string(),
+                },
+            ];
+
+            let narrative = presenter.format_temporal_narrative(
+                200,
+                150,
+                4,
+                &supernovas,
+                &[],
+                &[],
+            );
+
+            assert!(narrative.contains("3 Supernovas"));
+            assert!(narrative.contains("and 1 others"));  // Shows overflow
+        }
+
+        #[test]
+        fn test_temporal_narrative_tectonic_shifts() {
+            let presenter = IntelligentPresenter::new();
+            let shifts = vec![
+                TectonicShift {
+                    path: "src/complex.rs".to_string(),
+                    churn_90d: 15,
+                    dark_matter_ratio: 0.25,
+                    risk_score: 0.8,
+                    reason: "High risk".to_string(),
+                },
+            ];
+
+            let narrative = presenter.format_temporal_narrative(
+                400,
+                200,
+                5,
+                &[],
+                &shifts,
+                &[],
+            );
+
+            assert!(narrative.contains("Tectonic Stress"));
+            assert!(narrative.contains("1 shift"));
+            assert!(narrative.contains("high-risk"));
+        }
+
+        #[test]
+        fn test_temporal_narrative_ancient_stars() {
+            let presenter = IntelligentPresenter::new();
+            let ancient = vec![
+                AncientStar {
+                    path: "src/core/legacy.rs".to_string(),
+                    age_days: 1000,
+                    dormant_days: 800,
+                    star_count: 10,
+                    is_core: true,
+                },
+            ];
+
+            let narrative = presenter.format_temporal_narrative(
+                1000,
+                500,
+                8,
+                &[],
+                &[],
+                &ancient,
+            );
+
+            assert!(narrative.contains("📜"), "Should contain scroll emoji");
+            assert!(narrative.contains("1 Ancient Star"));
+            assert!(narrative.contains("deep strata"));
+            assert!(narrative.contains("core files dormant > 2 years"));
+        }
+
+        #[test]
+        fn test_temporal_narrative_geological_stability() {
+            let presenter = IntelligentPresenter::new();
+            let narrative = presenter.format_temporal_narrative(
+                365,
+                100,
+                3,
+                &[],  // No supernovas
+                &[],  // No tectonic shifts
+                &[],  // No ancient stars
+            );
+
+            assert!(narrative.contains("🌍"), "Should contain earth emoji");
+            assert!(narrative.contains("Geological Stability"));
+            assert!(narrative.contains("No volcanic activity"));
+        }
+
+        #[test]
+        fn test_temporal_narrative_non_core_ancient() {
+            let presenter = IntelligentPresenter::new();
+            let ancient = vec![
+                AncientStar {
+                    path: "tests/old_test.rs".to_string(),
+                    age_days: 900,
+                    dormant_days: 750,
+                    star_count: 2,
+                    is_core: false,  // Not a core file
+                },
+            ];
+
+            let narrative = presenter.format_temporal_narrative(
+                900,
+                200,
+                4,
+                &[],
+                &[],
+                &ancient,
+            );
+
+            // Should mention dormant files but not as "Ancient Stars"
+            assert!(narrative.contains("dormant file"));
+            assert!(narrative.contains("non-core"));
+        }
     }
 }

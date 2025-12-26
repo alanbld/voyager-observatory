@@ -37,6 +37,8 @@ pub mod plugin;
 pub mod ast_bridge;
 pub mod metrics;
 pub mod regex_engine;
+pub mod census;
+pub mod temporal;
 
 // Re-export commonly used types
 pub use models::{FileEntry, EncoderConfig, ProcessedFile, OutputFormat, Config, SkeletonMode, CompressionLevel};
@@ -103,4 +105,22 @@ pub use ast_bridge::{
 pub use regex_engine::{
     RegexEngine, CompiledRegex, RegexError, MatchRange, MatchResult,
     PatternSet, compile, is_match, find_all, replace_all, global_engine,
+};
+
+// Phase 1C: Celestial Census (Code Health Metrics)
+pub use census::{
+    CelestialCensus, CensusMetrics, StarMetrics, NebulaeMetrics, DarkMatterMetrics,
+    DerivedMetrics, HealthRating, GalaxyCensus, ConstellationCensus,
+    StarCountMetric, NebulaeCountMetric, DarkMatterMetric,
+    StellarDensityMetric, NebulaRatioMetric, HealthScoreMetric,
+    build_census_registry,
+};
+
+// Phase 2: Temporal (Chronos Engine)
+pub use temporal::{
+    ChronosEngine, ChronosMetrics, ChronosState, StellarAge, VolcanicChurn,
+    Observer, ObserverImpact, TemporalCensus, ConstellationChurn, FileChurn,
+    TectonicShift, AncientStar, Supernova, AgeClassification, ChurnClassification,
+    is_temporal_available, temporal_state_description,
+    GeologicalAnalyzer, GeologicalSummary, GeologicalActivity,
 };

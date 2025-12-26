@@ -247,6 +247,18 @@ struct Cli {
     journal_clear: bool,
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // 📊 CELESTIAL CENSUS (Code Health Survey)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Survey the codebase [composition, health]
+    #[arg(long = "survey", value_name = "MODE", help_heading = "📊 CENSUS")]
+    survey: Option<SurveyMode>,
+
+    /// Grouping level for survey [constellation, galaxy, sector]
+    #[arg(long = "by", value_enum, default_value = "constellation", help_heading = "📊 CENSUS")]
+    by: SurveyGrouping,
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // 🚀 SPECIAL MODES
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -358,6 +370,27 @@ enum BudgetStrategy {
     Drop,
     Truncate,
     Hybrid,
+}
+
+/// Survey mode for --survey flag
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum SurveyMode {
+    /// High-level composition: Stars, Nebulae, Dark Matter counts
+    Composition,
+    /// Health diagnostics: Red Giants, Stellar Nurseries
+    Health,
+}
+
+/// Grouping level for survey output
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum SurveyGrouping {
+    /// Group by directory (default)
+    #[default]
+    Constellation,
+    /// Project-wide summary
+    Galaxy,
+    /// Fine-grained file-level
+    Sector,
 }
 
 /// CLI enum for metadata display mode (Chronos v2.3)
@@ -496,6 +529,838 @@ fn parse_zoom_target(s: &str) -> Result<ZoomConfig, String> {
         include_tests: false,
         context_lines: 5,
     })
+}
+
+/// Run the Celestial Census survey
+fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &Cli) {
+    use pm_encoder::core::{
+        CelestialCensus, GalaxyCensus, AstBridge,
+    };
+    #[cfg(feature = "temporal")]
+    use pm_encoder::core::{ChronosEngine, TemporalCensus};
+    use std::time::Instant;
+
+    let start = Instant::now();
+
+    // Walk directory and collect files
+    let ignore_patterns: Vec<String> = cli.exclude.clone();
+    let include_patterns: Vec<String> = cli.include.clone();
+
+    let entries = match pm_encoder::walk_directory(
+        root.to_str().unwrap(),
+        &ignore_patterns,
+        &include_patterns,
+        10_000_000, // 10MB max file size for census
+    ) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("Error walking directory: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Build census
+    let census = CelestialCensus::new();
+    let bridge = AstBridge::new();
+    let mut galaxy = GalaxyCensus::new(root.to_string_lossy().to_string());
+
+    // Analyze each file
+    for entry in &entries {
+        // Detect language from path
+        let language = AstBridge::detect_language(std::path::Path::new(&entry.path));
+
+        // Parse file with AST bridge
+        if let Some(file) = bridge.analyze_file(&entry.content, language) {
+            let metrics = census.analyze(&file);
+            galaxy.add_file(&entry.path, metrics);
+        }
+    }
+
+    galaxy.finalize();
+
+    // Build temporal census (Chronos Engine)
+    #[cfg(feature = "temporal")]
+    let temporal_census: Option<TemporalCensus> = {
+        if let Some(mut engine) = ChronosEngine::new(root) {
+            if engine.extract_history().is_ok() {
+                Some(engine.build_census())
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    };
+
+    #[cfg(not(feature = "temporal"))]
+    let temporal_census: Option<()> = None;
+
+    let elapsed = start.elapsed();
+
+    // Output based on mode and format
+    match cli.format {
+        OutputFormatArg::Xml | OutputFormatArg::ClaudeXml => {
+            // JSON output for machine consumption
+            match serde_json::to_string_pretty(&galaxy) {
+                Ok(json) => println!("{}", json),
+                Err(e) => {
+                    eprintln!("Error serializing JSON: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        OutputFormatArg::Markdown => {
+            // Markdown output for documentation
+            #[cfg(feature = "temporal")]
+            print_census_markdown(&galaxy, mode, temporal_census.as_ref());
+            #[cfg(not(feature = "temporal"))]
+            print_census_markdown(&galaxy, mode, None::<&()>);
+        }
+        OutputFormatArg::PlusMinus => {
+            // ASCII table output (default)
+            match mode {
+                SurveyMode::Composition => {
+                    #[cfg(feature = "temporal")]
+                    print_composition_table(&galaxy, grouping, temporal_census.as_ref());
+                    #[cfg(not(feature = "temporal"))]
+                    print_composition_table(&galaxy, grouping, None::<&()>);
+                }
+                SurveyMode::Health => {
+                    #[cfg(feature = "temporal")]
+                    print_health_report(&galaxy, grouping, temporal_census.as_ref());
+                    #[cfg(not(feature = "temporal"))]
+                    print_health_report(&galaxy, grouping, None::<&()>);
+                }
+            }
+        }
+    }
+
+    // Print timing
+    eprintln!();
+    #[cfg(feature = "temporal")]
+    if let Some(ref tc) = temporal_census {
+        eprintln!("Survey completed in {:.1}ms ({} files, {} chronos events)",
+            elapsed.as_secs_f64() * 1000.0, galaxy.total_files, tc.total_observations);
+    } else {
+        eprintln!("Survey completed in {:.1}ms ({} files analyzed)",
+            elapsed.as_secs_f64() * 1000.0, galaxy.total_files);
+    }
+    #[cfg(not(feature = "temporal"))]
+    eprintln!("Survey completed in {:.1}ms ({} files analyzed)",
+        elapsed.as_secs_f64() * 1000.0, galaxy.total_files);
+}
+
+/// Print composition table (Stars, Nebulae, Dark Matter, Churn)
+#[cfg(feature = "temporal")]
+fn print_composition_table(
+    galaxy: &pm_encoder::core::GalaxyCensus,
+    grouping: SurveyGrouping,
+    temporal: Option<&pm_encoder::core::TemporalCensus>,
+) {
+    use pm_encoder::core::HealthRating;
+
+    // Header - with Churn column if temporal data available
+    let has_temporal = temporal.is_some();
+
+    if has_temporal {
+        println!("╔════════════════════════════════════════════════════════════════════════════════════════╗");
+        println!("║                         CELESTIAL CENSUS: COMPOSITION                                   ║");
+        println!("╠═══════════════════════════════════════╦═══════╦═══════╦═══════╦═══════╦═════════════════╣");
+        println!("║ Constellation                         ║ Stars ║Nebulae║ Dark  ║ Churn ║     Health      ║");
+        println!("║                                       ║       ║       ║Matter ║ (90d) ║                 ║");
+        println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════╬═════════════════╣");
+    } else {
+        println!("╔══════════════════════════════════════════════════════════════════════════════╗");
+        println!("║                    CELESTIAL CENSUS: COMPOSITION                              ║");
+        println!("╠═══════════════════════════════════════╦═══════╦═══════╦═══════╦═══════════════╣");
+        println!("║ Constellation                         ║ Stars ║Nebulae║ Dark  ║    Health     ║");
+        println!("║                                       ║       ║       ║Matter ║               ║");
+        println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════════════╣");
+    }
+
+    match grouping {
+        SurveyGrouping::Galaxy => {
+            let totals = &galaxy.totals;
+            let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
+            let indicator = format_health_indicator(rating);
+            let churn = temporal.map(|t| t.constellations.values().map(|c| c.churn_90d).sum::<usize>()).unwrap_or(0);
+
+            if has_temporal {
+                println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:5} ║ {:15} ║",
+                    truncate_path(&galaxy.root, 37),
+                    totals.stars.count,
+                    totals.nebulae.doc_lines + totals.nebulae.comment_lines,
+                    totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+                    churn,
+                    indicator);
+            } else {
+                println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+                    truncate_path(&galaxy.root, 37),
+                    totals.stars.count,
+                    totals.nebulae.doc_lines + totals.nebulae.comment_lines,
+                    totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+                    indicator);
+            }
+        }
+        SurveyGrouping::Constellation => {
+            for (path, constellation) in &galaxy.constellations {
+                let rating = constellation.rating.unwrap_or(HealthRating::Stable);
+                let indicator = format_health_indicator(rating);
+                let dark_matter = constellation.totals.dark_matter.unknown_regions
+                    + constellation.totals.dark_matter.volcanic_regions;
+                let churn = temporal.and_then(|t| t.constellations.get(path).map(|c| c.churn_90d)).unwrap_or(0);
+
+                if has_temporal {
+                    println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:5} ║ {:15} ║",
+                        truncate_path(path, 37),
+                        constellation.totals.stars.count,
+                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        dark_matter,
+                        churn,
+                        indicator);
+                } else {
+                    println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+                        truncate_path(path, 37),
+                        constellation.totals.stars.count,
+                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        dark_matter,
+                        indicator);
+                }
+            }
+        }
+        SurveyGrouping::Sector => {
+            eprintln!("Sector-level grouping not yet implemented, using constellation");
+            for (path, constellation) in &galaxy.constellations {
+                let rating = constellation.rating.unwrap_or(HealthRating::Stable);
+                let indicator = format_health_indicator(rating);
+                let churn = temporal.and_then(|t| t.constellations.get(path).map(|c| c.churn_90d)).unwrap_or(0);
+
+                if has_temporal {
+                    println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:5} ║ {:15} ║",
+                        truncate_path(path, 37),
+                        constellation.totals.stars.count,
+                        constellation.totals.nebulae.doc_lines,
+                        constellation.totals.dark_matter.unknown_regions,
+                        churn,
+                        indicator);
+                } else {
+                    println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+                        truncate_path(path, 37),
+                        constellation.totals.stars.count,
+                        constellation.totals.nebulae.doc_lines,
+                        constellation.totals.dark_matter.unknown_regions,
+                        indicator);
+                }
+            }
+        }
+    }
+
+    // Footer
+    if has_temporal {
+        println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════╬═════════════════╣");
+    } else {
+        println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════════════╣");
+    }
+
+    // Totals row
+    let totals = &galaxy.totals;
+    let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
+    let indicator = format_health_indicator(rating);
+    let total_churn = temporal.map(|t| t.constellations.values().map(|c| c.churn_90d).sum::<usize>()).unwrap_or(0);
+
+    if has_temporal {
+        println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:5} ║ {:15} ║",
+            "TOTAL",
+            totals.stars.count,
+            totals.nebulae.doc_lines + totals.nebulae.comment_lines,
+            totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+            total_churn,
+            indicator);
+        println!("╚═══════════════════════════════════════╩═══════╩═══════╩═══════╩═══════╩═════════════════╝");
+    } else {
+        println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+            "TOTAL",
+            totals.stars.count,
+            totals.nebulae.doc_lines + totals.nebulae.comment_lines,
+            totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+            indicator);
+        println!("╚═══════════════════════════════════════╩═══════╩═══════╩═══════╩═══════════════╝");
+    }
+
+    // Legend
+    println!();
+    println!("Legend: star=Healthy  checkmark=Stable  warning=High Dark Matter  alert=Critical");
+
+    // Derived metrics
+    println!();
+    println!("Derived Metrics:");
+    println!("  Stellar Density: {:.1} stars/1k LOC", totals.derived.stellar_density);
+    println!("  Nebula Ratio:    {:.0}% documented", totals.derived.nebula_ratio * 100.0);
+    println!("  Health Score:    {:.0}/100", totals.derived.health_score * 100.0);
+
+    // Temporal metrics
+    if let Some(tc) = temporal {
+        println!();
+        println!("Temporal Metrics (Chronos Engine):");
+        println!("  Galaxy Age:      {} days", tc.galaxy_age_days);
+        println!("  Total Events:    {} observations", tc.total_observations);
+        println!("  Observers:       {} unique", tc.observer_count);
+        if !tc.supernovas.is_empty() {
+            println!("  Supernovas:      {} detected (high churn)", tc.supernovas.len());
+        }
+    }
+}
+
+/// Print composition table (without temporal data)
+#[cfg(not(feature = "temporal"))]
+fn print_composition_table<T>(
+    galaxy: &pm_encoder::core::GalaxyCensus,
+    grouping: SurveyGrouping,
+    _temporal: Option<&T>,
+) {
+    use pm_encoder::core::HealthRating;
+
+    println!("╔══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║                    CELESTIAL CENSUS: COMPOSITION                              ║");
+    println!("╠═══════════════════════════════════════╦═══════╦═══════╦═══════╦═══════════════╣");
+    println!("║ Constellation                         ║ Stars ║Nebulae║ Dark  ║    Health     ║");
+    println!("║                                       ║       ║       ║Matter ║               ║");
+    println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════════════╣");
+
+    match grouping {
+        SurveyGrouping::Galaxy => {
+            let totals = &galaxy.totals;
+            let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
+            let indicator = format_health_indicator(rating);
+            println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+                truncate_path(&galaxy.root, 37),
+                totals.stars.count,
+                totals.nebulae.doc_lines + totals.nebulae.comment_lines,
+                totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+                indicator);
+        }
+        SurveyGrouping::Constellation | SurveyGrouping::Sector => {
+            for (path, constellation) in &galaxy.constellations {
+                let rating = constellation.rating.unwrap_or(HealthRating::Stable);
+                let indicator = format_health_indicator(rating);
+                let dark_matter = constellation.totals.dark_matter.unknown_regions
+                    + constellation.totals.dark_matter.volcanic_regions;
+                println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+                    truncate_path(path, 37),
+                    constellation.totals.stars.count,
+                    constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                    dark_matter,
+                    indicator);
+            }
+        }
+    }
+
+    println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════════════╣");
+    let totals = &galaxy.totals;
+    let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
+    let indicator = format_health_indicator(rating);
+    println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+        "TOTAL", totals.stars.count,
+        totals.nebulae.doc_lines + totals.nebulae.comment_lines,
+        totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+        indicator);
+    println!("╚═══════════════════════════════════════╩═══════╩═══════╩═══════╩═══════════════╝");
+
+    println!();
+    println!("Legend: star=Healthy  checkmark=Stable  warning=High Dark Matter  alert=Critical");
+    println!();
+    println!("Derived Metrics:");
+    println!("  Stellar Density: {:.1} stars/1k LOC", totals.derived.stellar_density);
+    println!("  Nebula Ratio:    {:.0}% documented", totals.derived.nebula_ratio * 100.0);
+    println!("  Health Score:    {:.0}/100", totals.derived.health_score * 100.0);
+}
+
+/// Print health diagnostic report (with temporal data)
+#[cfg(feature = "temporal")]
+fn print_health_report(
+    galaxy: &pm_encoder::core::GalaxyCensus,
+    _grouping: SurveyGrouping,
+    temporal: Option<&pm_encoder::core::TemporalCensus>,
+) {
+    use pm_encoder::core::HealthRating;
+
+    println!("╔══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║                    CELESTIAL CENSUS: HEALTH REPORT                            ║");
+    println!("╚══════════════════════════════════════════════════════════════════════════════╝");
+    println!();
+
+    // Overall health
+    let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
+    let indicator = format_health_indicator(rating);
+    println!("Overall System Health: {} {}", indicator, rating.description());
+    println!();
+
+    // SUPERNOVAS (Extreme recent activity) - Phase 2 Chronos Engine
+    if let Some(tc) = temporal {
+        if !tc.supernovas.is_empty() {
+            println!("🔥 SUPERNOVAS (Destabilizing refactors - >30 observations in 30 days):");
+            for nova in tc.supernovas.iter().take(10) {
+                println!("  - {} ({} observations)", nova.path, nova.observations_30d);
+            }
+            if tc.supernovas.len() > 10 {
+                println!("  ... and {} more", tc.supernovas.len() - 10);
+            }
+            println!();
+        } else {
+            println!("✨ No Supernovas detected - codebase is stable");
+            println!();
+        }
+    }
+
+    // Red Giants (large files with issues)
+    let mut red_giants: Vec<&str> = Vec::new();
+    for constellation in galaxy.constellations.values() {
+        for rg in &constellation.red_giants {
+            red_giants.push(rg);
+        }
+    }
+
+    if !red_giants.is_empty() {
+        println!("alert RED GIANTS (Large files with high complexity/low documentation):");
+        for rg in red_giants.iter().take(10) {
+            println!("  - {}", rg);
+        }
+        if red_giants.len() > 10 {
+            println!("  ... and {} more", red_giants.len() - 10);
+        }
+        println!();
+    } else {
+        println!("checkmark No Red Giants detected - file sizes are healthy");
+        println!();
+    }
+
+    // High Dark Matter constellations
+    let high_dark_matter: Vec<_> = galaxy.constellations.iter()
+        .filter(|(_, c)| c.rating == Some(HealthRating::HighDarkMatter) || c.rating == Some(HealthRating::Critical))
+        .collect();
+
+    if !high_dark_matter.is_empty() {
+        println!("warning HIGH DARK MATTER REGIONS:");
+        for (path, constellation) in high_dark_matter.iter().take(10) {
+            let dm = constellation.totals.dark_matter.unknown_regions
+                + constellation.totals.dark_matter.volcanic_regions;
+            println!("  - {} ({} dark matter units)", path, dm);
+        }
+        println!();
+    } else {
+        println!("checkmark No High Dark Matter regions - code is well-parsed");
+        println!();
+    }
+
+    // Ancient Stars (Phase 2: Dormant but core files)
+    if let Some(tc) = temporal {
+        let core_ancient: Vec<_> = tc.ancient_stars.iter().filter(|a| a.is_core).collect();
+        if !core_ancient.is_empty() {
+            println!("📜 ANCIENT STARS (Core files dormant > 2 years):");
+            for ancient in core_ancient.iter().take(10) {
+                println!("  - {} (dormant {} days, {} stars)",
+                    ancient.path, ancient.dormant_days, ancient.star_count);
+            }
+            println!();
+        }
+    }
+
+    // Stellar Nurseries (high activity areas - based on file count and stars)
+    let mut nurseries: Vec<(&String, usize)> = galaxy.constellations.iter()
+        .map(|(path, c)| (path, c.totals.stars.count))
+        .filter(|(_, count)| *count > 10)
+        .collect();
+    nurseries.sort_by(|a, b| b.1.cmp(&a.1));
+
+    if !nurseries.is_empty() {
+        println!("star STELLAR NURSERIES (High activity regions):");
+        for (path, count) in nurseries.iter().take(5) {
+            println!("  - {} ({} stars)", path, count);
+        }
+        println!();
+    }
+
+    // Summary statistics
+    println!("─────────────────────────────────────────────────────────────────────────────────");
+    println!("Summary Statistics:");
+    println!("  Total Stars:          {}", galaxy.totals.stars.count);
+    println!("  Total Nebulae Lines:  {}", galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines);
+    println!("  Unknown Regions:      {}", galaxy.totals.dark_matter.unknown_regions);
+    println!("  Volcanic Depths:      {}", galaxy.totals.dark_matter.volcanic_regions);
+    println!("  Max Nesting Depth:    {}", galaxy.totals.dark_matter.max_nesting_depth);
+    println!("  Documentation Ratio:  {:.0}%", galaxy.totals.derived.nebula_ratio * 100.0);
+
+    // Temporal statistics
+    if let Some(tc) = temporal {
+        println!();
+        println!("Temporal Statistics (Chronos Engine):");
+        println!("  Galaxy Age:           {} days", tc.galaxy_age_days);
+        println!("  Total Observations:   {}", tc.total_observations);
+        println!("  Unique Observers:     {}", tc.observer_count);
+        println!("  Supernovas:           {}", tc.supernovas.len());
+        println!("  Ancient Stars:        {} ({} core)",
+            tc.ancient_stars.len(),
+            tc.ancient_stars.iter().filter(|a| a.is_core).count());
+    }
+}
+
+/// Print health diagnostic report (without temporal data)
+#[cfg(not(feature = "temporal"))]
+fn print_health_report<T>(
+    galaxy: &pm_encoder::core::GalaxyCensus,
+    _grouping: SurveyGrouping,
+    _temporal: Option<&T>,
+) {
+    use pm_encoder::core::HealthRating;
+
+    println!("╔══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║                    CELESTIAL CENSUS: HEALTH REPORT                            ║");
+    println!("╚══════════════════════════════════════════════════════════════════════════════╝");
+    println!();
+
+    let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
+    let indicator = format_health_indicator(rating);
+    println!("Overall System Health: {} {}", indicator, rating.description());
+    println!();
+
+    let mut red_giants: Vec<&str> = Vec::new();
+    for constellation in galaxy.constellations.values() {
+        for rg in &constellation.red_giants {
+            red_giants.push(rg);
+        }
+    }
+
+    if !red_giants.is_empty() {
+        println!("alert RED GIANTS (Large files with high complexity/low documentation):");
+        for rg in red_giants.iter().take(10) {
+            println!("  - {}", rg);
+        }
+        println!();
+    } else {
+        println!("checkmark No Red Giants detected - file sizes are healthy");
+        println!();
+    }
+
+    let high_dark_matter: Vec<_> = galaxy.constellations.iter()
+        .filter(|(_, c)| c.rating == Some(HealthRating::HighDarkMatter) || c.rating == Some(HealthRating::Critical))
+        .collect();
+
+    if !high_dark_matter.is_empty() {
+        println!("warning HIGH DARK MATTER REGIONS:");
+        for (path, constellation) in high_dark_matter.iter().take(10) {
+            let dm = constellation.totals.dark_matter.unknown_regions
+                + constellation.totals.dark_matter.volcanic_regions;
+            println!("  - {} ({} dark matter units)", path, dm);
+        }
+        println!();
+    } else {
+        println!("checkmark No High Dark Matter regions - code is well-parsed");
+        println!();
+    }
+
+    let mut nurseries: Vec<(&String, usize)> = galaxy.constellations.iter()
+        .map(|(path, c)| (path, c.totals.stars.count))
+        .filter(|(_, count)| *count > 10)
+        .collect();
+    nurseries.sort_by(|a, b| b.1.cmp(&a.1));
+
+    if !nurseries.is_empty() {
+        println!("star STELLAR NURSERIES (High activity regions):");
+        for (path, count) in nurseries.iter().take(5) {
+            println!("  - {} ({} stars)", path, count);
+        }
+        println!();
+    }
+
+    println!("─────────────────────────────────────────────────────────────────────────────────");
+    println!("Summary Statistics:");
+    println!("  Total Stars:          {}", galaxy.totals.stars.count);
+    println!("  Total Nebulae Lines:  {}", galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines);
+    println!("  Unknown Regions:      {}", galaxy.totals.dark_matter.unknown_regions);
+    println!("  Volcanic Depths:      {}", galaxy.totals.dark_matter.volcanic_regions);
+    println!("  Max Nesting Depth:    {}", galaxy.totals.dark_matter.max_nesting_depth);
+    println!("  Documentation Ratio:  {:.0}%", galaxy.totals.derived.nebula_ratio * 100.0);
+}
+
+/// Print census report in markdown format (with temporal data)
+#[cfg(feature = "temporal")]
+fn print_census_markdown(
+    galaxy: &pm_encoder::core::GalaxyCensus,
+    mode: SurveyMode,
+    temporal: Option<&pm_encoder::core::TemporalCensus>,
+) {
+    println!("# Celestial Census Report");
+    println!();
+
+    let rating = galaxy.rating.unwrap_or(pm_encoder::core::HealthRating::Stable);
+    let has_temporal = temporal.is_some();
+
+    match mode {
+        SurveyMode::Composition => {
+            println!("## Composition Overview");
+            println!();
+
+            if has_temporal {
+                println!("| Constellation | Stars | Nebulae | Dark Matter | Churn (90d) | Health |");
+                println!("|---------------|-------|---------|-------------|-------------|--------|");
+            } else {
+                println!("| Constellation | Stars | Nebulae | Dark Matter | Health |");
+                println!("|---------------|-------|---------|-------------|--------|");
+            }
+
+            for (path, constellation) in &galaxy.constellations {
+                let health = constellation.rating.unwrap_or(pm_encoder::core::HealthRating::Stable);
+                let dm = constellation.totals.dark_matter.unknown_regions
+                    + constellation.totals.dark_matter.volcanic_regions;
+
+                if has_temporal {
+                    let churn = temporal
+                        .and_then(|t| t.constellations.get(path).map(|c| c.churn_90d))
+                        .unwrap_or(0);
+                    println!("| {} | {} | {} | {} | {} | {} |",
+                        path,
+                        constellation.totals.stars.count,
+                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        dm,
+                        churn,
+                        health.description());
+                } else {
+                    println!("| {} | {} | {} | {} | {} |",
+                        path,
+                        constellation.totals.stars.count,
+                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        dm,
+                        health.description());
+                }
+            }
+
+            let total_churn = temporal.map(|t| t.total_observations).unwrap_or(0);
+            if has_temporal {
+                println!("| **TOTAL** | **{}** | **{}** | **{}** | **{}** | **{}** |",
+                    galaxy.totals.stars.count,
+                    galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines,
+                    galaxy.totals.dark_matter.unknown_regions + galaxy.totals.dark_matter.volcanic_regions,
+                    total_churn,
+                    rating.description());
+            } else {
+                println!("| **TOTAL** | **{}** | **{}** | **{}** | **{}** |",
+                    galaxy.totals.stars.count,
+                    galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines,
+                    galaxy.totals.dark_matter.unknown_regions + galaxy.totals.dark_matter.volcanic_regions,
+                    rating.description());
+            }
+
+            println!();
+            println!("## Derived Metrics");
+            println!();
+            println!("- **Stellar Density**: {:.1} stars/1k LOC", galaxy.totals.derived.stellar_density);
+            println!("- **Nebula Ratio**: {:.0}% documented", galaxy.totals.derived.nebula_ratio * 100.0);
+            println!("- **Health Score**: {:.0}/100", galaxy.totals.derived.health_score * 100.0);
+
+            // Temporal metrics section
+            if let Some(tc) = temporal {
+                println!();
+                println!("## ⏳ Temporal Metrics (Chronos Engine)");
+                println!();
+                println!("| Metric | Value |");
+                println!("|--------|-------|");
+                println!("| Galaxy Age | {} days |", tc.galaxy_age_days);
+                println!("| Total Observations | {} |", tc.total_observations);
+                println!("| Observers | {} unique |", tc.observer_count);
+                if !tc.supernovas.is_empty() {
+                    println!("| 🔥 Supernovas | {} detected |", tc.supernovas.len());
+                }
+                if !tc.tectonic_shifts.is_empty() {
+                    println!("| 🌋 Tectonic Shifts | {} |", tc.tectonic_shifts.len());
+                }
+            }
+        }
+        SurveyMode::Health => {
+            println!("## Health Status: {} {}", rating.indicator(), rating.description());
+            println!();
+
+            // Supernovas (extreme recent activity)
+            if let Some(tc) = temporal {
+                if !tc.supernovas.is_empty() {
+                    println!("### 🔥 Supernovas (Destabilizing refactors)");
+                    println!();
+                    println!("> Files with >30 observations in 30 days - potential destabilization.");
+                    println!();
+                    for nova in tc.supernovas.iter().take(10) {
+                        println!("- `{}` ({} observations)", nova.path, nova.observations_30d);
+                    }
+                    println!();
+                }
+            }
+
+            // Red Giants
+            let mut red_giants: Vec<&str> = Vec::new();
+            for constellation in galaxy.constellations.values() {
+                for rg in &constellation.red_giants {
+                    red_giants.push(rg);
+                }
+            }
+
+            if !red_giants.is_empty() {
+                println!("### 🔴 Red Giants (Large files needing attention)");
+                println!();
+                for rg in &red_giants {
+                    println!("- `{}`", rg);
+                }
+                println!();
+            }
+
+            // Tectonic Shifts (high churn + high complexity)
+            if let Some(tc) = temporal {
+                if !tc.tectonic_shifts.is_empty() {
+                    println!("### 🌋 Tectonic Shifts (High Risk)");
+                    println!();
+                    println!("> High churn combined with high dark matter ratio.");
+                    println!();
+                    for shift in tc.tectonic_shifts.iter().take(10) {
+                        println!("- `{}` (churn: {}, dark matter: {:.0}%, risk: {:.0}%)",
+                            shift.path, shift.churn_90d, shift.dark_matter_ratio * 100.0, shift.risk_score * 100.0);
+                    }
+                    println!();
+                }
+            }
+
+            // Ancient Stars (dormant but core files)
+            if let Some(tc) = temporal {
+                let core_ancient: Vec<_> = tc.ancient_stars.iter().filter(|a| a.is_core).collect();
+                if !core_ancient.is_empty() {
+                    println!("### 📜 Ancient Stars (Dormant core files)");
+                    println!();
+                    println!("> Core files dormant for >2 years - may need archaeological review.");
+                    println!();
+                    for ancient in core_ancient.iter().take(10) {
+                        println!("- `{}` (dormant {} days, {} stars)",
+                            ancient.path, ancient.dormant_days, ancient.star_count);
+                    }
+                    println!();
+                }
+            }
+
+            // Summary
+            println!("### Summary Statistics");
+            println!();
+            println!("| Metric | Value |");
+            println!("|--------|-------|");
+            println!("| Total Stars | {} |", galaxy.totals.stars.count);
+            println!("| Nebulae Lines | {} |", galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines);
+            println!("| Unknown Regions | {} |", galaxy.totals.dark_matter.unknown_regions);
+            println!("| Documentation | {:.0}% |", galaxy.totals.derived.nebula_ratio * 100.0);
+
+            // Temporal statistics
+            if let Some(tc) = temporal {
+                println!();
+                println!("### ⏳ Temporal Statistics (Chronos Engine)");
+                println!();
+                println!("| Metric | Value |");
+                println!("|--------|-------|");
+                println!("| Galaxy Age | {} days |", tc.galaxy_age_days);
+                println!("| Total Observations | {} |", tc.total_observations);
+                println!("| Observer Count | {} |", tc.observer_count);
+                println!("| Supernovas | {} |", tc.supernovas.len());
+                println!("| Tectonic Shifts | {} |", tc.tectonic_shifts.len());
+                let core_count = tc.ancient_stars.iter().filter(|a| a.is_core).count();
+                println!("| Ancient Stars | {} ({} core) |", tc.ancient_stars.len(), core_count);
+            }
+        }
+    }
+}
+
+/// Print census report in markdown format (non-temporal fallback)
+#[cfg(not(feature = "temporal"))]
+fn print_census_markdown<T>(galaxy: &pm_encoder::core::GalaxyCensus, mode: SurveyMode, _temporal: Option<&T>) {
+    println!("# Celestial Census Report");
+    println!();
+
+    let rating = galaxy.rating.unwrap_or(pm_encoder::core::HealthRating::Stable);
+
+    match mode {
+        SurveyMode::Composition => {
+            println!("## Composition Overview");
+            println!();
+            println!("| Constellation | Stars | Nebulae | Dark Matter | Health |");
+            println!("|---------------|-------|---------|-------------|--------|");
+
+            for (path, constellation) in &galaxy.constellations {
+                let health = constellation.rating.unwrap_or(pm_encoder::core::HealthRating::Stable);
+                let dm = constellation.totals.dark_matter.unknown_regions
+                    + constellation.totals.dark_matter.volcanic_regions;
+                println!("| {} | {} | {} | {} | {} |",
+                    path,
+                    constellation.totals.stars.count,
+                    constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                    dm,
+                    health.description());
+            }
+
+            println!("| **TOTAL** | **{}** | **{}** | **{}** | **{}** |",
+                galaxy.totals.stars.count,
+                galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines,
+                galaxy.totals.dark_matter.unknown_regions + galaxy.totals.dark_matter.volcanic_regions,
+                rating.description());
+
+            println!();
+            println!("## Derived Metrics");
+            println!();
+            println!("- **Stellar Density**: {:.1} stars/1k LOC", galaxy.totals.derived.stellar_density);
+            println!("- **Nebula Ratio**: {:.0}% documented", galaxy.totals.derived.nebula_ratio * 100.0);
+            println!("- **Health Score**: {:.0}/100", galaxy.totals.derived.health_score * 100.0);
+        }
+        SurveyMode::Health => {
+            println!("## Health Status: {} {}", rating.indicator(), rating.description());
+            println!();
+
+            // Red Giants
+            let mut red_giants: Vec<&str> = Vec::new();
+            for constellation in galaxy.constellations.values() {
+                for rg in &constellation.red_giants {
+                    red_giants.push(rg);
+                }
+            }
+
+            if !red_giants.is_empty() {
+                println!("### Red Giants (Large files needing attention)");
+                println!();
+                for rg in &red_giants {
+                    println!("- `{}`", rg);
+                }
+                println!();
+            }
+
+            // Summary
+            println!("### Summary Statistics");
+            println!();
+            println!("| Metric | Value |");
+            println!("|--------|-------|");
+            println!("| Total Stars | {} |", galaxy.totals.stars.count);
+            println!("| Nebulae Lines | {} |", galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines);
+            println!("| Unknown Regions | {} |", galaxy.totals.dark_matter.unknown_regions);
+            println!("| Documentation | {:.0}% |", galaxy.totals.derived.nebula_ratio * 100.0);
+        }
+    }
+}
+
+/// Format health indicator for display
+fn format_health_indicator(rating: pm_encoder::core::HealthRating) -> String {
+    match rating {
+        pm_encoder::core::HealthRating::Healthy => "star Healthy".to_string(),
+        pm_encoder::core::HealthRating::Stable => "checkmark Stable".to_string(),
+        pm_encoder::core::HealthRating::HighDarkMatter => "warning Warning".to_string(),
+        pm_encoder::core::HealthRating::Critical => "alert Critical".to_string(),
+    }
+}
+
+/// Truncate path for display
+fn truncate_path(path: &str, max_len: usize) -> String {
+    if path.len() <= max_len {
+        path.to_string()
+    } else {
+        format!("...{}", &path[path.len() - max_len + 3..])
+    }
 }
 
 /// Print Context Health summary to stderr
@@ -717,6 +1582,25 @@ pub fn run() {
                 std::process::exit(1);
             }
         }
+        return;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 📊 CELESTIAL CENSUS COMMANDS
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // Handle --survey (code health survey)
+    if let Some(survey_mode) = cli.survey {
+        let survey_root = cli.project_root.clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+        if !survey_root.exists() || !survey_root.is_dir() {
+            eprintln!("Error: Survey path '{}' must be a valid directory", survey_root.display());
+            std::process::exit(1);
+        }
+
+        // Run the survey
+        run_survey(&survey_root, survey_mode, cli.by, &cli);
         return;
     }
 
