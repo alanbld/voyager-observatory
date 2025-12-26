@@ -40,6 +40,7 @@ pub mod metrics;
 pub mod regex_engine;
 pub mod census;
 pub mod temporal;
+pub mod spectrograph;
 
 // Re-export commonly used types
 pub use models::{FileEntry, EncoderConfig, ProcessedFile, OutputFormat, Config, SkeletonMode, CompressionLevel};
@@ -115,6 +116,13 @@ pub use census::{
     StarCountMetric, NebulaeCountMetric, DarkMatterMetric,
     StellarDensityMetric, NebulaRatioMetric, HealthScoreMetric,
     build_census_registry,
+    // Universal Spectrograph fallback
+    PatternFallbackAnalyzer,
+};
+
+// Universal Spectrograph (80+ Language Patterns)
+pub use spectrograph::{
+    StellarLibrary, SpectralSignature, Hemisphere, STELLAR_LIBRARY,
 };
 
 // Phase 2: Temporal (Chronos Engine)

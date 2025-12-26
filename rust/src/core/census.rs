@@ -11,14 +11,25 @@
 //! - **Stellar Density**: Stars per 1,000 lines of code
 //! - **Nebula Ratio**: Percentage of documentation relative to logic
 //!
+//! # Fallback Pattern Analysis
+//!
+//! When AST parsing is unavailable for a language, the census uses the
+//! Universal Spectrograph's `StellarLibrary` for fallback pattern matching.
+//! This allows star counting even for legacy languages like COBOL, Simula, and Logo.
+//!
 //! # Example
 //!
 //! ```rust,ignore
-//! use pm_encoder::core::census::{CelestialCensus, CensusMetrics};
+//! use pm_encoder::core::census::{CelestialCensus, CensusMetrics, PatternFallbackAnalyzer};
 //!
+//! // AST-based analysis
 //! let census = CelestialCensus::new();
 //! let file: voyager_ast::ir::File = /* ... */;
 //! let metrics = census.analyze(&file);
+//!
+//! // Fallback pattern-based analysis for unsupported languages
+//! let fallback = PatternFallbackAnalyzer::new();
+//! let metrics = fallback.analyze_source("simula", source_code);
 //!
 //! println!("Stars: {}", metrics.stars);
 //! println!("Nebulae: {}", metrics.nebulae);
@@ -32,6 +43,7 @@ use voyager_ast::ir::{
 };
 
 use super::metrics::{MetricCollector, MetricRegistry, MetricResult};
+use super::spectrograph::{STELLAR_LIBRARY, Hemisphere};
 
 // =============================================================================
 // Census Result Types
@@ -793,6 +805,162 @@ impl ConstellationCensus {
 }
 
 // =============================================================================
+// Pattern Fallback Analyzer (Universal Spectrograph Integration)
+// =============================================================================
+
+/// Pattern-based fallback analyzer for languages without AST support.
+///
+/// Uses the Universal Spectrograph's StellarLibrary to count stars
+/// via regex patterns when Tree-sitter parsing is unavailable.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use pm_encoder::core::census::PatternFallbackAnalyzer;
+///
+/// let analyzer = PatternFallbackAnalyzer::new();
+///
+/// // Analyze a Simula file (no AST support)
+/// let source = r#"
+/// class Point;
+/// begin
+///     real x, y;
+///     procedure Draw;
+///     begin
+///         ! draw the point
+///     end;
+/// end;
+/// "#;
+///
+/// let metrics = analyzer.analyze_source("simula", source);
+/// assert_eq!(metrics.stars.count, 2); // class + procedure
+/// ```
+pub struct PatternFallbackAnalyzer;
+
+impl Default for PatternFallbackAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PatternFallbackAnalyzer {
+    /// Create a new fallback analyzer
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Analyze source code using pattern matching
+    ///
+    /// Returns CensusMetrics with star counts based on regex patterns.
+    /// This is used for languages without Tree-sitter support.
+    pub fn analyze_source(&self, language: &str, source: &str) -> CensusMetrics {
+        let mut metrics = CensusMetrics::default();
+
+        // Get the spectral signature for this language
+        let signature = match STELLAR_LIBRARY.get(language) {
+            Some(sig) => sig,
+            None => return metrics, // Unknown language, return empty metrics
+        };
+
+        // Count total lines
+        metrics.total_lines = source.lines().count();
+
+        // Count stars using the star pattern
+        if let Ok(star_regex) = regex::Regex::new(signature.star_pattern) {
+            for cap in star_regex.captures_iter(source) {
+                metrics.stars.count += 1;
+                // Try to classify the star based on capture groups
+                // For most patterns, group 1 is the name
+                if cap.get(0).map(|m| m.as_str().contains("class")).unwrap_or(false)
+                    || cap.get(0).map(|m| m.as_str().contains("struct")).unwrap_or(false)
+                    || cap.get(0).map(|m| m.as_str().contains("type")).unwrap_or(false)
+                    || cap.get(0).map(|m| m.as_str().contains("interface")).unwrap_or(false)
+                {
+                    metrics.stars.types += 1;
+                } else {
+                    metrics.stars.functions += 1;
+                }
+                metrics.nebulae.total_stars += 1;
+            }
+        }
+
+        // Count single-line comments (nebulae)
+        if signature.comment_single != "$^" {
+            if let Ok(comment_regex) = regex::Regex::new(signature.comment_single) {
+                for _cap in comment_regex.find_iter(source) {
+                    metrics.nebulae.comment_lines += 1;
+                }
+            }
+        }
+
+        // Calculate derived metrics
+        let total_lines_f = metrics.total_lines.max(1) as f64;
+        metrics.derived.stellar_density = (metrics.stars.count as f64 / total_lines_f) * 1000.0;
+        metrics.derived.nebula_ratio = if metrics.nebulae.total_stars > 0 {
+            metrics.nebulae.documented_stars as f64 / metrics.nebulae.total_stars as f64
+        } else {
+            0.0
+        };
+        metrics.derived.health_score = 0.7; // Moderate confidence for pattern-based analysis
+
+        metrics
+    }
+
+    /// Analyze a file by extension, reading from path
+    ///
+    /// Determines language from file extension and analyzes the source.
+    pub fn analyze_file(&self, path: &std::path::Path) -> Option<CensusMetrics> {
+        let ext = path.extension()?.to_str()?;
+        // Verify the extension is supported
+        let _ = STELLAR_LIBRARY.get_by_extension(ext)?;
+        let source = std::fs::read_to_string(path).ok()?;
+
+        // Find the language name from extension
+        let language = STELLAR_LIBRARY.languages()
+            .into_iter()
+            .find(|lang| {
+                STELLAR_LIBRARY.get(lang)
+                    .map(|s| s.extensions.contains(&ext))
+                    .unwrap_or(false)
+            })?;
+
+        Some(self.analyze_source(language, &source))
+    }
+
+    /// Get the hemisphere classification for a language
+    pub fn get_hemisphere(&self, language: &str) -> Option<Hemisphere> {
+        STELLAR_LIBRARY.get(language).map(|s| s.hemisphere)
+    }
+
+    /// Check if a language is supported for fallback analysis
+    pub fn is_supported(&self, language: &str) -> bool {
+        STELLAR_LIBRARY.get(language).is_some()
+    }
+
+    /// Get the display name for a language
+    pub fn display_name(&self, language: &str) -> Option<&'static str> {
+        STELLAR_LIBRARY.get(language).map(|s| s.display_name)
+    }
+
+    /// Analyze by extension string
+    pub fn analyze_by_extension(&self, ext: &str, source: &str) -> Option<CensusMetrics> {
+        // Verify the extension is supported
+        let _ = STELLAR_LIBRARY.get_by_extension(ext)?;
+
+        // Find language name by extension
+        let language = STELLAR_LIBRARY.languages()
+            .into_iter()
+            .find(|lang| {
+                STELLAR_LIBRARY.get(lang)
+                    .map(|s| s.extensions.contains(&ext))
+                    .unwrap_or(false)
+            })?;
+
+        Some(self.analyze_source(language, source))
+    }
+}
+
+// =============================================================================
 // Tests
 // =============================================================================
 
@@ -969,5 +1137,164 @@ mod tests {
         assert!(registry.find("star_count").is_some());
         assert!(registry.find("nebulae_count").is_some());
         assert!(registry.find("dark_matter").is_some());
+    }
+
+    // =========================================================================
+    // Pattern Fallback Analyzer Tests (Universal Spectrograph Integration)
+    // =========================================================================
+
+    #[test]
+    fn test_fallback_analyzer_creation() {
+        let analyzer = PatternFallbackAnalyzer::new();
+        assert!(analyzer.is_supported("rust"));
+        assert!(analyzer.is_supported("python"));
+        assert!(analyzer.is_supported("simula"));
+        assert!(analyzer.is_supported("logo"));
+        assert!(analyzer.is_supported("tcl"));
+    }
+
+    #[test]
+    fn test_fallback_simula_analysis() {
+        let analyzer = PatternFallbackAnalyzer::new();
+
+        let source = r#"
+class Point;
+begin
+    real x, y;
+    procedure Draw;
+    begin
+        ! draw the point
+    end;
+end;
+"#;
+
+        let metrics = analyzer.analyze_source("simula", source);
+        // Should find: class Point, procedure Draw
+        assert!(metrics.stars.count >= 2, "Should find at least 2 stars in Simula code");
+        assert_eq!(metrics.stars.types, 1, "Should find 1 class");
+        assert!(metrics.stars.functions >= 1, "Should find at least 1 procedure");
+    }
+
+    #[test]
+    fn test_fallback_logo_analysis() {
+        let analyzer = PatternFallbackAnalyzer::new();
+
+        let source = r#"
+to square :size
+  repeat 4 [forward :size right 90]
+end
+
+to circle :radius
+  repeat 360 [forward :radius right 1]
+end
+"#;
+
+        let metrics = analyzer.analyze_source("logo", source);
+        // Should find: to square, to circle
+        assert_eq!(metrics.stars.count, 2, "Should find 2 Logo procedures");
+        assert_eq!(metrics.stars.functions, 2, "All Logo stars are functions");
+    }
+
+    #[test]
+    fn test_fallback_tcl_analysis() {
+        let analyzer = PatternFallbackAnalyzer::new();
+
+        let source = r#"
+proc calculateTotal {a b} {
+    return [expr {$a + $b}]
+}
+
+proc greet {name} {
+    puts "Hello, $name!"
+}
+
+proc main {} {
+    set result [calculateTotal 5 10]
+    greet "World"
+}
+"#;
+
+        let metrics = analyzer.analyze_source("tcl", source);
+        // Should find: proc calculateTotal, proc greet, proc main
+        assert_eq!(metrics.stars.count, 3, "Should find 3 Tcl procedures");
+    }
+
+    #[test]
+    fn test_fallback_cobol_analysis() {
+        let analyzer = PatternFallbackAnalyzer::new();
+
+        let source = r#"
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HELLO-WORLD.
+       PROCEDURE DIVISION.
+       MAIN-PROCEDURE SECTION.
+           DISPLAY "Hello, World!".
+           STOP RUN.
+"#;
+
+        let metrics = analyzer.analyze_source("cobol", source);
+        // Should find procedure division, section
+        assert!(metrics.stars.count >= 1, "Should find at least 1 COBOL section");
+    }
+
+    #[test]
+    fn test_fallback_hemisphere_classification() {
+        let analyzer = PatternFallbackAnalyzer::new();
+
+        assert_eq!(analyzer.get_hemisphere("rust"), Some(Hemisphere::Logic));
+        assert_eq!(analyzer.get_hemisphere("html"), Some(Hemisphere::Interface));
+        assert_eq!(analyzer.get_hemisphere("bash"), Some(Hemisphere::Automation));
+        assert_eq!(analyzer.get_hemisphere("sql"), Some(Hemisphere::Data));
+        assert_eq!(analyzer.get_hemisphere("simula"), Some(Hemisphere::Logic));
+    }
+
+    #[test]
+    fn test_fallback_display_names() {
+        let analyzer = PatternFallbackAnalyzer::new();
+
+        assert_eq!(analyzer.display_name("simula"), Some("Simula"));
+        assert_eq!(analyzer.display_name("logo"), Some("Logo"));
+        assert_eq!(analyzer.display_name("tcl"), Some("Tcl"));
+        assert_eq!(analyzer.display_name("cobol"), Some("COBOL"));
+        assert_eq!(analyzer.display_name("fortran"), Some("Fortran"));
+    }
+
+    #[test]
+    fn test_fallback_analyze_by_extension() {
+        let analyzer = PatternFallbackAnalyzer::new();
+
+        let rust_source = "fn main() { println!(\"Hello\"); }";
+        let metrics = analyzer.analyze_by_extension("rs", rust_source);
+
+        assert!(metrics.is_some());
+        let m = metrics.unwrap();
+        assert!(m.stars.count >= 1, "Should find main function");
+    }
+
+    #[test]
+    fn test_fallback_unsupported_language() {
+        let analyzer = PatternFallbackAnalyzer::new();
+
+        // Unknown language returns empty metrics
+        let metrics = analyzer.analyze_source("unknown_language_xyz", "some code");
+        assert_eq!(metrics.stars.count, 0);
+        assert_eq!(metrics.total_lines, 0);
+    }
+
+    #[test]
+    fn test_fallback_comment_counting() {
+        let analyzer = PatternFallbackAnalyzer::new();
+
+        let source = r#"
+# This is a comment
+def hello():
+    # Another comment
+    pass
+# Final comment
+"#;
+
+        let metrics = analyzer.analyze_source("python", source);
+        // Should count some comments
+        assert!(metrics.nebulae.comment_lines >= 1, "Should count Python comments");
     }
 }
