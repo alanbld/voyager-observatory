@@ -81,6 +81,8 @@ pub use orchestrator::{
 pub use presenter::{
     IntelligentPresenter, EmojiFormatter, Theme,
     SemanticTransparency,
+    // Drift Info (v1.1.0)
+    DriftInfo,
 };
 
 // Phase 3: Spectral Synthesis (Celestial Navigation)
@@ -132,6 +134,12 @@ pub use temporal::{
     TectonicShift, AncientStar, Supernova, AgeClassification, ChurnClassification,
     is_temporal_available, temporal_state_description,
     GeologicalAnalyzer, GeologicalSummary, GeologicalActivity,
+    // Stellar Drift (v1.1.0)
+    StellarDriftAnalyzer, StellarDriftReport, ConstellationEvolution, NewStar,
+    // Shallow Chronos (v1.1.0)
+    DEFAULT_COMMIT_DEPTH, FULL_COMMIT_DEPTH,
+    // Chronos Warp (v1.2.0)
+    ChronosCache, ChronosCacheManager, CachedObservation, CachedGalaxyStats, WarpStatus,
 };
 
 // Phase 3: Plugin Ecosystem (Iron Sandbox)

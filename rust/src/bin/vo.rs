@@ -258,6 +258,14 @@ struct Cli {
     #[arg(long = "by", value_enum, default_value = "constellation", help_heading = "📊 CENSUS")]
     by: SurveyGrouping,
 
+    /// Git history depth for temporal analysis [shallow=1000, full=100000]
+    #[arg(long = "chronos-depth", value_enum, default_value = "shallow", help_heading = "📊 CENSUS")]
+    chronos_depth: ChronosDepth,
+
+    /// Disable Chronos Warp cache (force fresh git analysis)
+    #[arg(long = "no-cache", help_heading = "📊 CENSUS")]
+    no_cache: bool,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // 🚀 SPECIAL MODES
     // ═══════════════════════════════════════════════════════════════════════════
@@ -379,6 +387,8 @@ enum SurveyMode {
     Composition,
     /// Health diagnostics: Red Giants, Stellar Nurseries
     Health,
+    /// Evolution analysis: Ancient Stars, New Stars, Stellar Drift (v1.1.0)
+    Evolution,
 }
 
 /// Grouping level for survey output
@@ -391,6 +401,16 @@ enum SurveyGrouping {
     Galaxy,
     /// Fine-grained file-level
     Sector,
+}
+
+/// Chronos depth for git history analysis (v1.1.0)
+#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+enum ChronosDepth {
+    /// Fast mode: 1000 commits max (default)
+    #[default]
+    Shallow,
+    /// Complete history: 100000 commits max
+    Full,
 }
 
 /// CLI enum for metadata display mode (Chronos v2.3)
@@ -537,8 +557,9 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
         CelestialCensus, GalaxyCensus, AstBridge,
     };
     #[cfg(feature = "temporal")]
-    use pm_encoder::core::{ChronosEngine, TemporalCensus};
+    use pm_encoder::core::{ChronosEngine, TemporalCensus, StellarDriftAnalyzer, StellarDriftReport};
     use std::time::Instant;
+    use std::collections::HashMap;
 
     let start = Instant::now();
 
@@ -563,6 +584,7 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
     let census = CelestialCensus::new();
     let bridge = AstBridge::new();
     let mut galaxy = GalaxyCensus::new(root.to_string_lossy().to_string());
+    let mut star_counts: HashMap<String, usize> = HashMap::new();
 
     // Analyze each file
     for entry in &entries {
@@ -572,6 +594,8 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
         // Parse file with AST bridge
         if let Some(file) = bridge.analyze_file(&entry.content, language) {
             let metrics = census.analyze(&file);
+            // Track star counts for drift analysis
+            star_counts.insert(entry.path.clone(), metrics.stars.count);
             galaxy.add_file(&entry.path, metrics);
         }
     }
@@ -579,21 +603,83 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
     galaxy.finalize();
 
     // Build temporal census (Chronos Engine)
+    // Performance optimization: Only extract git history for evolution mode or health mode
+    // This avoids ~2-3 second overhead for composition-only surveys
     #[cfg(feature = "temporal")]
-    let temporal_census: Option<TemporalCensus> = {
-        if let Some(mut engine) = ChronosEngine::new(root) {
-            if engine.extract_history().is_ok() {
-                Some(engine.build_census())
+    use pm_encoder::core::WarpStatus;
+    #[cfg(feature = "temporal")]
+    let (temporal_census, drift_report, warp_status): (Option<TemporalCensus>, Option<StellarDriftReport>, Option<WarpStatus>) = {
+        use pm_encoder::core::{DEFAULT_COMMIT_DEPTH, FULL_COMMIT_DEPTH};
+
+        let needs_temporal = matches!(mode, SurveyMode::Evolution | SurveyMode::Health);
+
+        if needs_temporal {
+            // Use Shallow Chronos (1000 commits) by default for speed
+            // Use --chronos-depth full for complete history
+            let depth = match cli.chronos_depth {
+                ChronosDepth::Shallow => DEFAULT_COMMIT_DEPTH,
+                ChronosDepth::Full => FULL_COMMIT_DEPTH,
+            };
+
+            if let Some(mut engine) = ChronosEngine::with_depth(root, depth) {
+                // Calculate path prefix if survey root differs from git root
+                // This is needed to match star_counts paths (survey-relative) with
+                // temporal_census paths (git-relative)
+                let path_prefix: Option<String> = {
+                    let git_root = git2::Repository::discover(root)
+                        .ok()
+                        .and_then(|repo| repo.workdir().map(|p| p.to_path_buf()));
+
+                    if let Some(git_root) = git_root {
+                        // Canonicalize root to get absolute path for comparison
+                        let abs_root = root.canonicalize().ok();
+                        if let Some(abs_root) = abs_root {
+                            abs_root.strip_prefix(&git_root)
+                                .ok()
+                                .map(|p| p.to_string_lossy().to_string())
+                                .filter(|s| !s.is_empty())
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                };
+
+                // Use cache unless --no-cache flag is set
+                let extract_result = if cli.no_cache {
+                    engine.extract_history()
+                } else {
+                    engine.extract_history_cached()
+                };
+
+                if extract_result.is_ok() {
+                    let warp = engine.warp_status();
+                    let tc = engine.build_census();
+                    // Build stellar drift report for evolution survey
+                    let drift = if matches!(mode, SurveyMode::Evolution) {
+                        let analyzer = StellarDriftAnalyzer::new();
+                        Some(analyzer.analyze(&tc, &star_counts, None, path_prefix.as_deref()))
+                    } else {
+                        None
+                    };
+                    (Some(tc), drift, Some(warp))
+                } else {
+                    (None, None, None)
+                }
             } else {
-                None
+                (None, None, None)
             }
         } else {
-            None
+            // Skip temporal analysis for composition-only surveys
+            (None, None, None)
         }
     };
 
     #[cfg(not(feature = "temporal"))]
     let temporal_census: Option<()> = None;
+    #[cfg(not(feature = "temporal"))]
+    let drift_report: Option<()> = None;
 
     let elapsed = start.elapsed();
 
@@ -631,16 +717,27 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
                     #[cfg(not(feature = "temporal"))]
                     print_health_report(&galaxy, grouping, None::<&()>);
                 }
+                SurveyMode::Evolution => {
+                    #[cfg(feature = "temporal")]
+                    print_evolution_report(&galaxy, grouping, drift_report.as_ref(), temporal_census.as_ref());
+                    #[cfg(not(feature = "temporal"))]
+                    print_evolution_report_static(&galaxy);
+                }
             }
         }
     }
 
-    // Print timing
+    // Print timing with Warp status
     eprintln!();
     #[cfg(feature = "temporal")]
     if let Some(ref tc) = temporal_census {
-        eprintln!("Survey completed in {:.1}ms ({} files, {} chronos events)",
-            elapsed.as_secs_f64() * 1000.0, galaxy.total_files, tc.total_observations);
+        let warp_indicator = match warp_status {
+            Some(WarpStatus::Engaged) => " [Warp Engaged]",
+            Some(WarpStatus::Calibrating) => " [Warp Calibrating]",
+            _ => "",
+        };
+        eprintln!("Survey completed in {:.1}ms ({} files, {} chronos events){}",
+            elapsed.as_secs_f64() * 1000.0, galaxy.total_files, tc.total_observations, warp_indicator);
     } else {
         eprintln!("Survey completed in {:.1}ms ({} files analyzed)",
             elapsed.as_secs_f64() * 1000.0, galaxy.total_files);
@@ -650,7 +747,8 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
         elapsed.as_secs_f64() * 1000.0, galaxy.total_files);
 }
 
-/// Print composition table (Stars, Nebulae, Dark Matter, Churn)
+/// Print composition table with Technical Overlays
+/// (Stars=Logic, Nebulae=Docs, Dark Matter=Debt, Mass=LOC)
 #[cfg(feature = "temporal")]
 fn print_composition_table(
     galaxy: &pm_encoder::core::GalaxyCensus,
@@ -662,20 +760,29 @@ fn print_composition_table(
     // Header - with Churn column if temporal data available
     let has_temporal = temporal.is_some();
 
-    if has_temporal {
-        println!("╔════════════════════════════════════════════════════════════════════════════════════════╗");
-        println!("║                         CELESTIAL CENSUS: COMPOSITION                                   ║");
-        println!("╠═══════════════════════════════════════╦═══════╦═══════╦═══════╦═══════╦═════════════════╣");
-        println!("║ Constellation                         ║ Stars ║Nebulae║ Dark  ║ Churn ║     Health      ║");
-        println!("║                                       ║       ║       ║Matter ║ (90d) ║                 ║");
-        println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════╬═════════════════╣");
+    // Print Rosetta Stone legend first
+    println!();
+    if use_emoji() {
+        println!("  📖 Rosetta Stone: Stars = Functions/Methods | Nebulae = Doc/Comments | Dark Matter = Complexity/Debt | Mass = LOC");
     } else {
-        println!("╔══════════════════════════════════════════════════════════════════════════════╗");
-        println!("║                    CELESTIAL CENSUS: COMPOSITION                              ║");
-        println!("╠═══════════════════════════════════════╦═══════╦═══════╦═══════╦═══════════════╣");
-        println!("║ Constellation                         ║ Stars ║Nebulae║ Dark  ║    Health     ║");
-        println!("║                                       ║       ║       ║Matter ║               ║");
-        println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════════════╣");
+        println!("  [LEGEND] Stars = Functions/Methods | Nebulae = Doc/Comments | Dark Matter = Complexity/Debt | Mass = LOC");
+    }
+    println!();
+
+    if has_temporal {
+        println!("╔═══════════════════════════════════════════════════════════════════════════════════════════════════════╗");
+        println!("║                            CELESTIAL CENSUS: COMPOSITION                                              ║");
+        println!("╠═══════════════════════════════════════╦═══════╦════════╦════════╦═══════╦═══════╦═══════════════════════╣");
+        println!("║ Constellation                         ║ Stars ║Nebulae ║  Dark  ║ Mass  ║ Churn ║       Health          ║");
+        println!("║                                       ║(Logic)║ (Docs) ║(Matter)║ (LOC) ║ (90d) ║                       ║");
+        println!("╠═══════════════════════════════════════╬═══════╬════════╬════════╬═══════╬═══════╬═══════════════════════╣");
+    } else {
+        println!("╔═══════════════════════════════════════════════════════════════════════════════════════════╗");
+        println!("║                            CELESTIAL CENSUS: COMPOSITION                                  ║");
+        println!("╠═══════════════════════════════════════╦═══════╦════════╦════════╦═══════╦═════════════════╣");
+        println!("║ Constellation                         ║ Stars ║Nebulae ║  Dark  ║ Mass  ║     Health      ║");
+        println!("║                                       ║(Logic)║ (Docs) ║(Matter)║ (LOC) ║                 ║");
+        println!("╠═══════════════════════════════════════╬═══════╬════════╬════════╬═══════╬═════════════════╣");
     }
 
     match grouping {
@@ -684,21 +791,24 @@ fn print_composition_table(
             let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
             let indicator = format_health_indicator(rating);
             let churn = temporal.map(|t| t.constellations.values().map(|c| c.churn_90d).sum::<usize>()).unwrap_or(0);
+            let mass = format_mass(totals.total_lines);
 
             if has_temporal {
-                println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:5} ║ {:15} ║",
+                println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
                     truncate_path(&galaxy.root, 37),
                     totals.stars.count,
                     totals.nebulae.doc_lines + totals.nebulae.comment_lines,
                     totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+                    mass,
                     churn,
                     indicator);
             } else {
-                println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+                println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
                     truncate_path(&galaxy.root, 37),
                     totals.stars.count,
                     totals.nebulae.doc_lines + totals.nebulae.comment_lines,
                     totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+                    mass,
                     indicator);
             }
         }
@@ -709,21 +819,25 @@ fn print_composition_table(
                 let dark_matter = constellation.totals.dark_matter.unknown_regions
                     + constellation.totals.dark_matter.volcanic_regions;
                 let churn = temporal.and_then(|t| t.constellations.get(path).map(|c| c.churn_90d)).unwrap_or(0);
+                let mass = format_mass(constellation.totals.total_lines);
 
+                // Use hierarchical display for nebula grouping visual depth
                 if has_temporal {
-                    println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:5} ║ {:15} ║",
-                        truncate_path(path, 37),
+                    println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
+                        format_hierarchical_path(path, 37),
                         constellation.totals.stars.count,
                         constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
                         dark_matter,
+                        mass,
                         churn,
                         indicator);
                 } else {
-                    println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
-                        truncate_path(path, 37),
+                    println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
+                        format_hierarchical_path(path, 37),
                         constellation.totals.stars.count,
                         constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
                         dark_matter,
+                        mass,
                         indicator);
                 }
             }
@@ -733,33 +847,38 @@ fn print_composition_table(
             for (path, constellation) in &galaxy.constellations {
                 let rating = constellation.rating.unwrap_or(HealthRating::Stable);
                 let indicator = format_health_indicator(rating);
+                let dark_matter = constellation.totals.dark_matter.unknown_regions
+                    + constellation.totals.dark_matter.volcanic_regions;
                 let churn = temporal.and_then(|t| t.constellations.get(path).map(|c| c.churn_90d)).unwrap_or(0);
+                let mass = format_mass(constellation.totals.total_lines);
 
                 if has_temporal {
-                    println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:5} ║ {:15} ║",
+                    println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
                         truncate_path(path, 37),
                         constellation.totals.stars.count,
-                        constellation.totals.nebulae.doc_lines,
-                        constellation.totals.dark_matter.unknown_regions,
+                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        dark_matter,
+                        mass,
                         churn,
                         indicator);
                 } else {
-                    println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+                    println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
                         truncate_path(path, 37),
                         constellation.totals.stars.count,
-                        constellation.totals.nebulae.doc_lines,
-                        constellation.totals.dark_matter.unknown_regions,
+                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        dark_matter,
+                        mass,
                         indicator);
                 }
             }
         }
     }
 
-    // Footer
+    // Footer separator
     if has_temporal {
-        println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════╬═════════════════╣");
+        println!("╠═══════════════════════════════════════╬═══════╬════════╬════════╬═══════╬═══════╬═══════════════════════╣");
     } else {
-        println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════════════╣");
+        println!("╠═══════════════════════════════════════╬═══════╬════════╬════════╬═══════╬═════════════════╣");
     }
 
     // Totals row
@@ -767,24 +886,27 @@ fn print_composition_table(
     let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
     let indicator = format_health_indicator(rating);
     let total_churn = temporal.map(|t| t.constellations.values().map(|c| c.churn_90d).sum::<usize>()).unwrap_or(0);
+    let total_mass = format_mass(totals.total_lines);
 
     if has_temporal {
-        println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:5} ║ {:15} ║",
+        println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
             "TOTAL",
             totals.stars.count,
             totals.nebulae.doc_lines + totals.nebulae.comment_lines,
             totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+            total_mass,
             total_churn,
             indicator);
-        println!("╚═══════════════════════════════════════╩═══════╩═══════╩═══════╩═══════╩═════════════════╝");
+        println!("╚═══════════════════════════════════════╩═══════╩════════╩════════╩═══════╩═══════╩═══════════════════════╝");
     } else {
-        println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+        println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
             "TOTAL",
             totals.stars.count,
             totals.nebulae.doc_lines + totals.nebulae.comment_lines,
             totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+            total_mass,
             indicator);
-        println!("╚═══════════════════════════════════════╩═══════╩═══════╩═══════╩═══════════════╝");
+        println!("╚═══════════════════════════════════════╩═══════╩════════╩════════╩═══════╩═════════════════╝");
     }
 
     // Legend
@@ -820,23 +942,34 @@ fn print_composition_table<T>(
 ) {
     use pm_encoder::core::HealthRating;
 
-    println!("╔══════════════════════════════════════════════════════════════════════════════╗");
-    println!("║                    CELESTIAL CENSUS: COMPOSITION                              ║");
-    println!("╠═══════════════════════════════════════╦═══════╦═══════╦═══════╦═══════════════╣");
-    println!("║ Constellation                         ║ Stars ║Nebulae║ Dark  ║    Health     ║");
-    println!("║                                       ║       ║       ║Matter ║               ║");
-    println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════════════╣");
+    // Print Rosetta Stone legend first
+    println!();
+    if use_emoji() {
+        println!("  📖 Rosetta Stone: Stars = Functions/Methods | Nebulae = Doc/Comments | Dark Matter = Complexity/Debt | Mass = LOC");
+    } else {
+        println!("  [LEGEND] Stars = Functions/Methods | Nebulae = Doc/Comments | Dark Matter = Complexity/Debt | Mass = LOC");
+    }
+    println!();
+
+    println!("╔═══════════════════════════════════════════════════════════════════════════════════════════╗");
+    println!("║                            CELESTIAL CENSUS: COMPOSITION                                  ║");
+    println!("╠═══════════════════════════════════════╦═══════╦════════╦════════╦═══════╦═════════════════╣");
+    println!("║ Constellation                         ║ Stars ║Nebulae ║  Dark  ║ Mass  ║     Health      ║");
+    println!("║                                       ║(Logic)║ (Docs) ║(Matter)║ (LOC) ║                 ║");
+    println!("╠═══════════════════════════════════════╬═══════╬════════╬════════╬═══════╬═════════════════╣");
 
     match grouping {
         SurveyGrouping::Galaxy => {
             let totals = &galaxy.totals;
             let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
             let indicator = format_health_indicator(rating);
-            println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+            let mass = format_mass(totals.total_lines);
+            println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
                 truncate_path(&galaxy.root, 37),
                 totals.stars.count,
                 totals.nebulae.doc_lines + totals.nebulae.comment_lines,
                 totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+                mass,
                 indicator);
         }
         SurveyGrouping::Constellation | SurveyGrouping::Sector => {
@@ -845,26 +978,31 @@ fn print_composition_table<T>(
                 let indicator = format_health_indicator(rating);
                 let dark_matter = constellation.totals.dark_matter.unknown_regions
                     + constellation.totals.dark_matter.volcanic_regions;
-                println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
-                    truncate_path(path, 37),
+                let mass = format_mass(constellation.totals.total_lines);
+                // Use hierarchical display for nebula grouping visual depth
+                println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
+                    format_hierarchical_path(path, 37),
                     constellation.totals.stars.count,
                     constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
                     dark_matter,
+                    mass,
                     indicator);
             }
         }
     }
 
-    println!("╠═══════════════════════════════════════╬═══════╬═══════╬═══════╬═══════════════╣");
+    println!("╠═══════════════════════════════════════╬═══════╬════════╬════════╬═══════╬═════════════════╣");
     let totals = &galaxy.totals;
     let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
     let indicator = format_health_indicator(rating);
-    println!("║ {:37} ║ {:5} ║ {:5} ║ {:5} ║ {:13} ║",
+    let total_mass = format_mass(totals.total_lines);
+    println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
         "TOTAL", totals.stars.count,
         totals.nebulae.doc_lines + totals.nebulae.comment_lines,
         totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
+        total_mass,
         indicator);
-    println!("╚═══════════════════════════════════════╩═══════╩═══════╩═══════╩═══════════════╝");
+    println!("╚═══════════════════════════════════════╩═══════╩════════╩════════╩═══════╩═════════════════╝");
 
     println!();
     println!("Legend: star=Healthy  checkmark=Stable  warning=High Dark Matter  alert=Critical");
@@ -898,7 +1036,11 @@ fn print_health_report(
     // SUPERNOVAS (Extreme recent activity) - Phase 2 Chronos Engine
     if let Some(tc) = temporal {
         if !tc.supernovas.is_empty() {
-            println!("🔥 SUPERNOVAS (Destabilizing refactors - >30 observations in 30 days):");
+            if use_emoji() {
+                println!("🔥 SUPERNOVAS (Destabilizing refactors - >30 observations in 30 days):");
+            } else {
+                println!("[!!] SUPERNOVAS (Destabilizing refactors - >30 observations in 30 days):");
+            }
             for nova in tc.supernovas.iter().take(10) {
                 println!("  - {} ({} observations)", nova.path, nova.observations_30d);
             }
@@ -907,7 +1049,11 @@ fn print_health_report(
             }
             println!();
         } else {
-            println!("✨ No Supernovas detected - codebase is stable");
+            if use_emoji() {
+                println!("✨ No Supernovas detected - codebase is stable");
+            } else {
+                println!("[OK] No Supernovas detected - codebase is stable");
+            }
             println!();
         }
     }
@@ -956,7 +1102,11 @@ fn print_health_report(
     if let Some(tc) = temporal {
         let core_ancient: Vec<_> = tc.ancient_stars.iter().filter(|a| a.is_core).collect();
         if !core_ancient.is_empty() {
-            println!("📜 ANCIENT STARS (Core files dormant > 2 years):");
+            if use_emoji() {
+                println!("📜 ANCIENT STARS (Core files dormant > 2 years):");
+            } else {
+                println!("[*] ANCIENT STARS (Core files dormant > 2 years):");
+            }
             for ancient in core_ancient.iter().take(10) {
                 println!("  - {} (dormant {} days, {} stars)",
                     ancient.path, ancient.dormant_days, ancient.star_count);
@@ -1080,6 +1230,335 @@ fn print_health_report<T>(
     println!("  Volcanic Depths:      {}", galaxy.totals.dark_matter.volcanic_regions);
     println!("  Max Nesting Depth:    {}", galaxy.totals.dark_matter.max_nesting_depth);
     println!("  Documentation Ratio:  {:.0}%", galaxy.totals.derived.nebula_ratio * 100.0);
+}
+
+// =============================================================================
+// EVOLUTION REPORT (v1.1.0 - Stellar Drift)
+// =============================================================================
+
+/// Print evolution report with full temporal + semantic synthesis
+#[cfg(feature = "temporal")]
+fn print_evolution_report(
+    galaxy: &pm_encoder::core::GalaxyCensus,
+    _grouping: SurveyGrouping,
+    drift: Option<&pm_encoder::core::StellarDriftReport>,
+    temporal: Option<&pm_encoder::core::TemporalCensus>,
+) {
+    use pm_encoder::core::ChurnClassification;
+
+    println!("╔══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║              STELLAR DRIFT REPORT: EVOLUTION ANALYSIS                        ║");
+    println!("╚══════════════════════════════════════════════════════════════════════════════╝");
+    println!();
+
+    // Galaxy overview
+    if let Some(dr) = drift {
+        // Galaxy age and big bang
+        let age_display = if dr.galaxy_age_years >= 1.0 {
+            format!("{:.1} years", dr.galaxy_age_years)
+        } else {
+            format!("{} days", dr.galaxy_age_days)
+        };
+
+        let big_bang = dr.big_bang_date.map(|d| d.format("%Y-%m-%d").to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+
+        println!("🌌 GALAXY OVERVIEW");
+        println!("─────────────────────────────────────────────────────────────────────────────────");
+        println!("  Big Bang (First Commit):   {}", big_bang);
+        println!("  Galaxy Age:                {}", age_display);
+        println!("  Total Logic Stars:         {}", dr.total_stars);
+        println!();
+
+        // Stellar drift indicators
+        println!("📊 STELLAR DRIFT METRICS");
+        println!("─────────────────────────────────────────────────────────────────────────────────");
+        println!("  Drift Rate (6 months):     {:.1}%", dr.stellar_drift_percent);
+        println!("  Annual Drift Rate:         {:.1}% / year", dr.drift_rate_per_year);
+        println!();
+
+        // Star distribution
+        let ancient_pct = if dr.total_stars > 0 {
+            dr.ancient_star_total as f64 / dr.total_stars as f64 * 100.0
+        } else { 0.0 };
+        let new_pct = if dr.total_stars > 0 {
+            dr.new_star_total as f64 / dr.total_stars as f64 * 100.0
+        } else { 0.0 };
+
+        if use_emoji() {
+            println!("  🌟 Ancient Stars (>2y):    {} ({:.0}%)", dr.ancient_star_total, ancient_pct);
+            println!("  🌠 New Stars (<90d):       {} ({:.0}%)", dr.new_star_total, new_pct);
+            println!("  ⭐ Active Stars:           {}", dr.active_star_total);
+            println!("  💤 Dormant Stars:          {}", dr.dormant_star_total);
+        } else {
+            println!("  [*] Ancient Stars (>2y):   {} ({:.0}%)", dr.ancient_star_total, ancient_pct);
+            println!("  [+] New Stars (<90d):      {} ({:.0}%)", dr.new_star_total, new_pct);
+            println!("  [o] Active Stars:          {}", dr.active_star_total);
+            println!("  [-] Dormant Stars:         {}", dr.dormant_star_total);
+        }
+        println!();
+
+        // Health status
+        let health_indicator = if use_emoji() {
+            if dr.is_expanding {
+                "🚀 Expanding (More new stars than ancient)"
+            } else if dr.is_stable {
+                "✅ Stable (Low drift, balanced evolution)"
+            } else if dr.is_ossifying {
+                "🦴 Ossifying (All ancient, no new growth)"
+            } else if dr.has_supernovas {
+                "🔥 Volatile (Destabilizing refactors detected)"
+            } else {
+                "📊 Normal"
+            }
+        } else {
+            if dr.is_expanding {
+                "[^] Expanding (More new stars than ancient)"
+            } else if dr.is_stable {
+                "[OK] Stable (Low drift, balanced evolution)"
+            } else if dr.is_ossifying {
+                "[!] Ossifying (All ancient, no new growth)"
+            } else if dr.has_supernovas {
+                "[!!] Volatile (Destabilizing refactors detected)"
+            } else {
+                "[-] Normal"
+            }
+        };
+        println!("  Health Status:             {}", health_indicator);
+        println!();
+
+        // Constellation evolution table
+        if !dr.constellations.is_empty() {
+            if use_emoji() {
+                println!("✨ CONSTELLATION LIFE CYCLES");
+            } else {
+                println!("[*] CONSTELLATION LIFE CYCLES");
+            }
+            println!("─────────────────────────────────────────────────────────────────────────────────");
+            println!("{:<30} {:>6} {:>6} {:>8} {:>10} {:>12}",
+                "Constellation", "Stars", "New", "Ancient", "Churn", "Drift/yr");
+            println!("{}", "─".repeat(80));
+
+            for (path, evo) in &dr.constellations {
+                let display_path = if path.len() > 28 {
+                    format!("...{}", &path[path.len() - 25..])
+                } else {
+                    path.clone()
+                };
+
+                let total_stars = evo.new_star_count + evo.ancient_star_count
+                    + evo.active_star_count + evo.dormant_star_count;
+
+                let churn_display = match evo.volcanic_churn {
+                    ChurnClassification::Dormant => "Dormant",
+                    ChurnClassification::Low => "Low",
+                    ChurnClassification::Moderate => "Moderate",
+                    ChurnClassification::High => "High",
+                    ChurnClassification::Supernova => "Supernova",
+                };
+
+                let lifecycle = if use_emoji() {
+                    if evo.is_new {
+                        "🌱"
+                    } else if evo.is_ancient {
+                        "🏛️"
+                    } else if evo.new_star_count > evo.ancient_star_count {
+                        "📈"
+                    } else if evo.volcanic_churn == ChurnClassification::High
+                           || evo.volcanic_churn == ChurnClassification::Supernova {
+                        "🌋"
+                    } else {
+                        "📊"
+                    }
+                } else {
+                    if evo.is_new {
+                        "[+]"
+                    } else if evo.is_ancient {
+                        "[A]"
+                    } else if evo.new_star_count > evo.ancient_star_count {
+                        "[^]"
+                    } else if evo.volcanic_churn == ChurnClassification::High
+                           || evo.volcanic_churn == ChurnClassification::Supernova {
+                        "[!]"
+                    } else {
+                        "[-]"
+                    }
+                };
+
+                println!("{} {:<28} {:>6} {:>6} {:>8} {:>10} {:>10.1}%",
+                    lifecycle,
+                    display_path,
+                    total_stars,
+                    evo.new_star_count,
+                    evo.ancient_star_count,
+                    churn_display,
+                    evo.drift_rate);
+            }
+            println!();
+        }
+
+        // New Stars listing (top 10)
+        if !dr.new_stars.is_empty() {
+            if use_emoji() {
+                println!("🌠 NEW STARS (Recently Added Logic)");
+            } else {
+                println!("[+] NEW STARS (Recently Added Logic)");
+            }
+            println!("─────────────────────────────────────────────────────────────────────────────────");
+            for star in dr.new_stars.iter().take(10) {
+                let expansion_marker = if star.is_expansion { "+" } else if use_emoji() { "✦" } else { "*" };
+                println!("  {} {} ({} days old, {} stars)",
+                    expansion_marker, star.path, star.age_days, star.star_count);
+            }
+            if dr.new_stars.len() > 10 {
+                println!("  ... and {} more new stars", dr.new_stars.len() - 10);
+            }
+            println!();
+        }
+
+        // Ancient Stars listing (top 10)
+        if !dr.ancient_stars.is_empty() {
+            let core_ancient: Vec<_> = dr.ancient_stars.iter()
+                .filter(|a| a.is_core)
+                .collect();
+            if !core_ancient.is_empty() {
+                if use_emoji() {
+                    println!("🌟 ANCIENT STARS (Stable Core)");
+                } else {
+                    println!("[*] ANCIENT STARS (Stable Core)");
+                }
+                println!("─────────────────────────────────────────────────────────────────────────────────");
+                for star in core_ancient.iter().take(10) {
+                    let marker = if use_emoji() { "📜" } else { ">" };
+                    println!("  {} {} (dormant {} days, {} stars)",
+                        marker, star.path, star.dormant_days, star.star_count);
+                }
+                if core_ancient.len() > 10 {
+                    println!("  ... and {} more ancient core stars", core_ancient.len() - 10);
+                }
+                println!();
+            }
+        }
+
+        // Supernovas (if any)
+        if !dr.supernovas.is_empty() {
+            if use_emoji() {
+                println!("🔥 SUPERNOVAS (Destabilizing Activity)");
+            } else {
+                println!("[!!] SUPERNOVAS (Destabilizing Activity)");
+            }
+            println!("─────────────────────────────────────────────────────────────────────────────────");
+            for nova in dr.supernovas.iter().take(5) {
+                let marker = if use_emoji() { "💥" } else { "!" };
+                println!("  {} {} ({} observations in 30d)",
+                    marker, nova.path, nova.observations_30d);
+            }
+            println!();
+        }
+    } else {
+        // Fallback when no drift data available
+        if use_emoji() {
+            println!("⚠️  Stellar Drift analysis requires temporal data.");
+        } else {
+            println!("[!] Stellar Drift analysis requires temporal data.");
+        }
+        println!("    Run from a git repository root for evolution metrics.");
+        println!();
+    }
+
+    // Summary from temporal census
+    if let Some(tc) = temporal {
+        println!("─────────────────────────────────────────────────────────────────────────────────");
+        println!("TEMPORAL SUMMARY (Chronos Engine):");
+        println!("  Total Observations:   {}", tc.total_observations);
+        println!("  Unique Observers:     {}", tc.observer_count);
+        println!("  Supernovas Detected:  {}", tc.supernovas.len());
+        println!("  Ancient Stars Found:  {} ({} core)",
+            tc.ancient_stars.len(),
+            tc.ancient_stars.iter().filter(|a| a.is_core).count());
+    }
+
+    // Galaxy-level summary
+    println!();
+    println!("─────────────────────────────────────────────────────────────────────────────────");
+    println!("CENSUS SUMMARY:");
+    println!("  Total Files:          {}", galaxy.total_files);
+    println!("  Total Stars:          {}", galaxy.totals.stars.count);
+    println!("  Constellations:       {}", galaxy.constellations.len());
+    println!("  Health Score:         {:.0}/100", galaxy.totals.derived.health_score * 100.0);
+}
+
+/// Print evolution report without temporal data (static galaxy fallback)
+#[cfg(not(feature = "temporal"))]
+fn print_evolution_report_static(galaxy: &pm_encoder::core::GalaxyCensus) {
+    println!("╔══════════════════════════════════════════════════════════════════════════════╗");
+    println!("║              STELLAR DRIFT REPORT: STATIC GALAXY                             ║");
+    println!("╚══════════════════════════════════════════════════════════════════════════════╝");
+    println!();
+
+    if use_emoji() {
+        println!("⚠️  Temporal analysis is not available.");
+    } else {
+        println!("[!] Temporal analysis is not available.");
+    }
+    println!("    Build with --features temporal for evolution metrics.");
+    println!();
+    println!("    The Evolution Survey requires access to repository history");
+    println!("    to calculate stellar drift, ancient stars, and new stars.");
+    println!();
+
+    // Show what we can without temporal data
+    if use_emoji() {
+        println!("📊 STATIC CENSUS (No Temporal Data)");
+    } else {
+        println!("[-] STATIC CENSUS (No Temporal Data)");
+    }
+    println!("─────────────────────────────────────────────────────────────────────────────────");
+    println!("  Total Files:          {}", galaxy.total_files);
+    println!("  Total Stars:          {}", galaxy.totals.stars.count);
+    println!("  Constellations:       {}", galaxy.constellations.len());
+    println!();
+
+    // Constellation breakdown
+    if use_emoji() {
+        println!("✨ CONSTELLATION SUMMARY");
+    } else {
+        println!("[*] CONSTELLATION SUMMARY");
+    }
+    println!("─────────────────────────────────────────────────────────────────────────────────");
+    println!("{:<40} {:>10} {:>10} {:>10}",
+        "Constellation", "Files", "Stars", "Health");
+    println!("{}", "─".repeat(70));
+
+    let mut sorted_constellations: Vec<_> = galaxy.constellations.iter().collect();
+    sorted_constellations.sort_by(|a, b| b.1.totals.stars.count.cmp(&a.1.totals.stars.count));
+
+    for (path, constellation) in sorted_constellations.iter().take(15) {
+        let display_path = if path.len() > 38 {
+            format!("...{}", &path[path.len() - 35..])
+        } else {
+            (*path).clone()
+        };
+
+        let health = constellation.rating
+            .map(|r| r.description())
+            .unwrap_or("Unknown");
+
+        println!("{:<40} {:>10} {:>10} {:>10}",
+            display_path,
+            constellation.file_count,
+            constellation.totals.stars.count,
+            health);
+    }
+
+    if galaxy.constellations.len() > 15 {
+        println!("  ... and {} more constellations", galaxy.constellations.len() - 15);
+    }
+
+    println!();
+    println!("─────────────────────────────────────────────────────────────────────────────────");
+    println!("TIP: Enable temporal features for full evolution analysis:");
+    println!("     cargo build --release --features temporal");
 }
 
 /// Print census report in markdown format (with temporal data)
@@ -1267,6 +1746,32 @@ fn print_census_markdown(
                 println!("| Ancient Stars | {} ({} core) |", tc.ancient_stars.len(), core_count);
             }
         }
+        SurveyMode::Evolution => {
+            // Evolution mode uses the dedicated print_evolution_report function
+            // This case shouldn't be reached since markdown mode doesn't support evolution yet
+            println!("## Evolution Analysis");
+            println!();
+            println!("> Note: Evolution analysis is best viewed in default (non-markdown) mode.");
+            println!("> Use `--survey evolution` without `--markdown` for full output.");
+            println!();
+
+            // Basic summary
+            println!("### Summary");
+            println!();
+            println!("| Metric | Value |");
+            println!("|--------|-------|");
+            println!("| Total Files | {} |", galaxy.total_files);
+            println!("| Total Stars | {} |", galaxy.totals.stars.count);
+            println!("| Constellations | {} |", galaxy.constellations.len());
+
+            if let Some(tc) = temporal {
+                println!("| Galaxy Age | {} days |", tc.galaxy_age_days);
+                println!("| Total Observations | {} |", tc.total_observations);
+                let ancient_count = tc.ancient_stars.len();
+                let core_count = tc.ancient_stars.iter().filter(|a| a.is_core).count();
+                println!("| Ancient Stars | {} ({} core) |", ancient_count, core_count);
+            }
+        }
     }
 }
 
@@ -1341,16 +1846,81 @@ fn print_census_markdown<T>(galaxy: &pm_encoder::core::GalaxyCensus, mode: Surve
             println!("| Unknown Regions | {} |", galaxy.totals.dark_matter.unknown_regions);
             println!("| Documentation | {:.0}% |", galaxy.totals.derived.nebula_ratio * 100.0);
         }
+        SurveyMode::Evolution => {
+            // Evolution mode without temporal feature shows static summary
+            println!("## Evolution Analysis (Static Galaxy)");
+            println!();
+            if use_emoji() {
+                println!("> ⚠️ Temporal feature not enabled. Build with `--features temporal` for full evolution metrics.");
+            } else {
+                println!("> [!] Temporal feature not enabled. Build with `--features temporal` for full evolution metrics.");
+            }
+            println!();
+
+            // Basic summary
+            println!("### Summary");
+            println!();
+            println!("| Metric | Value |");
+            println!("|--------|-------|");
+            println!("| Total Files | {} |", galaxy.total_files);
+            println!("| Total Stars | {} |", galaxy.totals.stars.count);
+            println!("| Constellations | {} |", galaxy.constellations.len());
+            println!("| Health Score | {:.0}/100 |", galaxy.totals.derived.health_score * 100.0);
+        }
     }
 }
 
-/// Format health indicator for display
+/// Detect if terminal supports emoji/Unicode output
+fn terminal_supports_emoji() -> bool {
+    // Check for known environments that support emojis
+    // Windows Terminal (WT_SESSION), modern terminals (COLORTERM), etc.
+    if std::env::var("WT_SESSION").is_ok() {
+        return true; // Windows Terminal
+    }
+    if let Ok(colorterm) = std::env::var("COLORTERM") {
+        if colorterm == "truecolor" || colorterm == "24bit" {
+            return true; // Modern terminal
+        }
+    }
+    if let Ok(term) = std::env::var("TERM") {
+        // xterm-256color, alacritty, kitty, wezterm are modern
+        if term.contains("256color") || term.contains("kitty")
+            || term.contains("alacritty") || term.contains("wezterm") {
+            return true;
+        }
+        // Dumb terminals, basic SSH, screen without 256color support
+        if term == "dumb" || term == "linux" || term == "vt100" {
+            return false;
+        }
+    }
+    // Default to emoji support on Unix-like systems (macOS, modern Linux)
+    cfg!(target_family = "unix")
+}
+
+/// Thread-local cache for emoji support
+fn use_emoji() -> bool {
+    use std::sync::OnceLock;
+    static EMOJI_SUPPORT: OnceLock<bool> = OnceLock::new();
+    *EMOJI_SUPPORT.get_or_init(terminal_supports_emoji)
+}
+
+/// Format health indicator for display (with terminal compatibility)
 fn format_health_indicator(rating: pm_encoder::core::HealthRating) -> String {
-    match rating {
-        pm_encoder::core::HealthRating::Healthy => "star Healthy".to_string(),
-        pm_encoder::core::HealthRating::Stable => "checkmark Stable".to_string(),
-        pm_encoder::core::HealthRating::HighDarkMatter => "warning Warning".to_string(),
-        pm_encoder::core::HealthRating::Critical => "alert Critical".to_string(),
+    if use_emoji() {
+        match rating {
+            pm_encoder::core::HealthRating::Healthy => "⭐ Healthy".to_string(),
+            pm_encoder::core::HealthRating::Stable => "✓ Stable".to_string(),
+            pm_encoder::core::HealthRating::HighDarkMatter => "⚠ Warning".to_string(),
+            pm_encoder::core::HealthRating::Critical => "🚨 Critical".to_string(),
+        }
+    } else {
+        // ASCII fallbacks for terminals without emoji support
+        match rating {
+            pm_encoder::core::HealthRating::Healthy => "[*] Healthy".to_string(),
+            pm_encoder::core::HealthRating::Stable => "[+] Stable".to_string(),
+            pm_encoder::core::HealthRating::HighDarkMatter => "[!] Warning".to_string(),
+            pm_encoder::core::HealthRating::Critical => "[X] Critical".to_string(),
+        }
     }
 }
 
@@ -1360,6 +1930,45 @@ fn truncate_path(path: &str, max_len: usize) -> String {
         path.to_string()
     } else {
         format!("...{}", &path[path.len() - max_len + 3..])
+    }
+}
+
+/// Format path with visual hierarchy (Nebula Grouping)
+/// Shows indentation based on directory depth and uses tree-style markers
+fn format_hierarchical_path(path: &str, max_len: usize) -> String {
+    let depth = path.matches('/').count();
+
+    // For root-level paths, show full name
+    if depth == 0 {
+        return truncate_path(path, max_len);
+    }
+
+    // For nested paths, show indentation + last component
+    let last_component = path.rsplit('/').next().unwrap_or(path);
+    let indent = "  ".repeat(depth);
+    let display = format!("{}{}", indent, last_component);
+
+    if display.len() <= max_len {
+        display
+    } else {
+        // If still too long, truncate the component name
+        let max_name_len = max_len.saturating_sub(indent.len());
+        if max_name_len < 4 {
+            truncate_path(path, max_len)
+        } else {
+            format!("{}...{}", indent, &last_component[last_component.len().saturating_sub(max_name_len - 3)..])
+        }
+    }
+}
+
+/// Format Mass (LOC) with K/M suffixes for large numbers
+fn format_mass(lines: usize) -> String {
+    if lines >= 1_000_000 {
+        format!("{:.1}M", lines as f64 / 1_000_000.0)
+    } else if lines >= 1_000 {
+        format!("{:.1}k", lines as f64 / 1_000.0)
+    } else {
+        format!("{}", lines)
     }
 }
 
@@ -1404,6 +2013,42 @@ fn print_context_health(output: &str, file_count: usize) {
         eprintln!("  Zoom Density:     {:.2} per file", zoom_density);
     }
     eprintln!("======================");
+}
+
+/// Find project root by looking for common markers (git, Cargo.toml, package.json, etc.)
+/// Used by Microscope Auto-Focus to find the correct project root when given a file path.
+fn find_project_root(start: &PathBuf) -> Option<PathBuf> {
+    let markers = [
+        ".git",           // Git repository
+        "Cargo.toml",     // Rust
+        "package.json",   // Node.js
+        "pyproject.toml", // Python
+        "go.mod",         // Go
+        "pom.xml",        // Java Maven
+        "build.gradle",   // Java Gradle
+        ".pm_encoder_config.json", // pm_encoder config
+    ];
+
+    let mut current = start.clone();
+    loop {
+        for marker in &markers {
+            if current.join(marker).exists() {
+                return Some(current);
+            }
+        }
+
+        // Move up one directory
+        if !current.pop() {
+            break;
+        }
+
+        // Stop at filesystem root
+        if current.as_os_str().is_empty() || current == PathBuf::from("/") {
+            break;
+        }
+    }
+
+    None
 }
 
 /// Print Voyager Mission Log to stderr
@@ -1570,7 +2215,11 @@ pub fn run() {
 
         match journal.save(&journal_root) {
             Ok(_) => {
-                eprintln!("⭐ Marked star: {}", path_to_mark);
+                if use_emoji() {
+                    eprintln!("⭐ Marked star: {}", path_to_mark);
+                } else {
+                    eprintln!("[*] Marked star: {}", path_to_mark);
+                }
                 eprintln!("   Utility: {:.0}% (bright)", MARK_DEFAULT_UTILITY * 100.0);
 
                 // Show current bright stars count
@@ -1620,6 +2269,40 @@ pub fn run() {
         eprintln!("Error: Path '{}' does not exist", project_root.display());
         std::process::exit(1);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 🔬 MICROSCOPE AUTO-FOCUS (v1.2.0)
+    // When path is a file instead of a directory, auto-switch to zoom mode
+    // This makes `vo src/core/engine.rs` act like `vo --zoom file=src/core/engine.rs .`
+    // ═══════════════════════════════════════════════════════════════════════════
+    let (project_root, auto_zoom_target) = if project_root.is_file() {
+        // Auto-focus: path is a file, switch to zoom mode
+        // Canonicalize to get absolute path for accurate root detection
+        let file_path = project_root.canonicalize()
+            .unwrap_or_else(|_| project_root.clone());
+
+        // Find project root by looking for common markers or use parent directory
+        let parent = file_path.parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+        // Try to find actual project root (git root, Cargo.toml, etc.)
+        let actual_root = find_project_root(&parent).unwrap_or(parent);
+
+        // Calculate relative path from project root to file
+        let relative_path = file_path.strip_prefix(&actual_root)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| file_path.display().to_string());
+
+        eprintln!("🔬 Microscope Auto-Focus: Detected file path, zooming in...");
+        eprintln!("   File: {}", relative_path);
+        eprintln!("   Root: {}", actual_root.display());
+        eprintln!();
+
+        (actual_root, Some(format!("file={}", relative_path)))
+    } else {
+        (project_root, None)
+    };
 
     if !project_root.is_dir() {
         eprintln!("Error: Path '{}' is not a directory", project_root.display());
@@ -2038,7 +2721,9 @@ pub fn run() {
     }
 
     // Zoom mode (v2.0.0) - Fractal Protocol targeted context expansion
-    if let Some(zoom_str) = &cli.zoom {
+    // Includes Microscope Auto-Focus (v1.2.0) - auto-zoom when path is a file
+    let effective_zoom = cli.zoom.as_ref().or(auto_zoom_target.as_ref());
+    if let Some(zoom_str) = effective_zoom {
         let mut zoom_config = match parse_zoom_target(zoom_str) {
             Ok(config) => config,
             Err(e) => {

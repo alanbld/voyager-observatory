@@ -23,11 +23,21 @@
 #[cfg(feature = "temporal")]
 mod engine;
 
+#[cfg(feature = "temporal")]
+mod cache;
+
 mod metrics;
 mod geological;
+mod stellar_drift;
 
 #[cfg(feature = "temporal")]
-pub use engine::ChronosEngine;
+pub use engine::{ChronosEngine, DEFAULT_COMMIT_DEPTH, FULL_COMMIT_DEPTH};
+
+#[cfg(feature = "temporal")]
+pub use cache::{
+    ChronosCache, ChronosCacheManager, CachedObservation, CachedGalaxyStats,
+    WarpStatus,
+};
 
 pub use metrics::{
     ChronosMetrics, StellarAge, VolcanicChurn, Observer, ObserverImpact,
@@ -38,6 +48,11 @@ pub use metrics::{
 
 pub use geological::{
     GeologicalAnalyzer, GeologicalSummary, GeologicalActivity,
+};
+
+pub use stellar_drift::{
+    StellarDriftAnalyzer, StellarDriftReport, ConstellationEvolution, NewStar,
+    NEW_STAR_THRESHOLD_DAYS, ANCIENT_STAR_THRESHOLD_DAYS, DRIFT_WINDOW_DAYS,
 };
 
 /// Static Galaxy fallback when temporal feature is disabled or unavailable
@@ -70,6 +85,7 @@ pub fn is_temporal_available() -> bool {
 pub fn temporal_state_description(state: &ChronosState) -> &'static str {
     match state {
         ChronosState::Active { .. } => "Active Chronos Engine",
+        ChronosState::ShallowCensus { .. } => "Shallow Chronos (partial history)",
         ChronosState::StaticGalaxy => "Static Galaxy (no temporal data)",
         ChronosState::NoRepository => "No observation history found",
         ChronosState::Error(_) => "Chronos Engine error",

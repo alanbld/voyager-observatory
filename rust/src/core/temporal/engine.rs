@@ -1,7 +1,8 @@
 //! Chronos Engine - Git History Extraction
 //!
 //! This module provides the core temporal analysis engine using git2
-//! for optimized history extraction.
+//! for optimized history extraction. Includes the Chronos Warp caching
+//! system for near-instantaneous repeat scans.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -15,12 +16,21 @@ use super::metrics::{
     AgeClassification, ChurnClassification,
 };
 
+use super::cache::{
+    ChronosCache, ChronosCacheManager, CachedObservation, CachedGalaxyStats,
+    WarpStatus,
+};
+
 // =============================================================================
 // Constants
 // =============================================================================
 
 /// Maximum commit depth for performance (configurable)
-const DEFAULT_COMMIT_DEPTH: usize = 10_000;
+/// Default is 1000 for "Shallow Chronos" mode - fast surveys
+pub const DEFAULT_COMMIT_DEPTH: usize = 1_000;
+
+/// Full depth for complete history analysis
+pub const FULL_COMMIT_DEPTH: usize = 100_000;
 
 /// Days to consider for "recent" activity
 const CHURN_WINDOW_30D: i64 = 30;
@@ -51,6 +61,10 @@ pub struct ChronosEngine {
     galaxy_stats: GalaxyStats,
     /// Engine state
     state: ChronosState,
+    /// Cache manager for Chronos Warp
+    cache_manager: ChronosCacheManager,
+    /// Current warp status
+    warp_status: WarpStatus,
 }
 
 /// A single observation (commit) affecting a file
@@ -121,15 +135,23 @@ impl ChronosEngine {
         };
 
         let root_path = repo.workdir()?.to_path_buf();
+        let cache_manager = ChronosCacheManager::new(&root_path);
 
         Some(Self {
             repo,
-            root: root_path,
+            root: root_path.clone(),
             commit_depth,
             file_histories: HashMap::new(),
             galaxy_stats: GalaxyStats::default(),
             state: ChronosState::StaticGalaxy,
+            cache_manager,
+            warp_status: WarpStatus::Calibrating,
         })
+    }
+
+    /// Get the current Warp status
+    pub fn warp_status(&self) -> WarpStatus {
+        self.warp_status
     }
 
     /// Get the engine state
@@ -142,28 +164,36 @@ impl ChronosEngine {
         let now = Utc::now();
 
         // First, collect all commit data to avoid borrow conflicts
-        let commit_data: Vec<CommitData> = {
+        let (commit_data, hit_depth_limit): (Vec<CommitData>, bool) = {
             let mut revwalk = self.repo.revwalk()
                 .map_err(|e| format!("Failed to create revwalk: {}", e))?;
 
             revwalk.push_head()
                 .map_err(|e| format!("Failed to push HEAD: {}", e))?;
 
+            // Take one extra to detect if we hit the limit
             let oids: Vec<Oid> = revwalk
-                .take(self.commit_depth)
+                .take(self.commit_depth + 1)
                 .filter_map(|r| r.ok())
                 .collect();
 
+            let hit_limit = oids.len() > self.commit_depth;
+            let oids_to_process: Vec<Oid> = if hit_limit {
+                oids.into_iter().take(self.commit_depth).collect()
+            } else {
+                oids
+            };
+
             // Extract data from each commit
-            let mut data = Vec::with_capacity(oids.len());
-            for oid in oids {
+            let mut data = Vec::with_capacity(oids_to_process.len());
+            for oid in oids_to_process {
                 if let Ok(commit) = self.repo.find_commit(oid) {
                     if let Some(cd) = self.extract_commit_data(&commit) {
                         data.push(cd);
                     }
                 }
             }
-            data
+            (data, hit_limit)
         };
 
         // Process the extracted data
@@ -225,13 +255,153 @@ impl ChronosEngine {
             .map(|first| (now - first).num_days().max(0) as u64)
             .unwrap_or(0);
 
-        self.state = ChronosState::Active {
-            total_events: commit_count,
-            galaxy_age_days,
-            observer_count: self.galaxy_stats.observers.len(),
+        // Set appropriate state based on whether we hit depth limit
+        self.state = if hit_depth_limit {
+            ChronosState::ShallowCensus {
+                total_events: commit_count,
+                galaxy_age_days,
+                observer_count: self.galaxy_stats.observers.len(),
+                depth_limit: self.commit_depth,
+            }
+        } else {
+            ChronosState::Active {
+                total_events: commit_count,
+                galaxy_age_days,
+                observer_count: self.galaxy_stats.observers.len(),
+            }
         };
 
         Ok(())
+    }
+
+    /// Extract history with Chronos Warp caching
+    ///
+    /// This method first checks the cache for valid data. If the cache is valid
+    /// (git HEAD hasn't changed, cache isn't expired), it loads from cache for
+    /// near-instantaneous results. Otherwise, it performs full git analysis and
+    /// saves to cache.
+    pub fn extract_history_cached(&mut self) -> Result<(), String> {
+        // Try loading from cache first
+        if let Some(cache) = self.cache_manager.load() {
+            // Cache hit - restore state from cache
+            self.restore_from_cache(cache);
+            self.warp_status = WarpStatus::Engaged;
+            return Ok(());
+        }
+
+        // Cache miss - do full extraction
+        self.warp_status = WarpStatus::Calibrating;
+        self.extract_history()?;
+
+        // Save to cache for next time
+        if let Err(e) = self.save_to_cache() {
+            // Log but don't fail - cache is optional optimization
+            eprintln!("Warning: Failed to save Chronos cache: {}", e);
+        }
+
+        Ok(())
+    }
+
+    /// Restore engine state from cache
+    fn restore_from_cache(&mut self, cache: ChronosCache) {
+        // Convert cached observations back to FileObservation
+        self.file_histories.clear();
+        for (path, cached_obs) in cache.file_histories {
+            let observations: Vec<FileObservation> = cached_obs.into_iter()
+                .map(|co| FileObservation {
+                    timestamp: DateTime::from_timestamp(co.timestamp_secs, 0)
+                        .unwrap_or_else(Utc::now),
+                    observer_name: co.observer_name,
+                    observer_email: co.observer_email_hash, // Already hashed in cache
+                    lines_added: co.lines_added,
+                    lines_removed: co.lines_removed,
+                })
+                .collect();
+            self.file_histories.insert(path, observations);
+        }
+
+        // Restore galaxy stats
+        self.galaxy_stats.total_observations = cache.galaxy_stats.total_observations;
+        self.galaxy_stats.first_observation = cache.galaxy_stats.first_observation_secs
+            .and_then(|s| DateTime::from_timestamp(s, 0));
+        self.galaxy_stats.last_observation = cache.galaxy_stats.last_observation_secs
+            .and_then(|s| DateTime::from_timestamp(s, 0));
+
+        // Restore state
+        let now = Utc::now();
+        let galaxy_age_days = self.galaxy_stats.first_observation
+            .map(|first| (now - first).num_days().max(0) as u64)
+            .unwrap_or(0);
+
+        if cache.hit_depth_limit {
+            self.state = ChronosState::ShallowCensus {
+                total_events: cache.total_observations,
+                galaxy_age_days,
+                observer_count: cache.galaxy_stats.observer_count,
+                depth_limit: cache.commit_depth,
+            };
+        } else {
+            self.state = ChronosState::Active {
+                total_events: cache.total_observations,
+                galaxy_age_days,
+                observer_count: cache.galaxy_stats.observer_count,
+            };
+        }
+    }
+
+    /// Save current state to cache
+    fn save_to_cache(&self) -> Result<(), String> {
+        // Convert file histories to cached format
+        let mut cached_histories: HashMap<String, Vec<CachedObservation>> = HashMap::new();
+        for (path, observations) in &self.file_histories {
+            let cached: Vec<CachedObservation> = observations.iter()
+                .map(|o| CachedObservation {
+                    timestamp_secs: o.timestamp.timestamp(),
+                    observer_name: o.observer_name.clone(),
+                    observer_email_hash: hash_email(&o.observer_email),
+                    lines_added: o.lines_added,
+                    lines_removed: o.lines_removed,
+                })
+                .collect();
+            cached_histories.insert(path.clone(), cached);
+        }
+
+        // Build galaxy stats
+        let top_observers: Vec<(String, usize)> = self.galaxy_stats.observers.values()
+            .map(|o| (o.name.clone(), o.observations))
+            .collect();
+
+        let galaxy_stats = CachedGalaxyStats {
+            total_observations: self.galaxy_stats.total_observations,
+            first_observation_secs: self.galaxy_stats.first_observation.map(|t| t.timestamp()),
+            last_observation_secs: self.galaxy_stats.last_observation.map(|t| t.timestamp()),
+            observer_count: self.galaxy_stats.observers.len(),
+            top_observers,
+        };
+
+        // Determine if we hit depth limit
+        let hit_depth_limit = matches!(self.state, ChronosState::ShallowCensus { .. });
+
+        // Create and save cache
+        let cache = self.cache_manager.create_cache(
+            cached_histories,
+            galaxy_stats,
+            self.galaxy_stats.total_observations,
+            hit_depth_limit,
+            self.commit_depth,
+        )?;
+
+        self.cache_manager.save(&cache)
+    }
+
+    /// Invalidate the cache (force full re-analysis on next run)
+    pub fn invalidate_cache(&self) -> Result<(), String> {
+        self.cache_manager.invalidate()
+    }
+
+    /// Check if cache is valid without loading
+    pub fn is_cache_valid(&self) -> bool {
+        self.cache_manager.warp_engaged()
     }
 
     /// Extract data from a single commit (pure, no mutation)
