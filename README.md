@@ -1,59 +1,73 @@
-# Voyager Observatory (VO)
+# Voyager Observatory
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/rust-1.0.0-orange.svg)](rust/)
+[![Rust v1.0.0](https://img.shields.io/badge/rust-v1.0.0-orange.svg)](rust/)
+[![Tests](https://img.shields.io/badge/tests-1237%20passing-brightgreen.svg)]()
 
-**Stop sending raw files to your AI. Start sending a contextual galaxy.**
+**The Fractal Telescope for Code**
 
 ```bash
-# Point the telescope at your codebase
 vo .
-
-# Output: A structured constellation of your code, ready for AI comprehension
 ```
+
+*Point the telescope at your codebase. See the stars.*
 
 ---
 
-## The Fractal Telescope
+## The Story
 
-Every codebase is a galaxy of interconnected systems. Most tools dump raw files into AI context windows like throwing stars into a bag. The Voyager Observatory is different—it's a telescope that reveals the structure, relationships, and meaning in your code.
+> *In the vast darkness of context windows, codebases drift like uncharted galaxies. Raw files tumble through token limits—truncated, compressed, lost. Meaning dissolves into noise.*
+>
+> *But there is another way.*
+>
+> *The Voyager Observatory was built by astronomers who understood that the universe is not chaos—it is structure. Every function is a star. Every module is a constellation. Every codebase is a galaxy waiting to be mapped.*
+>
+> *Point the telescope. Adjust the lens. And suddenly, the chaos resolves into clarity.*
 
-**Powered by Tree-sitter AST analysis**, the Fractal Telescope sees beyond raw text:
-- **Stars** — Functions, classes, and symbols extracted with AST precision
-- **Nebulae** — Semantic clusters of related code
-- **Constellations** — Cross-file relationships and call graphs
+---
 
-### The Viewfinder
+## The Viewfinder
 
-Point the telescope at any directory. The viewfinder automatically detects project boundaries, respects your gitignore, and calculates token costs.
+Every observation begins with pointing the telescope:
 
 ```bash
 # Point at current directory
 vo .
 
-# Point at a specific project
+# Point at a specific galaxy
 vo /path/to/project
+
+# Output: A structured map of your code, ready for AI comprehension
 ```
 
-### Spectral Filters (Lenses)
+The Viewfinder automatically detects project boundaries, respects your `.gitignore`, and calculates token costs.
 
-Different tasks require different views. Lenses filter your codebase to highlight what matters:
+---
+
+## Spectral Filters (Lenses)
+
+Different missions require different views. Each lens reveals a different layer of the codebase:
 
 ```bash
-# Architecture lens - system design, entry points, configs
+# Architecture Lens - system design, entry points, configurations
 vo . --lens architecture
 
-# Security lens - auth, crypto, input validation
+# Security Lens - authentication, cryptography, input validation
 vo . --lens security
 
-# Debug lens - tests, error handlers, logs
+# Debug Lens - tests, error handlers, logging
 vo . --lens debug
 
-# Minimal lens - just the essentials
+# Minimal Lens - just the essentials
 vo . --lens minimal
+
+# Onboarding Lens - best for newcomers
+vo . --lens onboarding
 ```
 
-### Magnification (Zoom)
+---
+
+## Magnification (Zoom)
 
 When you need to focus on a specific star, zoom in:
 
@@ -68,9 +82,13 @@ vo . --zoom "class=UserService"
 vo . --zoom "file=src/lib.rs:100-200"
 ```
 
-### The Observer's Journal
+**The Fractal Principle**: Zoom in, and new detail emerges. Zoom out, and patterns appear. Context flows at every level.
 
-The telescope learns. Mark files as important, and it remembers. Repeatedly ignore a pattern, and it fades into the background.
+---
+
+## The Observer's Journal
+
+The telescope learns from every observation. Mark files as important, and it remembers. Repeatedly ignore a pattern, and it fades into the background.
 
 ```bash
 # Mark a bright star
@@ -82,38 +100,9 @@ vo --journal
 
 ---
 
-## Quick Start
+## Intent-Driven Exploration
 
-### Installation
-
-```bash
-# From source
-cd rust && cargo build --release
-
-# Install globally
-cargo install --path rust
-
-# Verify
-vo --version
-```
-
-### Basic Usage
-
-```bash
-# Generate context (default: plus/minus format)
-vo .
-
-# With token budget
-vo . --token-budget 100k
-
-# Stream large codebases
-vo . --stream
-
-# Save to file
-vo . > context.txt
-```
-
-### Intent-Driven Exploration
+Let the telescope guide your exploration:
 
 ```bash
 # Explore for business logic
@@ -122,8 +111,131 @@ vo . --explore business-logic
 # Explore for debugging
 vo . --explore debugging
 
-# Explore for onboarding
+# Explore for onboarding new developers
 vo . --explore onboarding
+
+# Explore for security audit
+vo . --explore security
+
+# Explore for migration planning
+vo . --explore migration
+```
+
+---
+
+## Celestial Census
+
+Survey the health of your galaxy:
+
+```bash
+vo . --survey
+
+# Output:
+# Galaxy Census
+# ├── Stars (Functions): 342
+# ├── Nebulae (Modules): 28
+# ├── Dark Matter (Tests): 156
+# ├── Stellar Age: 18 months
+# ├── Volcanic Churn: Medium
+# └── Health Rating: ★★★★☆
+```
+
+---
+
+## External Optics (Community Plugins)
+
+Extend the telescope with community lenses. Plugins are Lua scripts that run in a secure sandbox.
+
+### Installing Plugins
+
+Create a `manifest.json` in `.vo/plugins/` or `~/.config/vo/plugins/`:
+
+```json
+{
+  "vo_api_version": "3.0",
+  "plugins": [
+    {
+      "name": "complexity-analyzer",
+      "file": "complexity.lua",
+      "enabled": true,
+      "priority": 100
+    }
+  ]
+}
+```
+
+### Writing Your First Plugin
+
+```lua
+-- complexity.lua
+-- A simple cyclomatic complexity estimator
+
+vo.log("info", "Complexity analyzer loaded")
+
+-- Contribute tags to nodes
+vo.contribute_tag("src/complex.rs:42", "high-complexity")
+
+-- Register custom metrics
+vo.register_metric("avg_complexity", function(ast)
+    -- Analyze the AST and return a metric
+    return {
+        value = 4.2,
+        confidence = 0.85,
+        explanation = "Average cyclomatic complexity"
+    }
+end)
+```
+
+### The vo.* API
+
+| Function | Description |
+|----------|-------------|
+| `vo.api_version` | Current API version ("3.0") |
+| `vo.patterns.*` | Pre-compiled regex patterns for 8+ languages |
+| `vo.regex(pattern)` | Returns a safe matcher function |
+| `vo.log(level, message)` | Log messages (trace/debug/info/warn/error) |
+| `vo.contribute_tag(node, tag)` | Attach tags to code nodes |
+| `vo.register_metric(name, fn)` | Register custom metrics |
+| `vo.ast(path)` | Read-only access to parsed AST |
+
+### Security Guarantees
+
+Plugins run in the **Iron Sandbox**:
+- 100ms CPU timeout (instruction limit)
+- 10MB memory ceiling
+- No filesystem access (`io` stripped)
+- No shell execution (`os` stripped)
+- No dynamic code loading (`load`, `require` stripped)
+- No debugging escape (`debug` stripped)
+
+Plugins can only **append** to the context—they cannot modify or delete core data.
+
+---
+
+## Token Budgeting
+
+When your galaxy exceeds the viewport:
+
+```bash
+# Drop least important files
+vo . --token-budget 50k --strategy drop
+
+# Truncate large files (preserve structure)
+vo . --token-budget 50k --strategy truncate
+
+# Hybrid: truncate first, then drop
+vo . --token-budget 50k --strategy hybrid
+```
+
+---
+
+## Output Formats
+
+```bash
+vo . --format plusminus    # Compact diff-like format (default)
+vo . --format xml          # Structured XML
+vo . --format markdown     # Markdown documentation
+vo . --format claude-xml   # Optimized for Claude
 ```
 
 ---
@@ -142,7 +254,7 @@ Configure in `~/.claude/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "pm_encoder": {
+    "voyager": {
       "command": "/path/to/vo",
       "args": ["--server", "/path/to/project"]
     }
@@ -158,30 +270,53 @@ Configure in `~/.claude/mcp.json`:
 
 ---
 
-## Output Formats
+## Installation
+
+### From Source
 
 ```bash
-vo . --format plusminus    # Compact (default)
-vo . --format xml          # Structured XML
-vo . --format markdown     # Markdown
-vo . --format claude-xml   # Optimized for Claude
+cd rust && cargo build --release --features plugins
+
+# The binary is at: target/release/vo
+```
+
+### Install Globally
+
+```bash
+cargo install --path rust --features plugins
+
+# Verify
+vo --version
+```
+
+### With Plugins Disabled
+
+```bash
+cargo build --release  # No --features plugins
 ```
 
 ---
 
-## Token Budgeting
-
-When your galaxy exceeds the viewport:
+## Quick Start
 
 ```bash
-# Drop least important files
-vo . --token-budget 50k --strategy drop
+# Point the telescope
+vo .
 
-# Truncate large files
-vo . --token-budget 50k --strategy truncate
+# Apply a lens
+vo . --lens architecture
 
-# Hybrid: truncate first, then drop
-vo . --token-budget 50k --strategy hybrid
+# Zoom into a function
+vo . --zoom "function=main"
+
+# Set a token budget
+vo . --token-budget 100k
+
+# Stream large codebases
+vo . --stream
+
+# Save to file
+vo . > context.txt
 ```
 
 ---
@@ -190,11 +325,13 @@ vo . --token-budget 50k --strategy hybrid
 
 | Feature | Voyager Observatory | repomix | files-to-prompt |
 |---------|---------------------|---------|-----------------|
-| **AST parsing** | Tree-sitter (25 languages) | No | No |
+| **AST parsing** | Tree-sitter (25+ languages) | No | No |
 | **Token budgeting** | Drop/truncate/hybrid | No | No |
 | **Semantic analysis** | Fractal clustering | No | No |
 | **Intent exploration** | 5 built-in intents | No | No |
 | **Learning journal** | Persists preferences | No | No |
+| **Community plugins** | Secure Lua sandbox | No | No |
+| **Celestial Census** | Code health metrics | No | No |
 | **Performance** | Rust (10x faster) | Node.js | Python |
 | **MCP server** | Built-in | No | No |
 
@@ -203,53 +340,42 @@ vo . --token-budget 50k --strategy hybrid
 ## Documentation
 
 - **[Voyager Guide](docs/VOYAGER_GUIDE.md)** - Complete user manual
-- **[Plugin Guide](PLUGIN_GUIDE.md)** - Extend language support
+- **[Plugin Architecture](rust/docs/arch/PLUGIN_ARCHITECTURE.md)** - Plugin system design
+- **[Plugin Guide](PLUGIN_GUIDE.md)** - Language plugin development
 
 ---
 
-## Legacy Python Version
+## The Twins Architecture
 
-The original Python implementation is preserved for users who need it:
+Voyager Observatory evolved from a dual-engine architecture:
 
-```bash
-cd classic/python
-./pm_encoder.py . --token-budget 100k
-```
+- **Python (v1.7.0 LTS)**: Reference implementation in `classic/python/`
+- **Rust (v1.0.0)**: High-performance engine, the production core
 
-See [classic/python/README.md](classic/python/README.md) for details.
+Both produce identical output for the same input, verified by differential testing with 1,237+ tests.
 
 ---
 
 ## Project Structure
 
 ```
-pm_encoder/
+voyager-observatory/
 ├── rust/                    # Voyager Observatory (vo) - Rust engine
 │   ├── src/
 │   │   ├── bin/vo.rs        # Main binary
 │   │   ├── core/            # Core modules
+│   │   │   ├── plugins/     # Iron Sandbox & Plugin System
+│   │   │   ├── fractal/     # Fractal Context Engine
+│   │   │   ├── celestial/   # Celestial Navigation
+│   │   │   └── temporal/    # Chronos Engine (git history)
 │   │   └── lib.rs           # Library exports
 │   └── Cargo.toml
 ├── classic/
-│   └── python/              # Legacy Python implementation
-│       ├── pm_encoder.py
-│       └── tests/
+│   └── python/              # Legacy Python implementation (LTS)
 ├── docs/
-│   ├── VOYAGER_GUIDE.md     # User manual
-│   └── archive/             # Historical specs
+│   └── VOYAGER_GUIDE.md     # User manual
 └── test_vectors/            # Cross-implementation tests
 ```
-
----
-
-## The Twins Architecture
-
-Voyager Observatory is built on "The Twins Architecture"—two engines, one vision:
-
-- **Python (v1.7.0 LTS)**: Reference implementation, feature prototyping
-- **Rust (v1.0.0)**: High-performance engine, production deployments
-
-Both produce identical output for the same input, verified by differential testing.
 
 ---
 
@@ -259,4 +385,13 @@ MIT License - See [LICENSE](LICENSE)
 
 ---
 
-*"The engine is tested. The optics are clean. Now, let the world see the stars."*
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+<p align="center">
+<i>"The engine is tested. The optics are clean. The sandbox is secure.<br>
+Now, let the world see the stars."</i>
+</p>

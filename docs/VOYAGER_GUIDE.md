@@ -6,7 +6,72 @@
 
 The Voyager Observatory (`vo`) is a context serialization tool designed for AI-assisted development. It transforms your codebase into an optimized context window that AI assistants can understand and navigate efficiently.
 
-This guide covers the core concepts and practical usage of the `vo` command.
+This guide covers the core concepts, practical usage, and how to extend the telescope with your own lenses.
+
+---
+
+## Your First Mission
+
+Let's take the telescope for a spin. This 5-minute tutorial will have you navigating codebases like a seasoned astronomer.
+
+### Step 1: Point the Telescope
+
+```bash
+# Navigate to any project
+cd ~/my-project
+
+# Point the telescope
+vo .
+```
+
+You'll see a structured representation of your codebase—files organized by priority, with token counts and semantic groupings.
+
+### Step 2: Apply a Lens
+
+Different tasks need different views. Let's apply the architecture lens:
+
+```bash
+vo . --lens architecture
+```
+
+Notice how the output changes. Entry points, configuration files, and core modules rise to the top. Test files and documentation fade into the background.
+
+### Step 3: Zoom Into a Star
+
+Found an interesting function? Zoom in:
+
+```bash
+vo . --zoom "function=main"
+```
+
+The telescope focuses on that function, showing its context, callers, and related code.
+
+### Step 4: Survey the Galaxy
+
+Get a health report of your codebase:
+
+```bash
+vo . --survey
+```
+
+You'll see metrics like:
+- **Stars**: Total functions and classes
+- **Nebulae**: Module clusters
+- **Dark Matter**: Test coverage
+- **Stellar Age**: How old the codebase is
+- **Volcanic Churn**: Recent change activity
+
+### Step 5: Save to the Journal
+
+Found an important file? Mark it:
+
+```bash
+vo --mark src/core/engine.rs --utility 0.95
+```
+
+The telescope remembers. Next time you observe, this file will be prioritized.
+
+**Congratulations!** You've completed your first mission. The galaxy awaits.
 
 ---
 
@@ -99,6 +164,100 @@ The Journal persists in `.pm_encoder/observers_journal.json` and influences futu
 
 ---
 
+## Building Your First Lens (Plugin Tutorial)
+
+The Voyager supports community plugins written in Lua. Let's build a simple complexity analyzer.
+
+### Step 1: Create the Plugin Directory
+
+```bash
+mkdir -p .vo/plugins
+```
+
+### Step 2: Create the Manifest
+
+Create `.vo/plugins/manifest.json`:
+
+```json
+{
+  "vo_api_version": "3.0",
+  "plugins": [
+    {
+      "name": "my-complexity-lens",
+      "file": "complexity.lua",
+      "enabled": true,
+      "priority": 100,
+      "description": "Highlights complex code"
+    }
+  ]
+}
+```
+
+### Step 3: Write the Plugin
+
+Create `.vo/plugins/complexity.lua`:
+
+```lua
+-- complexity.lua
+-- A simple plugin that tags complex code
+
+vo.log("info", "Complexity analyzer starting...")
+
+-- Use built-in patterns to find functions
+local fn_pattern = vo.patterns.rust_fn
+vo.log("debug", "Using pattern: " .. fn_pattern)
+
+-- Tag specific locations as complex
+vo.contribute_tag("src/core/engine.rs:142", "high-complexity")
+vo.contribute_tag("src/core/engine.rs:142", "needs-refactor")
+
+-- Register a custom metric
+vo.register_metric("complexity_score", function(ast)
+    -- In a real plugin, you'd analyze the AST here
+    return {
+        value = 7.3,
+        confidence = 0.85,
+        explanation = "Average cyclomatic complexity across all functions"
+    }
+end)
+
+vo.log("info", "Complexity analyzer complete!")
+```
+
+### Step 4: Test Your Plugin
+
+```bash
+vo . --plugins list    # See your plugin loaded
+vo .                    # Run with plugin active
+```
+
+### The vo.* API Reference
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `vo.api_version` | Current API version | `"3.0"` |
+| `vo.patterns.rust_fn` | Regex for Rust functions | `"fn\\s+(\\w+)"` |
+| `vo.patterns.python_def` | Regex for Python defs | `"def\\s+(\\w+)"` |
+| `vo.patterns.js_function` | Regex for JS functions | `"function\\s+(\\w+)"` |
+| `vo.regex(pattern)` | Create a matcher | `local m = vo.regex("test")` |
+| `vo.log(level, msg)` | Log a message | `vo.log("info", "Hello")` |
+| `vo.contribute_tag(node, tag)` | Tag a code location | `vo.contribute_tag("file:10", "todo")` |
+| `vo.register_metric(name, fn)` | Register a metric | See example above |
+| `vo.ast(path)` | Get AST for a file | `local ast = vo.ast("src/lib.rs")` |
+
+### Security Sandbox
+
+Your plugin runs in the **Iron Sandbox**:
+- No filesystem access (`io` library stripped)
+- No shell commands (`os` library stripped)
+- No dynamic code loading (`load`, `require` stripped)
+- 100ms CPU timeout
+- 10MB memory limit
+
+You can only **add** data—never modify or delete core context.
+
+---
+
 ## Practical Usage
 
 ### Basic Commands
@@ -186,7 +345,7 @@ Add to your MCP settings (`~/.claude/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "pm_encoder": {
+    "voyager": {
       "command": "/path/to/vo",
       "args": ["--server", "/path/to/project"]
     }
@@ -281,6 +440,9 @@ Binary files are automatically skipped. If you need to include specific binary p
 ### "No files found"
 Check that you're pointing at the right directory and that .gitignore isn't excluding everything.
 
+### "Plugin execution failed"
+Check your plugin for syntax errors. Run with `--plugins list` to see plugin status and error messages.
+
 ---
 
 ## Quick Reference
@@ -307,6 +469,9 @@ vo . --zoom "class=Config"        # Zoom to class
 # Exploration
 vo . --explore business-logic     # Intent-driven explore
 
+# Census
+vo . --survey                     # Galaxy health report
+
 # Output
 vo . --format xml                 # XML output
 vo . --stream                     # Stream mode
@@ -314,8 +479,14 @@ vo . --stream                     # Stream mode
 # Journal
 vo --journal                      # View journal
 vo --mark FILE --utility 0.9      # Mark file
+
+# Plugins
+vo . --plugins list               # List plugins
+vo . --no-plugins                 # Disable plugins
 ```
 
 ---
 
 *For legacy Python usage, see [classic/python/README.md](../classic/python/README.md)*
+
+*For plugin architecture details, see [Plugin Architecture](../rust/docs/arch/PLUGIN_ARCHITECTURE.md)*
