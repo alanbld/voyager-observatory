@@ -242,31 +242,92 @@ vo . --format claude-xml   # Optimized for Claude
 
 ## MCP Server Mode
 
-Integrate with AI CLI tools like Claude Code:
+Integrate with AI CLI tools like Claude Code, Cursor, or Gemini CLI.
+
+### Adding VO as MCP Server
+
+Use the `claude mcp add` command to register VO:
 
 ```bash
-# Start as MCP server
-vo --server /path/to/project
+# Project scope (recommended) - stored in .mcp.json, shareable with team
+cd /path/to/your/project
+claude mcp add vo /path/to/vo --scope project -- --server .
+
+# User scope - available across all projects on your machine
+claude mcp add vo /path/to/vo --scope user -- --server /default/project
+
+# Remove from a scope
+claude mcp remove vo
 ```
 
-Configure in `~/.claude/mcp.json`:
+### Configuration Scopes
+
+| Scope | Location | Use Case |
+|-------|----------|----------|
+| **Project** | `.mcp.json` (project root) | Team sharing, version control |
+| **User** | `~/.claude.json` | Personal cross-project tools |
+| **Local** | `.claude/settings.local.json` | Private project-specific |
+
+### Project Scope (Recommended)
+
+Creates `.mcp.json` in your project root (check into git):
 
 ```json
 {
   "mcpServers": {
-    "voyager": {
+    "vo": {
       "command": "/path/to/vo",
-      "args": ["--server", "/path/to/project"]
+      "args": ["--server", "."]
     }
   }
 }
 ```
 
-**Available Tools:**
-- `get_context` - Serialize with lens/budget options
-- `zoom` - Symbol-aware magnification
-- `explore_with_intent` - Guided codebase exploration
-- `report_utility` - Train the telescope
+Using `"."` as server path makes VO serve the **current working directory**, so the same config works for any project.
+
+### User Scope
+
+Stored in `~/.claude.json` - available everywhere but requires absolute path:
+
+```json
+{
+  "mcpServers": {
+    "vo": {
+      "command": "/path/to/vo",
+      "args": ["--server", "/home/user/default/project"]
+    }
+  }
+}
+```
+
+### Available MCP Tools
+
+| Tool | Purpose |
+|------|---------|
+| `get_context` | Serialize with lens/budget options |
+| `zoom` | Symbol-aware magnification |
+| `explore_with_intent` | Guided codebase exploration |
+| `report_utility` | Train the telescope |
+| `session_list` | List saved zoom sessions |
+| `session_create` | Create new zoom session |
+
+### Troubleshooting MCP
+
+```bash
+# Check running MCP servers
+ps aux | grep "vo --server"
+
+# Kill stale servers (after config changes)
+pkill -f "vo --server"
+
+# Test MCP server manually
+echo '{"jsonrpc":"2.0","method":"tools/list","id":1}' | vo --server .
+
+# Reset project approval choices
+claude mcp reset-project-choices
+```
+
+**Important**: After changing MCP config, restart Claude Code to spawn fresh servers.
 
 ---
 
