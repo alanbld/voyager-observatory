@@ -20,6 +20,29 @@ use crate::core::orchestrator::DetailLevel;
 use crate::core::census::{GalaxyCensus, HealthRating, CensusMetrics};
 
 // =============================================================================
+// Drift Info (v1.1.0 - Stellar Drift)
+// =============================================================================
+
+/// Information about temporal drift for mission log display.
+#[derive(Debug, Clone, Default)]
+pub struct DriftInfo {
+    /// Galaxy age in days
+    pub galaxy_age_days: u64,
+    /// Galaxy age in years
+    pub galaxy_age_years: f64,
+    /// Stellar drift rate per year (percentage)
+    pub drift_rate_per_year: f64,
+    /// Number of ancient stars (dormant > 2 years)
+    pub ancient_stars: usize,
+    /// Number of core ancient stars
+    pub core_ancient_stars: usize,
+    /// Number of new stars (< 90 days)
+    pub new_stars: usize,
+    /// New star percentage of total
+    pub new_star_percentage: f64,
+}
+
+// =============================================================================
 // Intelligent Presenter
 // =============================================================================
 
@@ -262,6 +285,96 @@ impl IntelligentPresenter {
             "{} Teleporting context sample to LLM base...\n",
             self.emoji_formatter.transmit()
         ));
+
+        output
+    }
+
+    /// Format an extended Voyager Mission Log with temporal drift metrics.
+    ///
+    /// This adds Galaxy Age, Stellar Drift, and Ancient Star information
+    /// when temporal analysis is available.
+    pub fn format_mission_log_with_drift(
+        &self,
+        project_name: &str,
+        hemispheres: (&str, Option<&str>),
+        lens: &str,
+        confidence: f32,
+        tokens_used: usize,
+        token_budget: usize,
+        poi_count: usize,
+        nebula_name: Option<&str>,
+        drift_info: Option<DriftInfo>,
+    ) -> String {
+        let mut output = self.format_mission_log(
+            project_name,
+            hemispheres,
+            lens,
+            confidence,
+            tokens_used,
+            token_budget,
+            poi_count,
+            nebula_name,
+        );
+
+        // Add temporal/drift section if available
+        if let Some(drift) = drift_info {
+            output.push_str("\n");
+            output.push_str(&format!(
+                "{} Temporal Analysis\n",
+                self.emoji_formatter.insight_emoji()
+            ));
+            output.push_str("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
+
+            // Galaxy age
+            let age_display = if drift.galaxy_age_years >= 1.0 {
+                format!("{:.1} years", drift.galaxy_age_years)
+            } else if drift.galaxy_age_days > 0 {
+                format!("{} days", drift.galaxy_age_days)
+            } else {
+                "Unknown".to_string()
+            };
+            output.push_str(&format!(
+                "  {} Galaxy Age: {}\n",
+                self.emoji_formatter.notable_star(),
+                age_display
+            ));
+
+            // Stellar drift
+            let drift_health = if drift.drift_rate_per_year < 20.0 {
+                ("✅", "Stable")
+            } else if drift.drift_rate_per_year < 50.0 {
+                ("📊", "Active")
+            } else if drift.drift_rate_per_year < 100.0 {
+                ("🚀", "Expanding")
+            } else {
+                ("🌋", "Volcanic")
+            };
+            output.push_str(&format!(
+                "  {} Stellar Drift: {:.1}%/year {}\n",
+                drift_health.0,
+                drift.drift_rate_per_year,
+                drift_health.1
+            ));
+
+            // Ancient stars
+            if drift.ancient_stars > 0 {
+                output.push_str(&format!(
+                    "  {} Ancient Stars: {} discovered ({} core files)\n",
+                    self.emoji_formatter.gem(),
+                    drift.ancient_stars,
+                    drift.core_ancient_stars
+                ));
+            }
+
+            // New stars
+            if drift.new_stars > 0 {
+                output.push_str(&format!(
+                    "  🌠 New Stars: {} ({:.0}% of logic units)\n",
+                    drift.new_stars,
+                    drift.new_star_percentage
+                ));
+            }
+        }
 
         output
     }

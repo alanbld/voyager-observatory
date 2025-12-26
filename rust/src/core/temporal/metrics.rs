@@ -23,6 +23,17 @@ pub enum ChronosState {
         /// Number of unique observers
         observer_count: usize,
     },
+    /// Shallow census - commit limit reached (performance optimization)
+    ShallowCensus {
+        /// Total events analyzed (up to limit)
+        total_events: usize,
+        /// Age of the galaxy
+        galaxy_age_days: u64,
+        /// Number of unique observers
+        observer_count: usize,
+        /// Maximum depth limit that was used
+        depth_limit: usize,
+    },
     /// No temporal data available (feature disabled)
     StaticGalaxy,
     /// No observation history found (.git missing)
