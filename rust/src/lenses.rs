@@ -187,13 +187,15 @@ impl LensManager {
             fallback: Some(FallbackConfig { priority: 50 }),
         });
 
-        // Security lens - focuses on auth, secrets, and dependencies
+        // Security lens - focuses on auth, secrets, dependencies, and attack surface
         built_in.insert("security".to_string(), LensConfig {
-            description: "Security-relevant files (auth, secrets, dependencies)".to_string(),
+            description: "Security-relevant files (auth, secrets, dependencies, APIs)".to_string(),
             truncate_mode: None,
             truncate: Some(0),
             exclude: vec![
-                "tests/**".to_string(), "test/**".to_string(), "docs/**".to_string(),
+                "docs/**".to_string(), "doc/**".to_string(),
+                "*.md".to_string(), "*.txt".to_string(),
+                "htmlcov/**".to_string(), "coverage/**".to_string(),
             ],
             include: vec![
                 "**/*auth*".to_string(), "**/*security*".to_string(),
@@ -204,30 +206,67 @@ impl LensManager {
             sort_by: Some("name".to_string()),
             sort_order: None,
             groups: vec![
-                // Auth and secrets - highest priority
+                // Auth and secrets - highest priority (Tier 1: Critical)
                 PriorityGroup { pattern: "*auth*".to_string(), priority: 100, truncate_mode: None, truncate: None },
                 PriorityGroup { pattern: "*secret*".to_string(), priority: 100, truncate_mode: None, truncate: None },
                 PriorityGroup { pattern: "*credential*".to_string(), priority: 100, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*password*".to_string(), priority: 100, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*token*".to_string(), priority: 98, truncate_mode: None, truncate: None },
                 PriorityGroup { pattern: "*security*".to_string(), priority: 95, truncate_mode: None, truncate: None },
-                // Dependency files - high priority for vulnerability analysis
+                PriorityGroup { pattern: "*crypto*".to_string(), priority: 95, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*encrypt*".to_string(), priority: 95, truncate_mode: None, truncate: None },
+                // Environment and config - sensitive settings (Tier 2: High)
+                PriorityGroup { pattern: "*.env*".to_string(), priority: 92, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*config*".to_string(), priority: 88, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*settings*".to_string(), priority: 88, truncate_mode: None, truncate: None },
+                // Dependency files - vulnerability analysis (Tier 2: High)
                 PriorityGroup { pattern: "package.json".to_string(), priority: 90, truncate_mode: None, truncate: None },
                 PriorityGroup { pattern: "package-lock.json".to_string(), priority: 85, truncate_mode: None, truncate: None },
                 PriorityGroup { pattern: "requirements.txt".to_string(), priority: 90, truncate_mode: None, truncate: None },
                 PriorityGroup { pattern: "Cargo.toml".to_string(), priority: 90, truncate_mode: None, truncate: None },
                 PriorityGroup { pattern: "Cargo.lock".to_string(), priority: 85, truncate_mode: None, truncate: None },
-                // Config files that may contain sensitive settings
-                PriorityGroup { pattern: "*.env*".to_string(), priority: 80, truncate_mode: None, truncate: None },
-                PriorityGroup { pattern: "Dockerfile".to_string(), priority: 75, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "go.mod".to_string(), priority: 90, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "Gemfile".to_string(), priority: 90, truncate_mode: None, truncate: None },
+                // API and server boundaries - attack surface (Tier 3: Medium-High)
+                PriorityGroup { pattern: "**/server/**".to_string(), priority: 80, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "**/api/**".to_string(), priority: 80, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "**/routes/**".to_string(), priority: 78, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "**/handlers/**".to_string(), priority: 78, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "**/middleware/**".to_string(), priority: 76, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*handler*".to_string(), priority: 75, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*endpoint*".to_string(), priority: 75, truncate_mode: None, truncate: None },
+                // Input processing - injection vectors (Tier 3: Medium-High)
+                PriorityGroup { pattern: "*parse*".to_string(), priority: 72, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*input*".to_string(), priority: 70, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*valid*".to_string(), priority: 70, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*sanitize*".to_string(), priority: 70, truncate_mode: None, truncate: None },
+                // Infrastructure (Tier 4: Medium)
+                PriorityGroup { pattern: "Dockerfile".to_string(), priority: 65, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "docker-compose*.yml".to_string(), priority: 65, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*.yaml".to_string(), priority: 55, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*.yml".to_string(), priority: 55, truncate_mode: None, truncate: None },
+                // Source code - lower priority but still relevant (Tier 5: Low)
+                PriorityGroup { pattern: "*.rs".to_string(), priority: 45, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*.py".to_string(), priority: 45, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*.js".to_string(), priority: 40, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*.ts".to_string(), priority: 40, truncate_mode: None, truncate: None },
+                // Tests - useful for understanding security assumptions (Tier 5: Low)
+                PriorityGroup { pattern: "tests/**".to_string(), priority: 35, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "test/**".to_string(), priority: 35, truncate_mode: None, truncate: None },
             ],
-            fallback: Some(FallbackConfig { priority: 50 }),
+            fallback: Some(FallbackConfig { priority: 25 }), // Low default - security lens is selective
         });
 
-        // Onboarding lens
+        // Onboarding lens - prioritizes documentation and entry points for new contributors
         built_in.insert("onboarding".to_string(), LensConfig {
             description: "Essential files for new contributors".to_string(),
-            truncate_mode: None,
-            truncate: Some(0),
-            exclude: Vec::new(),
+            truncate_mode: Some("structure".to_string()),
+            truncate: Some(500),
+            exclude: vec![
+                "target/**".to_string(), "dist/**".to_string(),
+                "node_modules/**".to_string(), ".git/**".to_string(),
+                "*.lock".to_string(), "*.min.js".to_string(),
+            ],
             include: vec![
                 "README.md".to_string(), "CONTRIBUTING.md".to_string(),
                 "LICENSE".to_string(), "CHANGELOG.md".to_string(),
@@ -237,8 +276,41 @@ impl LensManager {
             ],
             sort_by: Some("name".to_string()),
             sort_order: None,
-            groups: Vec::new(),
-            fallback: None,
+            groups: vec![
+                // Documentation - highest priority for onboarding
+                PriorityGroup { pattern: "README.md".to_string(), priority: 100, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "CONTRIBUTING.md".to_string(), priority: 98, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "CLAUDE.md".to_string(), priority: 97, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "CHANGELOG.md".to_string(), priority: 95, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*.md".to_string(), priority: 90, truncate_mode: None, truncate: None },
+                // Project configuration - essential for understanding setup
+                PriorityGroup { pattern: "Cargo.toml".to_string(), priority: 88, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "package.json".to_string(), priority: 88, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "pyproject.toml".to_string(), priority: 88, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "Makefile".to_string(), priority: 85, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "Dockerfile".to_string(), priority: 80, truncate_mode: None, truncate: None },
+                // Entry points - where to start reading code
+                PriorityGroup { pattern: "**/main.rs".to_string(), priority: 75, truncate_mode: Some("structure".to_string()), truncate: None },
+                PriorityGroup { pattern: "**/lib.rs".to_string(), priority: 75, truncate_mode: Some("structure".to_string()), truncate: None },
+                PriorityGroup { pattern: "**/main.py".to_string(), priority: 75, truncate_mode: Some("structure".to_string()), truncate: None },
+                PriorityGroup { pattern: "**/index.js".to_string(), priority: 75, truncate_mode: Some("structure".to_string()), truncate: None },
+                PriorityGroup { pattern: "**/index.ts".to_string(), priority: 75, truncate_mode: Some("structure".to_string()), truncate: None },
+                PriorityGroup { pattern: "**/mod.rs".to_string(), priority: 70, truncate_mode: Some("structure".to_string()), truncate: None },
+                // Config files - useful context
+                PriorityGroup { pattern: "*.toml".to_string(), priority: 65, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*.yaml".to_string(), priority: 60, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*.yml".to_string(), priority: 60, truncate_mode: None, truncate: None },
+                PriorityGroup { pattern: "*.json".to_string(), priority: 55, truncate_mode: None, truncate: None },
+                // Tests - helpful examples but lower priority
+                PriorityGroup { pattern: "tests/**".to_string(), priority: 40, truncate_mode: Some("structure".to_string()), truncate: Some(200) },
+                PriorityGroup { pattern: "test/**".to_string(), priority: 40, truncate_mode: Some("structure".to_string()), truncate: Some(200) },
+                // Source code - structure only for onboarding
+                PriorityGroup { pattern: "*.rs".to_string(), priority: 35, truncate_mode: Some("structure".to_string()), truncate: Some(300) },
+                PriorityGroup { pattern: "*.py".to_string(), priority: 35, truncate_mode: Some("structure".to_string()), truncate: Some(300) },
+                PriorityGroup { pattern: "*.js".to_string(), priority: 30, truncate_mode: Some("structure".to_string()), truncate: Some(300) },
+                PriorityGroup { pattern: "*.ts".to_string(), priority: 30, truncate_mode: Some("structure".to_string()), truncate: Some(300) },
+            ],
+            fallback: Some(FallbackConfig { priority: 20 }), // Low priority for implementation details
         });
 
         Self {
@@ -507,6 +579,17 @@ impl LensManager {
         // Handle ** recursive patterns
         if pattern.contains("**") {
             let parts: Vec<&str> = pattern.split("**").collect();
+
+            // Handle **/dirname/** pattern (matches files inside dirname anywhere)
+            if parts.len() == 3 && parts[0].is_empty() && parts[2].is_empty() {
+                let dirname = parts[1].trim_matches('/');
+                if !dirname.is_empty() {
+                    // Match if path contains /dirname/ or starts with dirname/
+                    return file_str.contains(&format!("/{}/", dirname))
+                        || file_str.starts_with(&format!("{}/", dirname));
+                }
+            }
+
             if parts.len() == 2 {
                 let prefix = parts[0].trim_end_matches('/');
                 let suffix = parts[1].trim_start_matches('/');
@@ -555,6 +638,15 @@ impl LensManager {
         if pattern.starts_with("*.") {
             let ext = &pattern[1..]; // ".ext"
             return text.ends_with(ext);
+        }
+
+        // Handle *middle* patterns (contains check) - e.g., *config*, *auth*
+        if pattern.starts_with('*') && pattern.ends_with('*') && pattern.len() > 2 {
+            let middle = &pattern[1..pattern.len()-1];
+            // Only handle if middle doesn't contain more wildcards
+            if !middle.contains('*') {
+                return text.contains(middle);
+            }
         }
 
         // Handle *suffix patterns
@@ -651,8 +743,18 @@ mod tests {
     #[test]
     fn test_priority_no_groups() {
         let mut manager = LensManager::new();
-        // Apply a lens without groups (backward compatibility) - onboarding has no groups
-        let _ = manager.apply_lens("onboarding");
+
+        // Create a custom lens with no groups (backward compatibility test)
+        let empty_lens = LensConfig {
+            description: "Empty groups test".to_string(),
+            groups: vec![], // No groups = all files get default priority
+            fallback: None,
+            ..Default::default()
+        };
+        manager.custom.insert("empty".to_string(), empty_lens);
+        let _ = manager.apply_lens("empty");
+
+        // Without groups, should return default priority 50
         assert_eq!(manager.get_file_priority(Path::new("any_file.py")), 50);
     }
 
@@ -1341,5 +1443,173 @@ mod tests {
         assert!(manager.is_frozen());
         manager.set_frozen(false);
         assert!(!manager.is_frozen());
+    }
+
+    // ============================================================
+    // Lens Differentiation Tests (v2.3.0)
+    // Verifies that different lenses produce meaningfully different
+    // priority orderings for the same files.
+    // ============================================================
+
+    #[test]
+    fn test_onboarding_lens_has_priority_groups() {
+        let manager = LensManager::new();
+        let lens = manager.get_lens("onboarding").unwrap();
+        assert!(!lens.groups.is_empty(), "Onboarding lens must have priority groups");
+        assert!(lens.groups.len() >= 20, "Onboarding should have comprehensive patterns");
+    }
+
+    #[test]
+    fn test_security_lens_has_priority_groups() {
+        let manager = LensManager::new();
+        let lens = manager.get_lens("security").unwrap();
+        assert!(!lens.groups.is_empty(), "Security lens must have priority groups");
+        assert!(lens.groups.len() >= 25, "Security should have comprehensive patterns");
+    }
+
+    #[test]
+    fn test_onboarding_prioritizes_documentation() {
+        let mut manager = LensManager::new();
+        let _ = manager.apply_lens("onboarding");
+
+        // Documentation should be highest priority
+        let readme_priority = manager.get_file_priority(Path::new("README.md"));
+        let source_priority = manager.get_file_priority(Path::new("src/main.rs"));
+        let test_priority = manager.get_file_priority(Path::new("tests/test.py"));
+
+        assert!(readme_priority > source_priority,
+            "README ({}) should have higher priority than source ({})",
+            readme_priority, source_priority);
+        assert!(source_priority > test_priority,
+            "Source ({}) should have higher priority than tests ({})",
+            source_priority, test_priority);
+    }
+
+    #[test]
+    fn test_security_prioritizes_server_over_docs() {
+        let mut manager = LensManager::new();
+        let _ = manager.apply_lens("security");
+
+        // Server code should be higher priority than documentation
+        let server_priority = manager.get_file_priority(Path::new("src/server/handler.rs"));
+        let readme_priority = manager.get_file_priority(Path::new("README.md"));
+
+        assert!(server_priority > readme_priority,
+            "Server code ({}) should have higher priority than README ({}) for security",
+            server_priority, readme_priority);
+    }
+
+    #[test]
+    fn test_lens_differentiation_readme() {
+        // README.md should have different priorities in different lenses
+        let mut onboarding_mgr = LensManager::new();
+        let mut security_mgr = LensManager::new();
+
+        let _ = onboarding_mgr.apply_lens("onboarding");
+        let _ = security_mgr.apply_lens("security");
+
+        let onboarding_priority = onboarding_mgr.get_file_priority(Path::new("README.md"));
+        let security_priority = security_mgr.get_file_priority(Path::new("README.md"));
+
+        // Onboarding should prioritize README much higher than security
+        assert!(onboarding_priority > security_priority,
+            "Onboarding ({}) should prioritize README higher than security ({})",
+            onboarding_priority, security_priority);
+    }
+
+    #[test]
+    fn test_lens_differentiation_auth_file() {
+        // Auth file should have different priorities in different lenses
+        let mut onboarding_mgr = LensManager::new();
+        let mut security_mgr = LensManager::new();
+
+        let _ = onboarding_mgr.apply_lens("onboarding");
+        let _ = security_mgr.apply_lens("security");
+
+        let onboarding_priority = onboarding_mgr.get_file_priority(Path::new("src/auth.rs"));
+        let security_priority = security_mgr.get_file_priority(Path::new("src/auth.rs"));
+
+        // Security should prioritize auth files much higher than onboarding
+        assert!(security_priority > onboarding_priority,
+            "Security ({}) should prioritize auth.rs higher than onboarding ({})",
+            security_priority, onboarding_priority);
+    }
+
+    #[test]
+    fn test_lens_differentiation_cargo_toml() {
+        // Cargo.toml should have reasonable priority in both, but different
+        let mut onboarding_mgr = LensManager::new();
+        let mut security_mgr = LensManager::new();
+
+        let _ = onboarding_mgr.apply_lens("onboarding");
+        let _ = security_mgr.apply_lens("security");
+
+        let onboarding_priority = onboarding_mgr.get_file_priority(Path::new("Cargo.toml"));
+        let security_priority = security_mgr.get_file_priority(Path::new("Cargo.toml"));
+
+        // Both should have high priority (>=80) but can differ
+        assert!(onboarding_priority >= 80, "Onboarding should value Cargo.toml highly");
+        assert!(security_priority >= 80, "Security should value Cargo.toml highly");
+    }
+
+    #[test]
+    fn test_onboarding_fallback_is_low() {
+        let mut manager = LensManager::new();
+        let _ = manager.apply_lens("onboarding");
+
+        // Unknown files should get low fallback priority
+        let priority = manager.get_file_priority(Path::new("random_impl_detail.xyz"));
+        assert!(priority <= 25, "Onboarding fallback ({}) should be low", priority);
+    }
+
+    #[test]
+    fn test_security_fallback_is_low() {
+        let mut manager = LensManager::new();
+        let _ = manager.apply_lens("security");
+
+        // Unknown files should get low fallback priority
+        let priority = manager.get_file_priority(Path::new("random_impl_detail.xyz"));
+        assert!(priority <= 30, "Security fallback ({}) should be low", priority);
+    }
+
+    #[test]
+    fn test_security_config_patterns() {
+        let mut manager = LensManager::new();
+        let _ = manager.apply_lens("security");
+
+        // Config-related files should get high priority
+        let config_priority = manager.get_file_priority(Path::new("src/config.rs"));
+        let settings_priority = manager.get_file_priority(Path::new("settings.py"));
+
+        assert!(config_priority >= 80, "config.rs ({}) should be high priority", config_priority);
+        assert!(settings_priority >= 80, "settings.py ({}) should be high priority", settings_priority);
+    }
+
+    #[test]
+    fn test_security_api_patterns() {
+        let mut manager = LensManager::new();
+        let _ = manager.apply_lens("security");
+
+        // API and server files should get high priority
+        let api_priority = manager.get_file_priority(Path::new("src/api/routes.rs"));
+        let server_priority = manager.get_file_priority(Path::new("server/main.rs"));
+
+        assert!(api_priority >= 75, "API file ({}) should be high priority", api_priority);
+        assert!(server_priority >= 75, "Server file ({}) should be high priority", server_priority);
+    }
+
+    #[test]
+    fn test_onboarding_entry_points() {
+        let mut manager = LensManager::new();
+        let _ = manager.apply_lens("onboarding");
+
+        // Entry point files should get high priority
+        let main_rs = manager.get_file_priority(Path::new("src/main.rs"));
+        let lib_rs = manager.get_file_priority(Path::new("src/lib.rs"));
+        let mod_rs = manager.get_file_priority(Path::new("src/core/mod.rs"));
+
+        assert!(main_rs >= 70, "main.rs ({}) should be high priority", main_rs);
+        assert!(lib_rs >= 70, "lib.rs ({}) should be high priority", lib_rs);
+        assert!(mod_rs >= 65, "mod.rs ({}) should be moderately high priority", mod_rs);
     }
 }
