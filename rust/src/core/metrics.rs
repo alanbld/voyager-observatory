@@ -236,7 +236,7 @@ impl MetricCollector for DocCoverageMetric {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voyager_ast::ir::{Declaration, DeclarationKind, LanguageId, Span};
+    use voyager_ast::ir::{Declaration, DeclarationKind, LanguageId, Span, Visibility, Parameter, Comment, CommentKind};
 
     fn make_test_file() -> File {
         File {
@@ -246,6 +246,69 @@ mod tests {
                 Declaration::new("foo".to_string(), DeclarationKind::Function, Span::default()),
                 Declaration::new("bar".to_string(), DeclarationKind::Function, Span::default()),
             ],
+            imports: vec![],
+            comments: vec![],
+            unknown_regions: vec![],
+            span: Span::default(),
+            metadata: Default::default(),
+        }
+    }
+
+    fn make_file_with_params(param_counts: &[usize]) -> File {
+        let declarations = param_counts.iter().enumerate().map(|(i, &count)| {
+            let mut decl = Declaration::new(
+                format!("func_{}", i),
+                DeclarationKind::Function,
+                Span::default(),
+            );
+            for j in 0..count {
+                decl.parameters.push(Parameter {
+                    name: format!("param_{}", j),
+                    type_annotation: None,
+                    default_value: None,
+                    span: Span::default(),
+                });
+            }
+            decl
+        }).collect();
+
+        File {
+            path: "test.rs".to_string(),
+            language: LanguageId::Rust,
+            declarations,
+            imports: vec![],
+            comments: vec![],
+            unknown_regions: vec![],
+            span: Span::default(),
+            metadata: Default::default(),
+        }
+    }
+
+    fn make_file_with_visibility(public_count: usize, documented_count: usize) -> File {
+        let mut declarations = Vec::new();
+
+        for i in 0..public_count {
+            let mut decl = Declaration::new(
+                format!("public_{}", i),
+                DeclarationKind::Function,
+                Span::default(),
+            );
+            decl.visibility = Visibility::Public;
+            if i < documented_count {
+                decl.doc_comment = Some(Comment {
+                    text: "Documentation".to_string(),
+                    kind: CommentKind::Doc,
+                    span: Span::default(),
+                    attached_to: None,
+                });
+            }
+            declarations.push(decl);
+        }
+
+        File {
+            path: "test.rs".to_string(),
+            language: LanguageId::Rust,
+            declarations,
             imports: vec![],
             comments: vec![],
             unknown_regions: vec![],
@@ -265,6 +328,30 @@ mod tests {
     }
 
     #[test]
+    fn test_declaration_count_metric_empty() {
+        let file = File {
+            path: "empty.rs".to_string(),
+            language: LanguageId::Rust,
+            declarations: vec![],
+            imports: vec![],
+            comments: vec![],
+            unknown_regions: vec![],
+            span: Span::default(),
+            metadata: Default::default(),
+        };
+        let metric = DeclarationCountMetric;
+        let result = metric.analyze(&file);
+        assert_eq!(result.value, 0.0);
+    }
+
+    #[test]
+    fn test_declaration_count_name_description() {
+        let metric = DeclarationCountMetric;
+        assert_eq!(metric.name(), "declaration_count");
+        assert!(!metric.description().is_empty());
+    }
+
+    #[test]
     fn test_metric_registry() {
         let mut registry = MetricRegistry::new();
         registry.register(Box::new(DeclarationCountMetric));
@@ -273,6 +360,12 @@ mod tests {
         assert_eq!(registry.collectors().len(), 2);
         assert!(registry.find("declaration_count").is_some());
         assert!(registry.find("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_metric_registry_default() {
+        let registry = MetricRegistry::default();
+        assert_eq!(registry.collectors().len(), 0);
     }
 
     #[test]
@@ -295,5 +388,150 @@ mod tests {
 
         let result = MetricResult::new(50.0, -0.5, "test");
         assert_eq!(result.confidence, 0.0);
+    }
+
+    #[test]
+    fn test_metric_result_confident() {
+        let result = MetricResult::confident(42.0, "high confidence");
+        assert_eq!(result.value, 42.0);
+        assert_eq!(result.confidence, 1.0);
+        assert_eq!(result.explanation, "high confidence");
+    }
+
+    #[test]
+    fn test_metric_result_uncertain() {
+        let result = MetricResult::uncertain(10.0, "low confidence");
+        assert_eq!(result.value, 10.0);
+        assert_eq!(result.confidence, 0.5);
+        assert_eq!(result.explanation, "low confidence");
+    }
+
+    #[test]
+    fn test_format_human() {
+        let metric = DeclarationCountMetric;
+        let result = MetricResult::confident(5.0, "5 declarations found");
+        let formatted = metric.format_human(&result);
+        assert!(formatted.contains("declaration_count"));
+        assert!(formatted.contains("5.00"));
+    }
+
+    #[test]
+    fn test_format_machine() {
+        let metric = DeclarationCountMetric;
+        let result = MetricResult::confident(5.0, "5 declarations found");
+        let json = metric.format_machine(&result);
+        assert_eq!(json["metric"], "declaration_count");
+        assert_eq!(json["value"], 5.0);
+        assert_eq!(json["confidence"], 1.0);
+    }
+
+    #[test]
+    fn test_parameter_complexity_no_functions() {
+        let file = File {
+            path: "test.rs".to_string(),
+            language: LanguageId::Rust,
+            declarations: vec![
+                Declaration::new("MyStruct".to_string(), DeclarationKind::Struct, Span::default()),
+            ],
+            imports: vec![],
+            comments: vec![],
+            unknown_regions: vec![],
+            span: Span::default(),
+            metadata: Default::default(),
+        };
+        let metric = ParameterComplexityMetric;
+        let result = metric.analyze(&file);
+        assert_eq!(result.value, 0.0);
+        assert_eq!(result.confidence, 0.5); // uncertain
+    }
+
+    #[test]
+    fn test_parameter_complexity_healthy() {
+        let file = make_file_with_params(&[1, 2, 3]); // avg = 2.0
+        let metric = ParameterComplexityMetric;
+        let result = metric.analyze(&file);
+        assert_eq!(result.value, 2.0);
+        assert!(result.explanation.contains("Healthy"));
+    }
+
+    #[test]
+    fn test_parameter_complexity_moderate() {
+        let file = make_file_with_params(&[4, 4, 4]); // avg = 4.0
+        let metric = ParameterComplexityMetric;
+        let result = metric.analyze(&file);
+        assert_eq!(result.value, 4.0);
+        assert!(result.explanation.contains("Moderate"));
+    }
+
+    #[test]
+    fn test_parameter_complexity_high() {
+        let file = make_file_with_params(&[6, 7, 8]); // avg = 7.0
+        let metric = ParameterComplexityMetric;
+        let result = metric.analyze(&file);
+        assert!(result.value > 5.0);
+        assert!(result.explanation.contains("High"));
+    }
+
+    #[test]
+    fn test_parameter_complexity_name_description() {
+        let metric = ParameterComplexityMetric;
+        assert_eq!(metric.name(), "avg_parameters");
+        assert!(!metric.description().is_empty());
+    }
+
+    #[test]
+    fn test_doc_coverage_no_public() {
+        let file = make_test_file(); // Default visibility is Private
+        let metric = DocCoverageMetric;
+        let result = metric.analyze(&file);
+        assert_eq!(result.value, 100.0); // "No public declarations"
+        assert_eq!(result.confidence, 0.5); // uncertain
+    }
+
+    #[test]
+    fn test_doc_coverage_all_documented() {
+        let file = make_file_with_visibility(3, 3); // 3 public, 3 documented
+        let metric = DocCoverageMetric;
+        let result = metric.analyze(&file);
+        assert_eq!(result.value, 100.0);
+        assert!(result.explanation.contains("3/3"));
+    }
+
+    #[test]
+    fn test_doc_coverage_partial() {
+        let file = make_file_with_visibility(4, 2); // 4 public, 2 documented
+        let metric = DocCoverageMetric;
+        let result = metric.analyze(&file);
+        assert_eq!(result.value, 50.0);
+        assert!(result.explanation.contains("2/4"));
+    }
+
+    #[test]
+    fn test_doc_coverage_none_documented() {
+        let file = make_file_with_visibility(5, 0); // 5 public, 0 documented
+        let metric = DocCoverageMetric;
+        let result = metric.analyze(&file);
+        assert_eq!(result.value, 0.0);
+        assert!(result.explanation.contains("0/5"));
+    }
+
+    #[test]
+    fn test_doc_coverage_name_description() {
+        let metric = DocCoverageMetric;
+        assert_eq!(metric.name(), "doc_coverage");
+        assert!(!metric.description().is_empty());
+    }
+
+    #[test]
+    fn test_registry_analyze_all_multiple() {
+        let mut registry = MetricRegistry::new();
+        registry.register(Box::new(DeclarationCountMetric));
+        registry.register(Box::new(ParameterComplexityMetric));
+        registry.register(Box::new(DocCoverageMetric));
+
+        let file = make_test_file();
+        let results = registry.analyze_all(&file);
+
+        assert_eq!(results.len(), 3);
     }
 }

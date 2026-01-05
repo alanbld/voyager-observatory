@@ -369,46 +369,358 @@ impl EmojiFormatter {
 mod tests {
     use super::*;
 
+    // =========================================================================
+    // Theme Tests
+    // =========================================================================
+
     #[test]
-    fn test_formatter_default_theme() {
+    fn test_theme_default() {
+        let theme = Theme::default();
+        assert_eq!(theme, Theme::Full);
+    }
+
+    #[test]
+    fn test_theme_variants() {
+        assert_eq!(Theme::Full, Theme::Full);
+        assert_eq!(Theme::Minimal, Theme::Minimal);
+        assert_eq!(Theme::Plain, Theme::Plain);
+        assert_ne!(Theme::Full, Theme::Plain);
+    }
+
+    // =========================================================================
+    // Formatter Creation Tests
+    // =========================================================================
+
+    #[test]
+    fn test_formatter_new() {
         let formatter = EmojiFormatter::new();
         assert_eq!(formatter.view_emoji(), "🔭");
     }
 
     #[test]
-    fn test_formatter_plain_theme() {
+    fn test_formatter_default() {
+        let formatter = EmojiFormatter::default();
+        assert_eq!(formatter.view_emoji(), "🔭");
+    }
+
+    #[test]
+    fn test_formatter_with_theme() {
         let formatter = EmojiFormatter::new().with_theme(Theme::Plain);
         assert_eq!(formatter.view_emoji(), "[VIEW]");
-        assert_eq!(formatter.power_emoji(), "[STATS]");
     }
 
+    // =========================================================================
+    // Intent Emoji Tests
+    // =========================================================================
+
     #[test]
-    fn test_intent_emoji() {
+    fn test_intent_emoji_full() {
         let formatter = EmojiFormatter::new();
         assert_eq!(formatter.intent_emoji("business-logic"), "💼");
+        assert_eq!(formatter.intent_emoji("business"), "💼");
         assert_eq!(formatter.intent_emoji("debugging"), "🔍");
+        assert_eq!(formatter.intent_emoji("debug"), "🔍");
+        assert_eq!(formatter.intent_emoji("onboarding"), "🎓");
         assert_eq!(formatter.intent_emoji("security"), "🔒");
+        assert_eq!(formatter.intent_emoji("migration"), "🔄");
+        assert_eq!(formatter.intent_emoji("unknown"), "🎯");
     }
 
     #[test]
-    fn test_confidence_indicator() {
+    fn test_intent_emoji_plain() {
+        let formatter = EmojiFormatter::new().with_theme(Theme::Plain);
+        assert_eq!(formatter.intent_emoji("business-logic"), "");
+        assert_eq!(formatter.intent_emoji("debugging"), "");
+        assert_eq!(formatter.intent_emoji("unknown"), "");
+    }
+
+    // =========================================================================
+    // Core Emoji Tests - All Themes
+    // =========================================================================
+
+    #[test]
+    fn test_view_emoji_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).view_emoji(), "🔭");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).view_emoji(), ">>");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).view_emoji(), "[VIEW]");
+    }
+
+    #[test]
+    fn test_power_emoji_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).power_emoji(), "🔋");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).power_emoji(), "**");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).power_emoji(), "[STATS]");
+    }
+
+    #[test]
+    fn test_insight_emoji_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).insight_emoji(), "💡");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).insight_emoji(), "*");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).insight_emoji(), "[INSIGHTS]");
+    }
+
+    #[test]
+    fn test_navigation_emoji_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).navigation_emoji(), "🧭");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).navigation_emoji(), "->");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).navigation_emoji(), "[START]");
+    }
+
+    #[test]
+    fn test_hint_emoji_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).hint_emoji(), "💡");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).hint_emoji(), "i");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).hint_emoji(), "[TIP]");
+    }
+
+    #[test]
+    fn test_technical_emoji_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).technical_emoji(), "🔬");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).technical_emoji(), "#");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).technical_emoji(), "[TECH]");
+    }
+
+    #[test]
+    fn test_bullet_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).bullet(), "•");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).bullet(), "*");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).bullet(), "-");
+    }
+
+    // =========================================================================
+    // Confidence Tests
+    // =========================================================================
+
+    #[test]
+    fn test_confidence_emoji_full() {
         let formatter = EmojiFormatter::new();
-
-        let high = formatter.confidence_indicator(0.9);
-        assert!(high.contains("High Confidence"));
-
-        let medium = formatter.confidence_indicator(0.6);
-        assert!(medium.contains("Medium Confidence"));
-
-        let low = formatter.confidence_indicator(0.3);
-        assert!(low.contains("Low Confidence"));
+        assert_eq!(formatter.confidence_emoji(0.9), "🔍");
+        assert_eq!(formatter.confidence_emoji(0.6), "⚡");
+        assert_eq!(formatter.confidence_emoji(0.3), "⚠️");
     }
 
     #[test]
-    fn test_file_type_emoji() {
+    fn test_confidence_emoji_plain() {
+        let formatter = EmojiFormatter::new().with_theme(Theme::Plain);
+        assert_eq!(formatter.confidence_emoji(0.9), "");
+        assert_eq!(formatter.confidence_emoji(0.6), "");
+        assert_eq!(formatter.confidence_emoji(0.3), "");
+    }
+
+    #[test]
+    fn test_confidence_indicator_all_levels() {
+        let formatter = EmojiFormatter::new();
+        assert!(formatter.confidence_indicator(0.9).contains("High"));
+        assert!(formatter.confidence_indicator(0.6).contains("Medium"));
+        assert!(formatter.confidence_indicator(0.3).contains("Low"));
+    }
+
+    #[test]
+    fn test_confidence_indicator_plain() {
+        let formatter = EmojiFormatter::new().with_theme(Theme::Plain);
+        assert_eq!(formatter.confidence_indicator(0.9), "High Confidence");
+        assert_eq!(formatter.confidence_indicator(0.6), "Medium Confidence");
+        assert_eq!(formatter.confidence_indicator(0.3), "Low Confidence");
+    }
+
+    // =========================================================================
+    // Voyager Observatory Emoji Tests
+    // =========================================================================
+
+    #[test]
+    fn test_telescope_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).telescope(), "🔭");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).telescope(), ">>");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).telescope(), "[START]");
+    }
+
+    #[test]
+    fn test_shooting_star_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).shooting_star(), "🌠");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).shooting_star(), "*");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).shooting_star(), "[RECENT]");
+    }
+
+    #[test]
+    fn test_todo_marker_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).todo_marker(), "💫");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).todo_marker(), "!");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).todo_marker(), "[TODO]");
+    }
+
+    #[test]
+    fn test_stars_all_themes() {
+        let full = EmojiFormatter::new().with_theme(Theme::Full);
+        let minimal = EmojiFormatter::new().with_theme(Theme::Minimal);
+        let plain = EmojiFormatter::new().with_theme(Theme::Plain);
+
+        assert_eq!(full.very_bright_star(), "🌟");
+        assert_eq!(minimal.very_bright_star(), "****");
+        assert_eq!(plain.very_bright_star(), "[****]");
+
+        assert_eq!(full.bright_star(), "⭐");
+        assert_eq!(minimal.bright_star(), "***");
+        assert_eq!(plain.bright_star(), "[***]");
+
+        assert_eq!(full.notable_star(), "✨");
+        assert_eq!(minimal.notable_star(), "**");
+        assert_eq!(plain.notable_star(), "[**]");
+    }
+
+    #[test]
+    fn test_galaxy_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).galaxy(), "🌌");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).galaxy(), "@@");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).galaxy(), "[MAP]");
+    }
+
+    #[test]
+    fn test_fuel_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).fuel(), "🔋");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).fuel(), "##");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).fuel(), "[FUEL]");
+    }
+
+    #[test]
+    fn test_gem_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).gem(), "💎");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).gem(), "<>");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).gem(), "[POI]");
+    }
+
+    #[test]
+    fn test_transmit_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).transmit(), "📡");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).transmit(), ">>");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).transmit(), "[TX]");
+    }
+
+    #[test]
+    fn test_brightness_indicator_all_levels() {
+        let full = EmojiFormatter::new();
+        assert_eq!(full.brightness_indicator(0.95), "🌟");
+        assert_eq!(full.brightness_indicator(0.85), "⭐");
+        assert_eq!(full.brightness_indicator(0.6), "✨");
+        assert_eq!(full.brightness_indicator(0.3), "·");
+    }
+
+    #[test]
+    fn test_brightness_indicator_plain() {
+        let plain = EmojiFormatter::new().with_theme(Theme::Plain);
+        assert_eq!(plain.brightness_indicator(0.95), "[****]");
+        assert_eq!(plain.brightness_indicator(0.85), "[***]");
+        assert_eq!(plain.brightness_indicator(0.6), "[**]");
+        assert_eq!(plain.brightness_indicator(0.3), "[*]");
+    }
+
+    #[test]
+    fn test_brightness_indicator_minimal() {
+        let minimal = EmojiFormatter::new().with_theme(Theme::Minimal);
+        assert_eq!(minimal.brightness_indicator(0.3), "*");
+    }
+
+    // =========================================================================
+    // Status Indicator Tests
+    // =========================================================================
+
+    #[test]
+    fn test_success_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).success(), "✅");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).success(), "v");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).success(), "[OK]");
+    }
+
+    #[test]
+    fn test_warning_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).warning(), "⚠️");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).warning(), "!");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).warning(), "[WARN]");
+    }
+
+    #[test]
+    fn test_error_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).error(), "❌");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).error(), "x");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).error(), "[ERR]");
+    }
+
+    #[test]
+    fn test_info_all_themes() {
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Full).info(), "ℹ️");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Minimal).info(), "i");
+        assert_eq!(EmojiFormatter::new().with_theme(Theme::Plain).info(), "[INFO]");
+    }
+
+    // =========================================================================
+    // File Type Emoji Tests
+    // =========================================================================
+
+    #[test]
+    fn test_file_type_emoji_all_extensions() {
         let formatter = EmojiFormatter::new();
         assert_eq!(formatter.file_type_emoji("rs"), "🦀");
         assert_eq!(formatter.file_type_emoji("py"), "🐍");
         assert_eq!(formatter.file_type_emoji("ts"), "📘");
+        assert_eq!(formatter.file_type_emoji("tsx"), "📘");
+        assert_eq!(formatter.file_type_emoji("js"), "📜");
+        assert_eq!(formatter.file_type_emoji("jsx"), "📜");
+        assert_eq!(formatter.file_type_emoji("sh"), "🐚");
+        assert_eq!(formatter.file_type_emoji("bash"), "🐚");
+        assert_eq!(formatter.file_type_emoji("md"), "📝");
+        assert_eq!(formatter.file_type_emoji("json"), "⚙️");
+        assert_eq!(formatter.file_type_emoji("yaml"), "⚙️");
+        assert_eq!(formatter.file_type_emoji("yml"), "⚙️");
+        assert_eq!(formatter.file_type_emoji("html"), "🌐");
+        assert_eq!(formatter.file_type_emoji("css"), "🎨");
+        assert_eq!(formatter.file_type_emoji("scss"), "🎨");
+        assert_eq!(formatter.file_type_emoji("sql"), "🗄️");
+        assert_eq!(formatter.file_type_emoji("unknown"), "📄");
+    }
+
+    #[test]
+    fn test_file_type_emoji_plain() {
+        let formatter = EmojiFormatter::new().with_theme(Theme::Plain);
+        assert_eq!(formatter.file_type_emoji("rs"), "");
+        assert_eq!(formatter.file_type_emoji("py"), "");
+    }
+
+    #[test]
+    fn test_file_type_emoji_case_insensitive() {
+        let formatter = EmojiFormatter::new();
+        assert_eq!(formatter.file_type_emoji("RS"), "🦀");
+        assert_eq!(formatter.file_type_emoji("PY"), "🐍");
+        assert_eq!(formatter.file_type_emoji("Json"), "⚙️");
+    }
+
+    // =========================================================================
+    // Language Emoji Tests
+    // =========================================================================
+
+    #[test]
+    fn test_language_emoji_all() {
+        let formatter = EmojiFormatter::new();
+        assert_eq!(formatter.language_emoji("rust"), "🦀");
+        assert_eq!(formatter.language_emoji("python"), "🐍");
+        assert_eq!(formatter.language_emoji("typescript"), "📘");
+        assert_eq!(formatter.language_emoji("javascript"), "📘");
+        assert_eq!(formatter.language_emoji("shell"), "🐚");
+        assert_eq!(formatter.language_emoji("bash"), "🐚");
+        assert_eq!(formatter.language_emoji("abl"), "🏭");
+        assert_eq!(formatter.language_emoji("progress"), "🏭");
+        assert_eq!(formatter.language_emoji("unknown"), "💻");
+    }
+
+    #[test]
+    fn test_language_emoji_plain() {
+        let formatter = EmojiFormatter::new().with_theme(Theme::Plain);
+        assert_eq!(formatter.language_emoji("rust"), "");
+        assert_eq!(formatter.language_emoji("python"), "");
+    }
+
+    #[test]
+    fn test_language_emoji_case_insensitive() {
+        let formatter = EmojiFormatter::new();
+        assert_eq!(formatter.language_emoji("RUST"), "🦀");
+        assert_eq!(formatter.language_emoji("Python"), "🐍");
     }
 }
