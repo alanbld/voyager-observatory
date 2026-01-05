@@ -513,6 +513,10 @@ mod tests {
         }
     }
 
+    // =========================================================================
+    // StellarDriftAnalyzer Tests
+    // =========================================================================
+
     #[test]
     fn test_stellar_drift_analyzer_creation() {
         let analyzer = StellarDriftAnalyzer::new();
@@ -521,10 +525,44 @@ mod tests {
     }
 
     #[test]
+    fn test_stellar_drift_analyzer_default() {
+        let analyzer = StellarDriftAnalyzer::default();
+        assert_eq!(analyzer.new_star_threshold, 90);
+        assert_eq!(analyzer.ancient_star_threshold, 730);
+        assert_eq!(analyzer.drift_window_days, 180);
+    }
+
+    #[test]
     fn test_static_galaxy_report() {
         let report = StellarDriftAnalyzer::static_galaxy_report();
         assert!(report.is_static());
         assert_eq!(report.health_description(), "Static Galaxy (no drift detected)");
+    }
+
+    #[test]
+    fn test_analyze_static_galaxy() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::StaticGalaxy,
+            ..Default::default()
+        };
+
+        let report = analyzer.analyze(&temporal_census, &HashMap::new(), None, None);
+        assert!(report.is_static());
+    }
+
+    #[test]
+    fn test_analyze_no_repository() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::NoRepository,
+            ..Default::default()
+        };
+
+        let report = analyzer.analyze(&temporal_census, &HashMap::new(), None, None);
+        assert!(report.is_static());
     }
 
     #[test]
@@ -619,6 +657,65 @@ mod tests {
     }
 
     #[test]
+    fn test_analyze_with_path_prefix() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let mut files = BTreeMap::new();
+        files.insert("prefix/src/lib.rs".to_string(), make_file_churn(100, 5, Some(10)));
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::Active {
+                total_events: 50,
+                galaxy_age_days: 500,
+                observer_count: 3,
+            },
+            galaxy_age_days: 500,
+            files,
+            ..Default::default()
+        };
+
+        let mut star_counts = HashMap::new();
+        star_counts.insert("src/lib.rs".to_string(), 5);
+
+        let report = analyzer.analyze(&temporal_census, &star_counts, None, Some("prefix"));
+
+        assert_eq!(report.total_stars, 5);
+    }
+
+    #[test]
+    fn test_supernovas_copied() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
+            galaxy_age_days: 500,
+            supernovas: vec![
+                Supernova {
+                    path: "hot.rs".to_string(),
+                    observations_30d: 50,
+                    observer_count: 5,
+                    lines_changed: 1000,
+                    warning: "Test".to_string(),
+                },
+            ],
+            ..Default::default()
+        };
+
+        let report = analyzer.analyze(&temporal_census, &HashMap::new(), None, None);
+
+        assert!(report.has_supernovas);
+        assert_eq!(report.supernovas.len(), 1);
+    }
+
+    // =========================================================================
+    // StellarDriftReport Tests
+    // =========================================================================
+
+    #[test]
     fn test_health_indicators() {
         // Test expanding galaxy
         let mut report = StellarDriftReport::default();
@@ -638,6 +735,147 @@ mod tests {
     }
 
     #[test]
+    fn test_health_description_static() {
+        let report = StellarDriftReport {
+            state: ChronosState::StaticGalaxy,
+            ..Default::default()
+        };
+        assert_eq!(report.health_description(), "Static Galaxy (no drift detected)");
+    }
+
+    #[test]
+    fn test_health_description_supernovas() {
+        let report = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            has_supernovas: true,
+            ..Default::default()
+        };
+        assert_eq!(report.health_description(), "Volcanic Activity (destabilizing refactors in progress)");
+    }
+
+    #[test]
+    fn test_health_description_ossifying() {
+        let report = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            is_ossifying: true,
+            total_stars: 100,
+            ancient_star_total: 60,
+            new_star_total: 0,
+            ..Default::default()
+        };
+        assert_eq!(report.health_description(), "Ossifying (ancient core with no new growth)");
+    }
+
+    #[test]
+    fn test_health_description_expanding() {
+        let report = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            is_expanding: true,
+            ..Default::default()
+        };
+        assert_eq!(report.health_description(), "Expanding (active development with new features)");
+    }
+
+    #[test]
+    fn test_health_description_stable() {
+        let report = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            is_stable: true,
+            ..Default::default()
+        };
+        assert_eq!(report.health_description(), "Stable (healthy balance of old and new)");
+    }
+
+    #[test]
+    fn test_health_description_high_drift() {
+        let report = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            // None of the flags set
+            ..Default::default()
+        };
+        assert_eq!(report.health_description(), "High Drift (significant changes in progress)");
+    }
+
+    #[test]
+    fn test_health_indicator_all_states() {
+        let static_report = StellarDriftReport { state: ChronosState::StaticGalaxy, ..Default::default() };
+        assert_eq!(static_report.health_indicator(), "⏳");
+
+        let supernova_report = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            has_supernovas: true,
+            ..Default::default()
+        };
+        assert_eq!(supernova_report.health_indicator(), "🔥");
+
+        let ossifying_report = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            is_ossifying: true,
+            ..Default::default()
+        };
+        assert_eq!(ossifying_report.health_indicator(), "🪨");
+
+        let expanding_report = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            is_expanding: true,
+            ..Default::default()
+        };
+        assert_eq!(expanding_report.health_indicator(), "🌱");
+
+        let stable_report = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            is_stable: true,
+            ..Default::default()
+        };
+        assert_eq!(stable_report.health_indicator(), "💎");
+    }
+
+    #[test]
+    fn test_drift_classification() {
+        let static_report = StellarDriftReport { state: ChronosState::StaticGalaxy, ..Default::default() };
+        assert_eq!(static_report.drift_classification(), "No Drift Data");
+
+        let minimal = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            drift_rate_per_year: 5.0,
+            ..Default::default()
+        };
+        assert_eq!(minimal.drift_classification(), "Minimal Drift");
+
+        let low = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            drift_rate_per_year: 15.0,
+            ..Default::default()
+        };
+        assert_eq!(low.drift_classification(), "Low Drift");
+
+        let moderate = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            drift_rate_per_year: 35.0,
+            ..Default::default()
+        };
+        assert_eq!(moderate.drift_classification(), "Moderate Drift");
+
+        let high = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            drift_rate_per_year: 60.0,
+            ..Default::default()
+        };
+        assert_eq!(high.drift_classification(), "High Drift");
+
+        let extreme = StellarDriftReport {
+            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            drift_rate_per_year: 80.0,
+            ..Default::default()
+        };
+        assert_eq!(extreme.drift_classification(), "Extreme Drift");
+    }
+
+    // =========================================================================
+    // ConstellationEvolution Tests
+    // =========================================================================
+
+    #[test]
     fn test_constellation_evolution() {
         let evolution = ConstellationEvolution {
             path: "src/core".to_string(),
@@ -655,5 +893,85 @@ mod tests {
 
         assert_eq!(evolution.life_cycle_stage(), "Growing");
         assert_eq!(evolution.life_cycle_emoji(), "🌱");
+    }
+
+    #[test]
+    fn test_constellation_evolution_newborn() {
+        let evolution = ConstellationEvolution {
+            is_new: true,
+            ..Default::default()
+        };
+        assert_eq!(evolution.life_cycle_stage(), "Newborn");
+        assert_eq!(evolution.life_cycle_emoji(), "🌟");
+    }
+
+    #[test]
+    fn test_constellation_evolution_ancient() {
+        let evolution = ConstellationEvolution {
+            is_ancient: true,
+            ..Default::default()
+        };
+        assert_eq!(evolution.life_cycle_stage(), "Ancient");
+        assert_eq!(evolution.life_cycle_emoji(), "🏛️");
+    }
+
+    #[test]
+    fn test_constellation_evolution_active() {
+        let evolution = ConstellationEvolution {
+            active_star_count: 5,
+            ancient_star_count: 10,
+            new_star_count: 2,
+            ..Default::default()
+        };
+        assert_eq!(evolution.life_cycle_stage(), "Active");
+        assert_eq!(evolution.life_cycle_emoji(), "⚡");
+    }
+
+    #[test]
+    fn test_constellation_evolution_dormant() {
+        let evolution = ConstellationEvolution {
+            active_star_count: 0,
+            ancient_star_count: 5,
+            new_star_count: 2,
+            ..Default::default()
+        };
+        assert_eq!(evolution.life_cycle_stage(), "Dormant");
+        assert_eq!(evolution.life_cycle_emoji(), "💤");
+    }
+
+    #[test]
+    fn test_constellation_evolution_default() {
+        let evolution = ConstellationEvolution::default();
+        assert!(evolution.path.is_empty());
+        assert_eq!(evolution.file_count, 0);
+        assert_eq!(evolution.drift_rate, 0.0);
+    }
+
+    // =========================================================================
+    // NewStar Tests
+    // =========================================================================
+
+    #[test]
+    fn test_new_star_creation() {
+        let star = NewStar {
+            path: "new_feature.rs".to_string(),
+            age_days: 30,
+            star_count: 5,
+            is_expansion: true,
+        };
+        assert_eq!(star.path, "new_feature.rs");
+        assert!(star.age_days <= 90);
+        assert!(star.is_expansion);
+    }
+
+    // =========================================================================
+    // Constants Tests
+    // =========================================================================
+
+    #[test]
+    fn test_constants() {
+        assert_eq!(NEW_STAR_THRESHOLD_DAYS, 90);
+        assert_eq!(ANCIENT_STAR_THRESHOLD_DAYS, 730);
+        assert_eq!(DRIFT_WINDOW_DAYS, 180);
     }
 }

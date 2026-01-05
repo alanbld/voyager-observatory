@@ -298,6 +298,27 @@ mod tests {
         }
     }
 
+    // =========================================================================
+    // GeologicalAnalyzer Tests
+    // =========================================================================
+
+    #[test]
+    fn test_geological_analyzer_new() {
+        let analyzer = GeologicalAnalyzer::new();
+        assert_eq!(analyzer.tectonic_churn, TECTONIC_CHURN_THRESHOLD);
+        assert_eq!(analyzer.tectonic_dark_matter, TECTONIC_DARK_MATTER_THRESHOLD);
+        assert_eq!(analyzer.ancient_dormant_days, ANCIENT_DORMANT_DAYS);
+        assert_eq!(analyzer.core_star_threshold, ANCIENT_CORE_STAR_THRESHOLD);
+        assert_eq!(analyzer.supernova_threshold, SUPERNOVA_THRESHOLD);
+    }
+
+    #[test]
+    fn test_geological_analyzer_default() {
+        let analyzer = GeologicalAnalyzer::default();
+        assert_eq!(analyzer.tectonic_churn, 10);
+        assert_eq!(analyzer.ancient_dormant_days, 730);
+    }
+
     #[test]
     fn test_identify_tectonic_shifts() {
         let analyzer = GeologicalAnalyzer::new();
@@ -314,6 +335,41 @@ mod tests {
 
         assert_eq!(shifts.len(), 1);
         assert_eq!(shifts[0].path, "risky.rs");
+    }
+
+    #[test]
+    fn test_identify_tectonic_shifts_none() {
+        let analyzer = GeologicalAnalyzer::new();
+
+        let mut file_churn = HashMap::new();
+        file_churn.insert("low_churn.rs".to_string(), make_file_churn("low_churn.rs", 1, 5, 100));
+        file_churn.insert("low_complexity.rs".to_string(), make_file_churn("low_complexity.rs", 5, 15, 100));
+
+        let mut dark_matter = HashMap::new();
+        dark_matter.insert("low_churn.rs".to_string(), 0.30);
+        dark_matter.insert("low_complexity.rs".to_string(), 0.10);
+
+        let shifts = analyzer.identify_tectonic_shifts(&file_churn, &dark_matter);
+        assert!(shifts.is_empty());
+    }
+
+    #[test]
+    fn test_identify_tectonic_shifts_sorting() {
+        let analyzer = GeologicalAnalyzer::new();
+
+        let mut file_churn = HashMap::new();
+        file_churn.insert("medium.rs".to_string(), make_file_churn("medium.rs", 5, 15, 100));
+        file_churn.insert("high.rs".to_string(), make_file_churn("high.rs", 10, 25, 100));
+
+        let mut dark_matter = HashMap::new();
+        dark_matter.insert("medium.rs".to_string(), 0.25);
+        dark_matter.insert("high.rs".to_string(), 0.40);
+
+        let shifts = analyzer.identify_tectonic_shifts(&file_churn, &dark_matter);
+
+        assert_eq!(shifts.len(), 2);
+        // Should be sorted by risk score (highest first)
+        assert!(shifts[0].risk_score >= shifts[1].risk_score);
     }
 
     #[test]
@@ -341,6 +397,50 @@ mod tests {
     }
 
     #[test]
+    fn test_identify_ancient_stars_not_core() {
+        let analyzer = GeologicalAnalyzer::new();
+
+        let mut file_churn = HashMap::new();
+        let mut ancient = make_file_churn("small_ancient.rs", 0, 0, 1000);
+        ancient.last_observation = Some(Utc::now() - chrono::Duration::days(800));
+        file_churn.insert("small_ancient.rs".to_string(), ancient);
+
+        let mut star_counts = HashMap::new();
+        star_counts.insert("small_ancient.rs".to_string(), 2); // Below core threshold
+
+        let ancient_stars = analyzer.identify_ancient_stars(&file_churn, &star_counts);
+
+        assert_eq!(ancient_stars.len(), 1);
+        assert!(!ancient_stars[0].is_core);
+    }
+
+    #[test]
+    fn test_identify_ancient_stars_sorting() {
+        let analyzer = GeologicalAnalyzer::new();
+
+        let mut file_churn = HashMap::new();
+
+        let mut ancient1 = make_file_churn("core.rs", 0, 0, 1000);
+        ancient1.last_observation = Some(Utc::now() - chrono::Duration::days(800));
+        file_churn.insert("core.rs".to_string(), ancient1);
+
+        let mut ancient2 = make_file_churn("small.rs", 0, 0, 1000);
+        ancient2.last_observation = Some(Utc::now() - chrono::Duration::days(900));
+        file_churn.insert("small.rs".to_string(), ancient2);
+
+        let mut star_counts = HashMap::new();
+        star_counts.insert("core.rs".to_string(), 10); // Core
+        star_counts.insert("small.rs".to_string(), 2);  // Not core
+
+        let ancient_stars = analyzer.identify_ancient_stars(&file_churn, &star_counts);
+
+        assert_eq!(ancient_stars.len(), 2);
+        // Core files should come first
+        assert!(ancient_stars[0].is_core);
+        assert!(!ancient_stars[1].is_core);
+    }
+
+    #[test]
     fn test_identify_supernovas() {
         let analyzer = GeologicalAnalyzer::new();
 
@@ -355,8 +455,190 @@ mod tests {
     }
 
     #[test]
+    fn test_identify_supernovas_sorting() {
+        let analyzer = GeologicalAnalyzer::new();
+
+        let mut file_churn = HashMap::new();
+        file_churn.insert("hot.rs".to_string(), make_file_churn("hot.rs", 40, 60, 100));
+        file_churn.insert("hotter.rs".to_string(), make_file_churn("hotter.rs", 50, 70, 100));
+
+        let supernovas = analyzer.identify_supernovas(&file_churn);
+
+        assert_eq!(supernovas.len(), 2);
+        // Should be sorted by observations_30d (highest first)
+        assert!(supernovas[0].observations_30d >= supernovas[1].observations_30d);
+    }
+
+    #[test]
+    fn test_summarize_stable() {
+        let analyzer = GeologicalAnalyzer::new();
+
+        let mut file_churn = HashMap::new();
+        file_churn.insert("stable.rs".to_string(), make_file_churn("stable.rs", 2, 5, 200));
+
+        let dark_matter = HashMap::new();
+        let star_counts = HashMap::new();
+
+        let summary = analyzer.summarize(&file_churn, &dark_matter, &star_counts);
+
+        assert_eq!(summary.activity_level, GeologicalActivity::Stable);
+    }
+
+    #[test]
+    fn test_summarize_volcanic() {
+        let analyzer = GeologicalAnalyzer::new();
+
+        let mut file_churn = HashMap::new();
+        file_churn.insert("exploding.rs".to_string(), make_file_churn("exploding.rs", 35, 50, 100));
+
+        let summary = analyzer.summarize(&file_churn, &HashMap::new(), &HashMap::new());
+
+        assert_eq!(summary.activity_level, GeologicalActivity::HighVolcanic);
+    }
+
+    #[test]
+    fn test_summarize_tectonic_stress() {
+        let analyzer = GeologicalAnalyzer::new();
+
+        let mut file_churn = HashMap::new();
+        let mut dark_matter = HashMap::new();
+
+        // Add more than 5 tectonic files
+        for i in 0..7 {
+            let name = format!("risky{}.rs", i);
+            file_churn.insert(name.clone(), make_file_churn(&name, 5, 15, 100));
+            dark_matter.insert(name, 0.30);
+        }
+
+        let summary = analyzer.summarize(&file_churn, &dark_matter, &HashMap::new());
+
+        assert_eq!(summary.activity_level, GeologicalActivity::TectonicStress);
+    }
+
+    #[test]
+    fn test_summarize_minor_shifts() {
+        let analyzer = GeologicalAnalyzer::new();
+
+        let mut file_churn = HashMap::new();
+        let mut dark_matter = HashMap::new();
+
+        // Add a few tectonic files (less than 5)
+        for i in 0..3 {
+            let name = format!("risky{}.rs", i);
+            file_churn.insert(name.clone(), make_file_churn(&name, 5, 15, 100));
+            dark_matter.insert(name, 0.30);
+        }
+
+        let summary = analyzer.summarize(&file_churn, &dark_matter, &HashMap::new());
+
+        assert_eq!(summary.activity_level, GeologicalActivity::MinorShifts);
+    }
+
+    // =========================================================================
+    // GeologicalActivity Tests
+    // =========================================================================
+
+    #[test]
     fn test_geological_activity_levels() {
         assert_eq!(GeologicalActivity::Stable.description(), "Stable geology");
         assert_eq!(GeologicalActivity::HighVolcanic.indicator(), "🔥");
+    }
+
+    #[test]
+    fn test_geological_activity_descriptions() {
+        assert_eq!(GeologicalActivity::Stable.description(), "Stable geology");
+        assert_eq!(GeologicalActivity::MinorShifts.description(), "Minor tectonic shifts");
+        assert_eq!(GeologicalActivity::TectonicStress.description(), "Tectonic stress detected");
+        assert_eq!(GeologicalActivity::HighVolcanic.description(), "High volcanic activity");
+    }
+
+    #[test]
+    fn test_geological_activity_indicators() {
+        assert_eq!(GeologicalActivity::Stable.indicator(), "🌍");
+        assert_eq!(GeologicalActivity::MinorShifts.indicator(), "🌋");
+        assert_eq!(GeologicalActivity::TectonicStress.indicator(), "⚠️");
+        assert_eq!(GeologicalActivity::HighVolcanic.indicator(), "🔥");
+    }
+
+    #[test]
+    fn test_geological_activity_equality() {
+        assert_eq!(GeologicalActivity::Stable, GeologicalActivity::Stable);
+        assert_ne!(GeologicalActivity::Stable, GeologicalActivity::HighVolcanic);
+    }
+
+    // =========================================================================
+    // GeologicalSummary Tests
+    // =========================================================================
+
+    #[test]
+    fn test_geological_summary_risk_count() {
+        let summary = GeologicalSummary {
+            tectonic_shifts: vec![
+                TectonicShift { path: "a.rs".to_string(), churn_90d: 15, dark_matter_ratio: 0.3, risk_score: 0.5, reason: "Test".to_string() },
+                TectonicShift { path: "b.rs".to_string(), churn_90d: 20, dark_matter_ratio: 0.4, risk_score: 0.6, reason: "Test".to_string() },
+            ],
+            ancient_stars: vec![],
+            supernovas: vec![
+                Supernova { path: "c.rs".to_string(), observations_30d: 35, observer_count: 3, lines_changed: 1000, warning: "Test".to_string() },
+            ],
+            activity_level: GeologicalActivity::TectonicStress,
+        };
+
+        assert_eq!(summary.risk_count(), 3);
+    }
+
+    #[test]
+    fn test_geological_summary_high_risk_files() {
+        let summary = GeologicalSummary {
+            tectonic_shifts: vec![
+                TectonicShift { path: "tectonic.rs".to_string(), churn_90d: 15, dark_matter_ratio: 0.3, risk_score: 0.5, reason: "Test".to_string() },
+            ],
+            ancient_stars: vec![],
+            supernovas: vec![
+                Supernova { path: "supernova.rs".to_string(), observations_30d: 35, observer_count: 3, lines_changed: 1000, warning: "Test".to_string() },
+            ],
+            activity_level: GeologicalActivity::HighVolcanic,
+        };
+
+        let high_risk = summary.high_risk_files();
+        assert_eq!(high_risk.len(), 2);
+        assert!(high_risk.contains(&"tectonic.rs"));
+        assert!(high_risk.contains(&"supernova.rs"));
+    }
+
+    #[test]
+    fn test_geological_summary_has_ancient_core_files() {
+        let summary_with_core = GeologicalSummary {
+            tectonic_shifts: vec![],
+            ancient_stars: vec![
+                AncientStar { path: "core.rs".to_string(), age_days: 1000, dormant_days: 800, star_count: 10, is_core: true },
+            ],
+            supernovas: vec![],
+            activity_level: GeologicalActivity::Stable,
+        };
+        assert!(summary_with_core.has_ancient_core_files());
+
+        let summary_no_core = GeologicalSummary {
+            tectonic_shifts: vec![],
+            ancient_stars: vec![
+                AncientStar { path: "small.rs".to_string(), age_days: 1000, dormant_days: 800, star_count: 2, is_core: false },
+            ],
+            supernovas: vec![],
+            activity_level: GeologicalActivity::Stable,
+        };
+        assert!(!summary_no_core.has_ancient_core_files());
+    }
+
+    // =========================================================================
+    // Constants Tests
+    // =========================================================================
+
+    #[test]
+    fn test_constants() {
+        assert_eq!(TECTONIC_CHURN_THRESHOLD, 10);
+        assert_eq!(TECTONIC_DARK_MATTER_THRESHOLD, 0.20);
+        assert_eq!(ANCIENT_DORMANT_DAYS, 730);
+        assert_eq!(ANCIENT_CORE_STAR_THRESHOLD, 5);
+        assert_eq!(SUPERNOVA_THRESHOLD, 30);
     }
 }
