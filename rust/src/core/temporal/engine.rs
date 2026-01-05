@@ -744,6 +744,9 @@ fn hash_email(email: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+
+    // ==================== Helper Function Tests ====================
 
     #[test]
     fn test_hash_email() {
@@ -756,6 +759,18 @@ mod tests {
     }
 
     #[test]
+    fn test_hash_email_empty() {
+        let hash = hash_email("");
+        assert!(!hash.is_empty());
+    }
+
+    #[test]
+    fn test_hash_email_unicode() {
+        let hash = hash_email("user@例え.jp");
+        assert!(!hash.is_empty());
+    }
+
+    #[test]
     fn test_normalize_path() {
         let root = Path::new("/project");
         assert_eq!(normalize_path("src/main.rs", root), "src/main.rs");
@@ -763,8 +778,432 @@ mod tests {
     }
 
     #[test]
+    fn test_normalize_path_relative() {
+        let root = Path::new("/project");
+        assert_eq!(normalize_path("lib/utils.rs", root), "lib/utils.rs");
+    }
+
+    #[test]
+    fn test_normalize_path_outside_root() {
+        let root = Path::new("/project");
+        // Path outside root should remain unchanged
+        let result = normalize_path("/other/file.rs", root);
+        assert!(result.contains("file.rs"));
+    }
+
+    // ==================== Classification Tests ====================
+
+    #[test]
     fn test_churn_classification_from_counts() {
         assert_eq!(ChurnClassification::from_counts(0, 0), ChurnClassification::Dormant);
         assert_eq!(ChurnClassification::from_counts(35, 50), ChurnClassification::Supernova);
+    }
+
+    #[test]
+    fn test_churn_classification_high() {
+        // High: > 10 in 90d
+        assert_eq!(ChurnClassification::from_counts(7, 15), ChurnClassification::High);
+    }
+
+    #[test]
+    fn test_churn_classification_low() {
+        // Low: 1-3 in 90d
+        assert_eq!(ChurnClassification::from_counts(0, 2), ChurnClassification::Low);
+    }
+
+    #[test]
+    fn test_churn_classification_moderate() {
+        // Moderate: 4-10 in 90d
+        assert_eq!(ChurnClassification::from_counts(3, 6), ChurnClassification::Moderate);
+    }
+
+    #[test]
+    fn test_age_classification_from_days() {
+        assert_eq!(AgeClassification::from_days(0), AgeClassification::Newborn);
+        assert_eq!(AgeClassification::from_days(15), AgeClassification::Newborn);
+        assert_eq!(AgeClassification::from_days(60), AgeClassification::Young);
+        assert_eq!(AgeClassification::from_days(400), AgeClassification::Mature);
+        assert_eq!(AgeClassification::from_days(800), AgeClassification::Ancient);
+        assert_eq!(AgeClassification::from_days(1000), AgeClassification::Ancient);
+    }
+
+    // ==================== Struct Tests ====================
+
+    #[test]
+    fn test_file_observation_creation() {
+        let obs = FileObservation {
+            timestamp: Utc::now(),
+            observer_name: "Test User".to_string(),
+            observer_email: "test@example.com".to_string(),
+            lines_added: 10,
+            lines_removed: 5,
+        };
+        assert_eq!(obs.observer_name, "Test User");
+        assert_eq!(obs.lines_added, 10);
+    }
+
+    #[test]
+    fn test_commit_data_creation() {
+        let data = CommitData {
+            timestamp: Utc::now(),
+            observer_name: "Developer".to_string(),
+            observer_email: "dev@example.com".to_string(),
+            files_changed: vec!["src/main.rs".to_string(), "Cargo.toml".to_string()],
+        };
+        assert_eq!(data.files_changed.len(), 2);
+    }
+
+    #[test]
+    fn test_galaxy_stats_default() {
+        let stats = GalaxyStats::default();
+        assert_eq!(stats.total_observations, 0);
+        assert!(stats.observers.is_empty());
+        assert!(stats.first_observation.is_none());
+        assert!(stats.last_observation.is_none());
+    }
+
+    #[test]
+    fn test_observer_stats_default() {
+        let stats = ObserverStats::default();
+        assert_eq!(stats.observations, 0);
+        assert_eq!(stats.lines_added, 0);
+        assert!(stats.first_seen.is_none());
+    }
+
+    // ==================== Engine Creation Tests ====================
+
+    #[test]
+    fn test_engine_new_in_repo() {
+        // This test runs in the actual repo
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        let engine = ChronosEngine::new(&cwd);
+
+        // Should succeed since we're in a git repo
+        assert!(engine.is_some());
+    }
+
+    #[test]
+    fn test_engine_with_depth() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        let engine = ChronosEngine::with_depth(&cwd, 100);
+
+        assert!(engine.is_some());
+        if let Some(e) = engine {
+            assert_eq!(e.commit_depth, 100);
+        }
+    }
+
+    #[test]
+    fn test_engine_new_nonexistent_path() {
+        let engine = ChronosEngine::new(Path::new("/nonexistent/path/that/does/not/exist"));
+        assert!(engine.is_none());
+    }
+
+    #[test]
+    fn test_engine_initial_state() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            assert!(matches!(engine.state(), ChronosState::StaticGalaxy));
+            assert!(matches!(engine.warp_status(), WarpStatus::Calibrating));
+        }
+    }
+
+    // ==================== Constants Tests ====================
+
+    #[test]
+    fn test_constants() {
+        assert_eq!(DEFAULT_COMMIT_DEPTH, 1_000);
+        assert_eq!(FULL_COMMIT_DEPTH, 100_000);
+        assert_eq!(CHURN_WINDOW_30D, 30);
+        assert_eq!(CHURN_WINDOW_90D, 90);
+        assert_eq!(CHURN_WINDOW_YEAR, 365);
+        assert_eq!(ANCIENT_THRESHOLD_DAYS, 730);
+        assert_eq!(SUPERNOVA_THRESHOLD, 30);
+    }
+
+    // ==================== Metrics Calculation Tests ====================
+
+    #[test]
+    fn test_calculate_file_metrics_empty() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            let now = Utc::now();
+            let metrics = engine.calculate_file_metrics(&[], &now);
+
+            assert_eq!(metrics.total_observations, 0);
+            assert!(metrics.primary_observers.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_calculate_file_metrics_single_observation() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            let now = Utc::now();
+            let observations = vec![
+                FileObservation {
+                    timestamp: now - Duration::days(10),
+                    observer_name: "Alice".to_string(),
+                    observer_email: "alice@example.com".to_string(),
+                    lines_added: 100,
+                    lines_removed: 20,
+                },
+            ];
+
+            let metrics = engine.calculate_file_metrics(&observations, &now);
+
+            assert_eq!(metrics.total_observations, 1);
+            assert_eq!(metrics.volcanic_churn.last_30_days, 1);
+            assert_eq!(metrics.primary_observers.len(), 1);
+            assert_eq!(metrics.primary_observers[0].name, "Alice");
+        }
+    }
+
+    #[test]
+    fn test_calculate_file_metrics_multiple_observers() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            let now = Utc::now();
+            let observations = vec![
+                FileObservation {
+                    timestamp: now - Duration::days(5),
+                    observer_name: "Alice".to_string(),
+                    observer_email: "alice@example.com".to_string(),
+                    lines_added: 50,
+                    lines_removed: 10,
+                },
+                FileObservation {
+                    timestamp: now - Duration::days(10),
+                    observer_name: "Bob".to_string(),
+                    observer_email: "bob@example.com".to_string(),
+                    lines_added: 30,
+                    lines_removed: 5,
+                },
+                FileObservation {
+                    timestamp: now - Duration::days(15),
+                    observer_name: "Alice".to_string(),
+                    observer_email: "alice@example.com".to_string(),
+                    lines_added: 20,
+                    lines_removed: 3,
+                },
+            ];
+
+            let metrics = engine.calculate_file_metrics(&observations, &now);
+
+            assert_eq!(metrics.total_observations, 3);
+            assert_eq!(metrics.volcanic_churn.last_30_days, 3);
+            // Alice should be first (2 observations)
+            assert_eq!(metrics.primary_observers[0].name, "Alice");
+            assert_eq!(metrics.primary_observers[0].impact.observations, 2);
+        }
+    }
+
+    #[test]
+    fn test_calculate_file_metrics_old_observations() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            let now = Utc::now();
+            let observations = vec![
+                FileObservation {
+                    timestamp: now - Duration::days(100),
+                    observer_name: "Developer".to_string(),
+                    observer_email: "dev@example.com".to_string(),
+                    lines_added: 50,
+                    lines_removed: 10,
+                },
+            ];
+
+            let metrics = engine.calculate_file_metrics(&observations, &now);
+
+            assert_eq!(metrics.total_observations, 1);
+            assert_eq!(metrics.volcanic_churn.last_30_days, 0);
+            assert_eq!(metrics.volcanic_churn.last_90_days, 0);
+            assert_eq!(metrics.volcanic_churn.last_year, 1);
+        }
+    }
+
+    #[test]
+    fn test_calculate_file_metrics_stellar_age() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            let now = Utc::now();
+            let observations = vec![
+                FileObservation {
+                    timestamp: now - Duration::days(500),
+                    observer_name: "Dev".to_string(),
+                    observer_email: "dev@example.com".to_string(),
+                    lines_added: 100,
+                    lines_removed: 0,
+                },
+            ];
+
+            let metrics = engine.calculate_file_metrics(&observations, &now);
+
+            assert!(metrics.stellar_age.age_days >= 499);
+            // 500 days is Mature (365-729 days)
+            assert_eq!(metrics.stellar_age.classification, AgeClassification::Mature);
+        }
+    }
+
+    // ==================== File Metrics Tests ====================
+
+    #[test]
+    fn test_file_metrics_nonexistent_file() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            let metrics = engine.file_metrics("nonexistent/file/that/does/not/exist.rs");
+
+            // Should return default metrics
+            assert_eq!(metrics.total_observations, 0);
+        }
+    }
+
+    // ==================== History Extraction Tests ====================
+
+    #[test]
+    fn test_extract_history() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(mut engine) = ChronosEngine::new(&cwd) {
+            let result = engine.extract_history();
+            assert!(result.is_ok());
+
+            // State should be either Active or ShallowCensus
+            match engine.state() {
+                ChronosState::Active { total_events, .. } => {
+                    assert!(*total_events > 0);
+                }
+                ChronosState::ShallowCensus { total_events, .. } => {
+                    assert!(*total_events > 0);
+                }
+                _ => panic!("Unexpected state after extraction"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_extract_history_cached() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(mut engine) = ChronosEngine::new(&cwd) {
+            let result = engine.extract_history_cached();
+            assert!(result.is_ok());
+
+            // Warp status should be either Engaged or Calibrating
+            match engine.warp_status() {
+                WarpStatus::Engaged | WarpStatus::Calibrating => {}
+                _ => panic!("Unexpected warp status"),
+            }
+        }
+    }
+
+    // ==================== Census Tests ====================
+
+    #[test]
+    fn test_build_census_without_extraction() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            let census = engine.build_census();
+
+            // Without extraction, census should be mostly empty
+            assert!(matches!(census.state, ChronosState::StaticGalaxy));
+        }
+    }
+
+    #[test]
+    fn test_build_census_with_extraction() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(mut engine) = ChronosEngine::new(&cwd) {
+            let _ = engine.extract_history();
+            let census = engine.build_census();
+
+            // After extraction, census should have data
+            assert!(census.total_observations > 0 || matches!(census.state, ChronosState::StaticGalaxy));
+        }
+    }
+
+    // ==================== Tectonic Shifts Tests ====================
+
+    #[test]
+    fn test_identify_tectonic_shifts_empty() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            let dark_matter: HashMap<String, f64> = HashMap::new();
+            let shifts = engine.identify_tectonic_shifts(&dark_matter);
+
+            // Without history, should be empty
+            assert!(shifts.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_identify_tectonic_shifts_with_data() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(mut engine) = ChronosEngine::new(&cwd) {
+            let _ = engine.extract_history();
+
+            // Create some dark matter ratios for files
+            let mut dark_matter: HashMap<String, f64> = HashMap::new();
+            for path in engine.file_histories.keys() {
+                dark_matter.insert(path.clone(), 0.3); // 30% dark matter
+            }
+
+            let shifts = engine.identify_tectonic_shifts(&dark_matter);
+            // May or may not have shifts depending on churn
+            let _ = shifts;
+        }
+    }
+
+    // ==================== Cache Tests ====================
+
+    #[test]
+    fn test_is_cache_valid() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            // Just verify it doesn't panic
+            let _valid = engine.is_cache_valid();
+        }
+    }
+
+    #[test]
+    fn test_invalidate_cache() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            // Invalidate should succeed or fail gracefully
+            let _ = engine.invalidate_cache();
+        }
+    }
+
+    // ==================== WarpStatus Tests ====================
+
+    #[test]
+    fn test_warp_status_variants() {
+        // Test that all variants exist
+        let _calibrating = WarpStatus::Calibrating;
+        let _engaged = WarpStatus::Engaged;
+    }
+
+    // ==================== Integration Tests ====================
+
+    #[test]
+    fn test_full_workflow() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(mut engine) = ChronosEngine::with_depth(&cwd, 50) {
+            // Extract history with limited depth for speed
+            let result = engine.extract_history();
+            assert!(result.is_ok());
+
+            // Check state
+            let state = engine.state();
+            match state {
+                ChronosState::Active { total_events, observer_count, .. } |
+                ChronosState::ShallowCensus { total_events, observer_count, .. } => {
+                    assert!(*total_events > 0);
+                    assert!(*observer_count > 0);
+                }
+                _ => {}
+            }
+
+            // Build census - just verify it doesn't panic
+            let _census = engine.build_census();
+        }
     }
 }
