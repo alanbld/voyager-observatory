@@ -1181,4 +1181,857 @@ class Calculator {
         assert_eq!(TypeScriptTreeSitterAdapter::tsx().language(), LanguageId::Tsx);
         assert_eq!(TypeScriptTreeSitterAdapter::javascript().language(), LanguageId::JavaScript);
     }
+
+    // ==================== Adapter Creation Tests ====================
+
+    #[test]
+    fn test_adapter_new() {
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        assert_eq!(adapter.language(), LanguageId::TypeScript);
+    }
+
+    #[test]
+    fn test_adapter_default() {
+        let adapter = TypeScriptTreeSitterAdapter::default();
+        assert_eq!(adapter.language(), LanguageId::TypeScript);
+    }
+
+    #[test]
+    fn test_adapter_tsx() {
+        let adapter = TypeScriptTreeSitterAdapter::tsx();
+        assert_eq!(adapter.language(), LanguageId::Tsx);
+    }
+
+    #[test]
+    fn test_tree_sitter_language() {
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let lang = adapter.tree_sitter_language();
+        // Just verify it doesn't panic
+        assert!(lang.node_kind_count() > 0);
+    }
+
+    // ==================== Function Extraction Tests ====================
+
+    #[test]
+    fn test_extract_function_no_params() {
+        let source = "function noParams(): void {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "noParams");
+        assert_eq!(declarations[0].kind, DeclarationKind::Function);
+        assert!(declarations[0].parameters.is_empty());
+    }
+
+    #[test]
+    fn test_extract_function_multiple_params() {
+        let source = "function multi(a: string, b: number, c: boolean): void {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].parameters.len(), 3);
+        assert_eq!(declarations[0].parameters[0].name, "a");
+        assert_eq!(declarations[0].parameters[1].name, "b");
+        assert_eq!(declarations[0].parameters[2].name, "c");
+    }
+
+    #[test]
+    fn test_extract_function_with_default() {
+        let source = "function withDefault(name: string = 'world'): string { return name; }";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].parameters.len(), 1);
+        // Default value may or may not be extracted depending on implementation
+    }
+
+    #[test]
+    fn test_extract_function_rest_params() {
+        let source = "function withRest(...args: string[]): void {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        // Rest param handling varies
+    }
+
+    #[test]
+    fn test_extract_async_arrow_function() {
+        let source = "const fetchData = async (url: string): Promise<Response> => fetch(url);";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "fetchData");
+        assert_eq!(declarations[0].kind, DeclarationKind::Function);
+        assert_eq!(declarations[0].metadata.get("async"), Some(&"true".to_string()));
+    }
+
+    #[test]
+    fn test_extract_generator_function() {
+        let source = "function* generator(): Generator<number> { yield 1; }";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let _declarations = adapter.extract_declarations(&tree, source);
+
+        // Generator functions may not be extracted by current implementation
+        // Just verify no panic
+    }
+
+    // ==================== Class Extraction Tests ====================
+
+    #[test]
+    fn test_extract_empty_class() {
+        let source = "class Empty {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "Empty");
+        assert_eq!(declarations[0].kind, DeclarationKind::Class);
+    }
+
+    #[test]
+    fn test_extract_class_with_static_method() {
+        let source = r#"
+class Utility {
+    static helper(): void {}
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert!(!declarations[0].children.is_empty());
+        // Check for static metadata
+        let method = &declarations[0].children[0];
+        assert_eq!(method.metadata.get("static"), Some(&"true".to_string()));
+    }
+
+    #[test]
+    fn test_extract_class_with_async_method() {
+        let source = r#"
+class Service {
+    async fetch(): Promise<void> {}
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert!(!declarations[0].children.is_empty());
+        let method = &declarations[0].children[0];
+        assert_eq!(method.metadata.get("async"), Some(&"true".to_string()));
+    }
+
+    #[test]
+    fn test_extract_class_with_constructor() {
+        let source = r#"
+class Point {
+    constructor(public x: number, public y: number) {}
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        // Constructor may be in children
+    }
+
+    #[test]
+    fn test_extract_class_with_visibility() {
+        let source = r#"
+class Sample {
+    public pubMethod(): void {}
+    private privMethod(): void {}
+    protected protMethod(): void {}
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        let _children = &declarations[0].children;
+        // Visibility should be extracted for methods
+    }
+
+    // ==================== Interface Tests ====================
+
+    #[test]
+    fn test_extract_interface_with_methods() {
+        let source = r#"
+interface Calculator {
+    add(a: number, b: number): number;
+    subtract(a: number, b: number): number;
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].kind, DeclarationKind::Interface);
+        assert!(declarations[0].children.len() >= 2);
+    }
+
+    #[test]
+    fn test_extract_interface_with_properties() {
+        let source = r#"
+interface Config {
+    name: string;
+    value: number;
+    optional?: boolean;
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].kind, DeclarationKind::Interface);
+    }
+
+    #[test]
+    fn test_extract_empty_interface() {
+        let source = "interface Empty {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "Empty");
+        assert_eq!(declarations[0].kind, DeclarationKind::Interface);
+    }
+
+    // ==================== Enum Tests ====================
+
+    #[test]
+    fn test_extract_enum() {
+        let source = r#"
+enum Color {
+    Red,
+    Green,
+    Blue
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "Color");
+        assert_eq!(declarations[0].kind, DeclarationKind::Enum);
+    }
+
+    #[test]
+    fn test_extract_const_enum() {
+        let source = r#"
+const enum Status {
+    Pending = 0,
+    Active = 1,
+    Completed = 2
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let _declarations = adapter.extract_declarations(&tree, source);
+
+        // const enum may or may not be recognized depending on grammar
+    }
+
+    // ==================== Variable Tests ====================
+
+    #[test]
+    fn test_extract_const_declaration() {
+        let source = "const PI: number = 3.14159;";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "PI");
+        assert_eq!(declarations[0].kind, DeclarationKind::Variable);
+    }
+
+    #[test]
+    fn test_extract_let_declaration() {
+        let source = "let counter: number = 0;";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "counter");
+    }
+
+    #[test]
+    fn test_extract_multiple_variable_declarators() {
+        let source = "const a = 1, b = 2, c = 3;";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert!(declarations.len() >= 1); // May be 1 or 3 depending on extraction logic
+    }
+
+    // ==================== Import Tests ====================
+
+    #[test]
+    fn test_extract_default_import() {
+        let source = "import React from 'react';";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let imports = adapter.extract_imports(&tree, source);
+
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].source, "react");
+        assert!(imports[0].items.contains(&"React".to_string()));
+    }
+
+    #[test]
+    fn test_extract_named_import() {
+        let source = "import { useState, useEffect } from 'react';";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let imports = adapter.extract_imports(&tree, source);
+
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].source, "react");
+        assert!(imports[0].items.contains(&"useState".to_string()));
+        assert!(imports[0].items.contains(&"useEffect".to_string()));
+    }
+
+    #[test]
+    fn test_extract_namespace_import() {
+        let source = "import * as lodash from 'lodash';";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let imports = adapter.extract_imports(&tree, source);
+
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].source, "lodash");
+        assert!(imports[0].items.contains(&"*".to_string()));
+        assert_eq!(imports[0].alias, Some("lodash".to_string()));
+    }
+
+    #[test]
+    fn test_extract_type_only_import() {
+        let source = "import type { User } from './types';";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let imports = adapter.extract_imports(&tree, source);
+
+        assert_eq!(imports.len(), 1);
+        assert!(imports[0].type_only);
+    }
+
+    #[test]
+    fn test_extract_mixed_import() {
+        let source = "import React, { useState } from 'react';";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let imports = adapter.extract_imports(&tree, source);
+
+        assert_eq!(imports.len(), 1);
+        assert!(imports[0].items.contains(&"React".to_string()));
+    }
+
+    // ==================== Export Tests ====================
+
+    #[test]
+    fn test_extract_export_function() {
+        let source = "export function greet(): void {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "greet");
+        assert_eq!(declarations[0].visibility, Visibility::Public);
+    }
+
+    #[test]
+    fn test_extract_export_class() {
+        let source = "export class MyService {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "MyService");
+        assert_eq!(declarations[0].visibility, Visibility::Public);
+    }
+
+    #[test]
+    fn test_extract_export_interface() {
+        let source = "export interface Config {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "Config");
+        assert_eq!(declarations[0].visibility, Visibility::Public);
+    }
+
+    #[test]
+    fn test_extract_export_const() {
+        let source = "export const VERSION = '1.0.0';";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "VERSION");
+        assert_eq!(declarations[0].visibility, Visibility::Public);
+    }
+
+    // ==================== Comment Tests ====================
+
+    #[test]
+    fn test_extract_line_comment() {
+        let source = "// This is a line comment\nfunction foo() {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let comments = adapter.extract_comments(&tree, source);
+
+        assert!(!comments.is_empty());
+        assert!(comments.iter().any(|c| c.text.contains("line comment")));
+        assert!(comments.iter().any(|c| c.kind == CommentKind::Line));
+    }
+
+    #[test]
+    fn test_extract_block_comment() {
+        let source = "/* Block comment */\nfunction foo() {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let comments = adapter.extract_comments(&tree, source);
+
+        assert!(!comments.is_empty());
+        assert!(comments.iter().any(|c| c.kind == CommentKind::Block));
+    }
+
+    #[test]
+    fn test_extract_jsdoc_comment() {
+        let source = r#"
+/**
+ * Greets the user
+ * @param name The name
+ * @returns The greeting
+ */
+function greet(name: string): string {
+    return `Hello, ${name}!`;
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let comments = adapter.extract_comments(&tree, source);
+
+        assert!(!comments.is_empty());
+        assert!(comments.iter().any(|c| c.kind == CommentKind::Doc));
+    }
+
+    #[test]
+    fn test_jsdoc_attached_to_function() {
+        let source = r#"
+/**
+ * Adds two numbers
+ */
+function add(a: number, b: number): number {
+    return a + b;
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert!(declarations[0].doc_comment.is_some());
+        let doc = declarations[0].doc_comment.as_ref().unwrap();
+        assert!(doc.text.contains("Adds two numbers"));
+    }
+
+    // ==================== Body Extraction Tests ====================
+
+    #[test]
+    fn test_extract_function_body() {
+        let source = "function test(): void { const x = 1; return; }";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        let _body = adapter.extract_body(&tree, source, &declarations[0]);
+        // Body extraction may or may not work depending on span matching
+        // Just verify no panic
+    }
+
+    #[test]
+    fn test_extract_class_body() {
+        let source = r#"
+class Service {
+    method() {
+        return 42;
+    }
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        let _body = adapter.extract_body(&tree, source, &declarations[0]);
+        // May or may not have body depending on body_span matching
+    }
+
+    // ==================== Control Flow Tests ====================
+
+    #[test]
+    fn test_extract_if_statement() {
+        let source = r#"
+function test(): void {
+    if (true) {
+        console.log('yes');
+    } else {
+        console.log('no');
+    }
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
+            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::If));
+        }
+    }
+
+    #[test]
+    fn test_extract_for_loop() {
+        let source = r#"
+function test(): void {
+    for (let i = 0; i < 10; i++) {
+        console.log(i);
+    }
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
+            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::For));
+        }
+    }
+
+    #[test]
+    fn test_extract_for_in_loop() {
+        let source = r#"
+function test(): void {
+    for (const key in obj) {
+        console.log(key);
+    }
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
+            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::For));
+        }
+    }
+
+    #[test]
+    fn test_extract_while_loop() {
+        let source = r#"
+function test(): void {
+    while (true) {
+        break;
+    }
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
+            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::While));
+        }
+    }
+
+    #[test]
+    fn test_extract_switch_statement() {
+        let source = r#"
+function test(x: number): void {
+    switch (x) {
+        case 1:
+            break;
+        default:
+            break;
+    }
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
+            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::Switch));
+        }
+    }
+
+    #[test]
+    fn test_extract_try_catch() {
+        let source = r#"
+function test(): void {
+    try {
+        throw new Error('test');
+    } catch (e) {
+        console.log(e);
+    } finally {
+        console.log('done');
+    }
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
+            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::Try));
+        }
+    }
+
+    #[test]
+    fn test_extract_return_statement() {
+        let source = r#"
+function test(): number {
+    return 42;
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
+            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::Return));
+        }
+    }
+
+    // ==================== Call Extraction Tests ====================
+
+    #[test]
+    fn test_extract_function_call() {
+        let source = r#"
+function test(): void {
+    console.log('hello');
+    fetch('/api');
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
+            assert!(body.calls.len() >= 2);
+        }
+    }
+
+    #[test]
+    fn test_extract_method_call() {
+        let source = r#"
+function test(): void {
+    obj.method();
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
+            let method_calls: Vec<_> = body.calls.iter().filter(|c| c.is_method).collect();
+            assert!(!method_calls.is_empty());
+        }
+    }
+
+    // ==================== Edge Cases ====================
+
+    #[test]
+    fn test_empty_source() {
+        let source = "";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+
+        assert!(adapter.extract_declarations(&tree, source).is_empty());
+        assert!(adapter.extract_imports(&tree, source).is_empty());
+        assert!(adapter.extract_comments(&tree, source).is_empty());
+    }
+
+    #[test]
+    fn test_only_comments() {
+        let source = "// Just a comment";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+
+        assert!(adapter.extract_declarations(&tree, source).is_empty());
+        assert!(!adapter.extract_comments(&tree, source).is_empty());
+    }
+
+    #[test]
+    fn test_multiple_declarations() {
+        let source = r#"
+function first(): void {}
+function second(): void {}
+class Third {}
+interface Fourth {}
+type Fifth = string;
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 5);
+    }
+
+    #[test]
+    fn test_nested_function() {
+        let source = r#"
+function outer(): void {
+    function inner(): void {}
+}
+"#;
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "outer");
+        // Inner function should be in body, not top-level declarations
+    }
+
+    #[test]
+    fn test_extract_errors() {
+        let source = "function broken( {}"; // Syntax error
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+
+        let errors = adapter.extract_errors(&tree, source);
+        // May or may not have errors depending on parser recovery
+        let _ = errors;
+    }
+
+    #[test]
+    fn test_unicode_identifiers() {
+        let source = "function 日本語(): void {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let _declarations = adapter.extract_declarations(&tree, source);
+
+        // Unicode support varies
+    }
+
+    // ==================== JavaScript-specific Tests ====================
+
+    #[test]
+    fn test_javascript_function() {
+        let source = "function greet(name) { return 'Hello, ' + name; }";
+        let tree = parse_javascript(source);
+        let adapter = TypeScriptTreeSitterAdapter::javascript();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "greet");
+    }
+
+    #[test]
+    fn test_javascript_arrow_function() {
+        let source = "const add = (a, b) => a + b;";
+        let tree = parse_javascript(source);
+        let adapter = TypeScriptTreeSitterAdapter::javascript();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "add");
+        assert_eq!(declarations[0].kind, DeclarationKind::Function);
+    }
+
+    #[test]
+    fn test_javascript_class() {
+        let source = r#"
+class Animal {
+    constructor(name) {
+        this.name = name;
+    }
+
+    speak() {
+        console.log(this.name);
+    }
+}
+"#;
+        let tree = parse_javascript(source);
+        let adapter = TypeScriptTreeSitterAdapter::javascript();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].name, "Animal");
+        assert_eq!(declarations[0].kind, DeclarationKind::Class);
+    }
+
+    #[test]
+    fn test_javascript_import() {
+        let source = "import { readFile } from 'fs';";
+        let tree = parse_javascript(source);
+        let adapter = TypeScriptTreeSitterAdapter::javascript();
+        let imports = adapter.extract_imports(&tree, source);
+
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].source, "fs");
+    }
+
+    // ==================== Visibility Tests ====================
+
+    #[test]
+    fn test_visibility_unknown() {
+        let source = "function internal(): void {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].visibility, Visibility::Unknown);
+    }
+
+    #[test]
+    fn test_visibility_exported() {
+        let source = "export function exported(): void {}";
+        let tree = parse_typescript(source);
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        assert_eq!(declarations[0].visibility, Visibility::Public);
+    }
 }

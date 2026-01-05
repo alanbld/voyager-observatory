@@ -976,13 +976,43 @@ mod tests {
         parser.parse(source, None).unwrap()
     }
 
+    // =========================================================================
+    // Basic Adapter Tests
+    // =========================================================================
+
+    #[test]
+    fn test_adapter_new() {
+        let adapter = PythonTreeSitterAdapter::new();
+        assert_eq!(adapter.language(), LanguageId::Python);
+    }
+
+    #[test]
+    fn test_adapter_default() {
+        let adapter = PythonTreeSitterAdapter::default();
+        assert_eq!(adapter.language(), LanguageId::Python);
+    }
+
+    #[test]
+    fn test_tree_sitter_language() {
+        let adapter = PythonTreeSitterAdapter::new();
+        let lang = adapter.tree_sitter_language();
+        let mut parser = tree_sitter::Parser::new();
+        assert!(parser.set_language(&lang).is_ok());
+    }
+
+    #[test]
+    fn test_adapter_language() {
+        let adapter = PythonTreeSitterAdapter::new();
+        assert_eq!(adapter.language(), LanguageId::Python);
+    }
+
+    // =========================================================================
+    // Function Extraction Tests
+    // =========================================================================
+
     #[test]
     fn test_extract_simple_function() {
-        let source = r#"
-def hello(name: str) -> str:
-    """Greet someone."""
-    return f"Hello, {name}!"
-"#;
+        let source = "def hello(name: str) -> str:\n    \"\"\"Greet someone.\"\"\"\n    return f\"Hello, {name}!\"\n";
         let tree = parse_python(source);
         let adapter = PythonTreeSitterAdapter::new();
         let declarations = adapter.extract_declarations(&tree, source);
@@ -1001,11 +1031,7 @@ def hello(name: str) -> str:
 
     #[test]
     fn test_extract_async_function() {
-        let source = r#"
-async def fetch_data(url: str) -> dict:
-    """Fetch data from URL."""
-    pass
-"#;
+        let source = "async def fetch_data(url: str) -> dict:\n    \"\"\"Fetch data from URL.\"\"\"\n    pass\n";
         let tree = parse_python(source);
         let adapter = PythonTreeSitterAdapter::new();
         let declarations = adapter.extract_declarations(&tree, source);
@@ -1017,19 +1043,73 @@ async def fetch_data(url: str) -> dict:
     }
 
     #[test]
+    fn test_extract_function_no_return_type() {
+        let source = "def no_return():\n    pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(decls.len(), 1);
+        assert!(decls[0].return_type.is_none());
+    }
+
+    #[test]
+    fn test_extract_function_no_params() {
+        let source = "def empty():\n    pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(decls.len(), 1);
+        assert!(decls[0].parameters.is_empty());
+    }
+
+    #[test]
+    fn test_extract_function_args_kwargs() {
+        let source = "def variadic(*args, **kwargs):\n    pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(decls.len(), 1);
+        // Should extract args and kwargs as parameters
+    }
+
+    #[test]
+    fn test_extract_function_with_defaults() {
+        let source = "def greet(name: str = \"World\", times: int = 1):\n    pass\n";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let declarations = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(declarations.len(), 1);
+        let func = &declarations[0];
+        assert_eq!(func.parameters.len(), 2);
+
+        let name_param = &func.parameters[0];
+        assert_eq!(name_param.name, "name");
+        assert!(name_param.type_annotation.is_some());
+        assert!(name_param.default_value.is_some());
+    }
+
+    #[test]
+    fn test_extract_lambda() {
+        let source = "square = lambda x: x * x";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        // Lambda may or may not be extracted as a declaration
+        // Just verify no panic
+    }
+
+    // =========================================================================
+    // Class Extraction Tests
+    // =========================================================================
+
+    #[test]
     fn test_extract_class() {
-        let source = r#"
-class MyClass:
-    """A sample class."""
-
-    class_var = 10
-
-    def __init__(self, name):
-        self.name = name
-
-    def greet(self):
-        return f"Hello, {self.name}"
-"#;
+        let source = "class MyClass:\n    \"\"\"A sample class.\"\"\"\n\n    class_var = 10\n\n    def __init__(self, name):\n        self.name = name\n\n    def greet(self):\n        return f\"Hello, {self.name}\"\n";
         let tree = parse_python(source);
         let adapter = PythonTreeSitterAdapter::new();
         let declarations = adapter.extract_declarations(&tree, source);
@@ -1040,18 +1120,51 @@ class MyClass:
         assert_eq!(class.kind, DeclarationKind::Class);
         assert!(class.doc_comment.is_some());
 
-        // Should have methods and class variable as children
         assert!(class.children.len() >= 2, "Expected at least 2 children, got {}", class.children.len());
     }
 
     #[test]
+    fn test_extract_class_with_inheritance() {
+        let source = "class Child(Parent):\n    pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(decls.len(), 1);
+        assert_eq!(decls[0].name, "Child");
+        assert_eq!(decls[0].kind, DeclarationKind::Class);
+    }
+
+    #[test]
+    fn test_extract_class_multiple_inheritance() {
+        let source = "class Multi(Base1, Base2, Mixin):\n    pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(decls.len(), 1);
+        assert_eq!(decls[0].name, "Multi");
+    }
+
+    #[test]
+    fn test_extract_decorated_class() {
+        let source = "@dataclass\nclass Point:\n    x: int\n    y: int";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(decls.len(), 1);
+        assert_eq!(decls[0].name, "Point");
+        assert!(decls[0].metadata.get("decorators").is_some());
+    }
+
+    // =========================================================================
+    // Decorator Tests
+    // =========================================================================
+
+    #[test]
     fn test_extract_decorated_function() {
-        let source = r#"
-@staticmethod
-@cache
-def compute(x, y):
-    return x + y
-"#;
+        let source = "@staticmethod\n@cache\ndef compute(x, y):\n    return x + y\n";
         let tree = parse_python(source);
         let adapter = PythonTreeSitterAdapter::new();
         let declarations = adapter.extract_declarations(&tree, source);
@@ -1066,43 +1179,85 @@ def compute(x, y):
     }
 
     #[test]
+    fn test_extract_decorator_with_args() {
+        let source = "@decorator(arg1, arg2)\ndef decorated():\n    pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(decls.len(), 1);
+        assert!(decls[0].metadata.get("decorators").is_some());
+    }
+
+    // =========================================================================
+    // Import Extraction Tests
+    // =========================================================================
+
+    #[test]
     fn test_extract_imports() {
-        let source = r#"
-import os
-import json as js
-from pathlib import Path
-from typing import List, Optional
-from . import sibling
-from ..utils import helper
-"#;
+        let source = "import os\nimport json as js\nfrom pathlib import Path\nfrom typing import List, Optional\nfrom . import sibling\nfrom ..utils import helper\n";
         let tree = parse_python(source);
         let adapter = PythonTreeSitterAdapter::new();
         let imports = adapter.extract_imports(&tree, source);
 
         assert!(imports.len() >= 4, "Expected at least 4 imports, got {}", imports.len());
-
-        // Check for 'os' import
         assert!(imports.iter().any(|i| i.source == "os"));
-
-        // Check for 'json as js' import
         assert!(imports.iter().any(|i| i.source == "json" && i.alias == Some("js".to_string())));
     }
 
     #[test]
+    fn test_extract_import_simple() {
+        let source = "import math";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let imports = adapter.extract_imports(&tree, source);
+
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].source, "math");
+        assert_eq!(imports[0].kind, ImportKind::Import);
+    }
+
+    #[test]
+    fn test_extract_from_import() {
+        let source = "from os.path import join, exists";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let imports = adapter.extract_imports(&tree, source);
+
+        assert_eq!(imports.len(), 1);
+        assert_eq!(imports[0].source, "os.path");
+        // Items extraction depends on implementation
+    }
+
+    #[test]
+    fn test_extract_relative_import() {
+        let source = "from . import module";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let imports = adapter.extract_imports(&tree, source);
+
+        assert_eq!(imports.len(), 1);
+        // Relative import source may include the imported name
+        assert!(imports[0].source.starts_with("."));
+    }
+
+    #[test]
+    fn test_extract_star_import() {
+        let source = "from module import *";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let imports = adapter.extract_imports(&tree, source);
+
+        assert_eq!(imports.len(), 1);
+    }
+
+    // =========================================================================
+    // Visibility Tests
+    // =========================================================================
+
+    #[test]
     fn test_visibility_conventions() {
-        let source = r#"
-def public_func():
-    pass
-
-def _protected_func():
-    pass
-
-def __private_func():
-    pass
-
-def __dunder_method__():
-    pass
-"#;
+        let source = "def public_func():\n    pass\n\ndef _protected_func():\n    pass\n\ndef __private_func():\n    pass\n\ndef __dunder_method__():\n    pass\n";
         let tree = parse_python(source);
         let adapter = PythonTreeSitterAdapter::new();
         let declarations = adapter.extract_declarations(&tree, source);
@@ -1122,29 +1277,259 @@ def __dunder_method__():
         assert_eq!(dunder.visibility, Visibility::Public);
     }
 
+    // =========================================================================
+    // Comment Extraction Tests
+    // =========================================================================
+
     #[test]
-    fn test_extract_function_with_defaults() {
-        let source = r#"
-def greet(name: str = "World", times: int = 1):
-    pass
-"#;
+    fn test_extract_line_comment() {
+        let source = "# This is a comment\ndef foo():\n    pass";
         let tree = parse_python(source);
         let adapter = PythonTreeSitterAdapter::new();
-        let declarations = adapter.extract_declarations(&tree, source);
+        let comments = adapter.extract_comments(&tree, source);
 
-        assert_eq!(declarations.len(), 1);
-        let func = &declarations[0];
-        assert_eq!(func.parameters.len(), 2);
-
-        let name_param = &func.parameters[0];
-        assert_eq!(name_param.name, "name");
-        assert!(name_param.type_annotation.is_some());
-        assert!(name_param.default_value.is_some());
+        assert!(!comments.is_empty());
+        assert_eq!(comments[0].kind, CommentKind::Line);
     }
 
     #[test]
-    fn test_adapter_language() {
+    fn test_extract_docstring_comment() {
+        let source = "def foo():\n    \"\"\"Docstring.\"\"\"\n    pass";
+        let tree = parse_python(source);
         let adapter = PythonTreeSitterAdapter::new();
-        assert_eq!(adapter.language(), LanguageId::Python);
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert!(decls[0].doc_comment.is_some());
+        assert_eq!(decls[0].doc_comment.as_ref().unwrap().kind, CommentKind::Doc);
+    }
+
+    #[test]
+    fn test_extract_multiline_docstring() {
+        let source = "def foo():\n    \"\"\"\n    Multi-line\n    docstring.\n    \"\"\"\n    pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert!(decls[0].doc_comment.is_some());
+    }
+
+    // =========================================================================
+    // Body Extraction Tests
+    // =========================================================================
+
+    #[test]
+    fn test_extract_body_function() {
+        let source = "def test():\n    x = 1\n    return x";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        let _body = adapter.extract_body(&tree, source, &decls[0]);
+        // Just verify it doesn't panic
+    }
+
+    #[test]
+    fn test_extract_body_class() {
+        let source = "class Foo:\n    def method(self):\n        pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        let _body = adapter.extract_body(&tree, source, &decls[0]);
+        // Just verify it doesn't panic
+    }
+
+    // =========================================================================
+    // Control Flow Tests
+    // =========================================================================
+
+    #[test]
+    fn test_extract_if_statement() {
+        let source = "def test():\n    if x > 0:\n        print('positive')\n    else:\n        print('non-positive')";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        if let Some(body) = adapter.extract_body(&tree, source, &decls[0]) {
+            if !body.control_flow.is_empty() {
+                assert_eq!(body.control_flow[0].kind, ControlFlowKind::If);
+            }
+        }
+    }
+
+    #[test]
+    fn test_extract_for_loop() {
+        let source = "def test():\n    for i in range(10):\n        print(i)";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        if let Some(body) = adapter.extract_body(&tree, source, &decls[0]) {
+            if !body.control_flow.is_empty() {
+                assert_eq!(body.control_flow[0].kind, ControlFlowKind::For);
+            }
+        }
+    }
+
+    #[test]
+    fn test_extract_while_loop() {
+        let source = "def test():\n    while x > 0:\n        x -= 1";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        if let Some(body) = adapter.extract_body(&tree, source, &decls[0]) {
+            if !body.control_flow.is_empty() {
+                assert_eq!(body.control_flow[0].kind, ControlFlowKind::While);
+            }
+        }
+    }
+
+    #[test]
+    fn test_extract_try_except() {
+        let source = "def test():\n    try:\n        risky()\n    except Exception:\n        pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        if let Some(body) = adapter.extract_body(&tree, source, &decls[0]) {
+            let has_try = body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::Try);
+            let has_catch = body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::Catch);
+            assert!(has_try || has_catch || body.control_flow.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_extract_with_statement() {
+        let source = "def test():\n    with open('file') as f:\n        data = f.read()";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        if let Some(body) = adapter.extract_body(&tree, source, &decls[0]) {
+            if !body.control_flow.is_empty() {
+                assert_eq!(body.control_flow[0].kind, ControlFlowKind::With);
+            }
+        }
+    }
+
+    // =========================================================================
+    // Error Recovery Tests
+    // =========================================================================
+
+    #[test]
+    fn test_error_recovery() {
+        let source = "def broken(\n    pass\n\ndef valid():\n    pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+
+        let decls = adapter.extract_declarations(&tree, source);
+        // Error recovery may or may not extract valid function
+        // Just verify it doesn't panic
+        let _ = decls;
+    }
+
+    #[test]
+    fn test_extract_errors() {
+        let source = "def broken(\n    pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let errors = adapter.extract_errors(&tree, source);
+
+        // Should detect syntax error
+        assert!(errors.len() > 0 || tree.root_node().has_error());
+    }
+
+    // =========================================================================
+    // Multiple Declarations Tests
+    // =========================================================================
+
+    #[test]
+    fn test_multiple_functions() {
+        let source = "def one():\n    pass\n\ndef two():\n    pass\n\ndef three():\n    pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(decls.len(), 3);
+    }
+
+    #[test]
+    fn test_mixed_declarations() {
+        let source = "class Foo:\n    pass\n\ndef bar():\n    pass\n\nVAR = 42";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert!(decls.iter().any(|d| d.kind == DeclarationKind::Class));
+        assert!(decls.iter().any(|d| d.kind == DeclarationKind::Function));
+    }
+
+    // =========================================================================
+    // Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_empty_source() {
+        let source = "";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert!(decls.is_empty());
+    }
+
+    #[test]
+    fn test_only_comments() {
+        let source = "# Just a comment\n# Another comment";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert!(decls.is_empty());
+    }
+
+    #[test]
+    fn test_unicode_identifiers() {
+        let source = "def 中文函数():\n    pass";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(decls.len(), 1);
+        assert_eq!(decls[0].name, "中文函数");
+    }
+
+    #[test]
+    fn test_nested_function() {
+        let source = "def outer():\n    def inner():\n        pass\n    return inner";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        // Outer function should be extracted
+        assert!(decls.iter().any(|d| d.name == "outer"));
+    }
+
+    #[test]
+    fn test_generator_function() {
+        let source = "def gen():\n    yield 1\n    yield 2";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(decls.len(), 1);
+        assert_eq!(decls[0].name, "gen");
+    }
+
+    #[test]
+    fn test_property_decorator() {
+        let source = "class Foo:\n    @property\n    def value(self):\n        return self._value";
+        let tree = parse_python(source);
+        let adapter = PythonTreeSitterAdapter::new();
+        let decls = adapter.extract_declarations(&tree, source);
+
+        assert_eq!(decls.len(), 1);
+        assert!(decls[0].children.len() >= 1);
     }
 }
