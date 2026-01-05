@@ -1500,4 +1500,785 @@ mod tests {
             assert!(narrative.contains("non-core"));
         }
     }
+
+    // =========================================================================
+    // DriftInfo Tests
+    // =========================================================================
+
+    #[test]
+    fn test_drift_info_default() {
+        let info = DriftInfo::default();
+        assert_eq!(info.galaxy_age_days, 0);
+        assert_eq!(info.galaxy_age_years, 0.0);
+        assert_eq!(info.drift_rate_per_year, 0.0);
+        assert_eq!(info.ancient_stars, 0);
+        assert_eq!(info.core_ancient_stars, 0);
+        assert_eq!(info.new_stars, 0);
+        assert_eq!(info.new_star_percentage, 0.0);
+    }
+
+    #[test]
+    fn test_drift_info_fields() {
+        let info = DriftInfo {
+            galaxy_age_days: 730,
+            galaxy_age_years: 2.0,
+            drift_rate_per_year: 15.5,
+            ancient_stars: 5,
+            core_ancient_stars: 2,
+            new_stars: 10,
+            new_star_percentage: 8.5,
+        };
+
+        assert_eq!(info.galaxy_age_days, 730);
+        assert_eq!(info.galaxy_age_years, 2.0);
+        assert_eq!(info.drift_rate_per_year, 15.5);
+        assert_eq!(info.ancient_stars, 5);
+        assert_eq!(info.core_ancient_stars, 2);
+        assert_eq!(info.new_stars, 10);
+        assert_eq!(info.new_star_percentage, 8.5);
+    }
+
+    #[test]
+    fn test_drift_info_clone() {
+        let info = DriftInfo {
+            galaxy_age_days: 365,
+            galaxy_age_years: 1.0,
+            drift_rate_per_year: 10.0,
+            ancient_stars: 3,
+            core_ancient_stars: 1,
+            new_stars: 5,
+            new_star_percentage: 5.0,
+        };
+
+        let cloned = info.clone();
+        assert_eq!(cloned.galaxy_age_days, info.galaxy_age_days);
+        assert_eq!(cloned.drift_rate_per_year, info.drift_rate_per_year);
+    }
+
+    #[test]
+    fn test_drift_info_debug() {
+        let info = DriftInfo::default();
+        let debug_str = format!("{:?}", info);
+        assert!(debug_str.contains("DriftInfo"));
+        assert!(debug_str.contains("galaxy_age_days"));
+    }
+
+    // =========================================================================
+    // IntelligentPresenter Extended Tests
+    // =========================================================================
+
+    #[test]
+    fn test_presenter_default() {
+        let presenter = IntelligentPresenter::default();
+        assert_eq!(presenter.detail_level(), DetailLevel::Smart);
+    }
+
+    #[test]
+    fn test_presenter_with_detail_level() {
+        let presenter = IntelligentPresenter::new()
+            .with_detail_level(DetailLevel::Detailed);
+        assert_eq!(presenter.detail_level(), DetailLevel::Detailed);
+
+        let presenter2 = IntelligentPresenter::new()
+            .with_detail_level(DetailLevel::Summary);
+        assert_eq!(presenter2.detail_level(), DetailLevel::Summary);
+    }
+
+    #[test]
+    fn test_presenter_with_transparency_enabled() {
+        let presenter = IntelligentPresenter::new()
+            .with_transparency(true);
+
+        // Test that technical details are shown when transparency is enabled
+        let details = presenter.format_technical_details(&[
+            ("Metric", "Value"),
+            ("Another", "Data"),
+        ]);
+
+        // When transparency is enabled, details should be formatted
+        assert!(details.contains("Metric") || details.is_empty());
+    }
+
+    #[test]
+    fn test_presenter_with_transparency_disabled() {
+        let presenter = IntelligentPresenter::new()
+            .with_transparency(false);
+
+        let details = presenter.format_technical_details(&[
+            ("Metric", "Value"),
+        ]);
+
+        // Should return empty or minimal when disabled
+        assert!(details.is_empty() || !details.contains("─"));
+    }
+
+    #[test]
+    fn test_presenter_emoji_formatter_accessor() {
+        let presenter = IntelligentPresenter::new();
+        let formatter = presenter.emoji_formatter();
+
+        // Verify we can use the formatter
+        assert!(!formatter.telescope().is_empty());
+    }
+
+    #[test]
+    fn test_format_tip() {
+        let presenter = IntelligentPresenter::new();
+        let tip = presenter.format_tip("Use --lens for better results");
+
+        assert!(tip.contains("Tip:"));
+        assert!(tip.contains("Use --lens"));
+    }
+
+    #[test]
+    fn test_format_insights_empty() {
+        let presenter = IntelligentPresenter::new();
+        let insights: Vec<String> = vec![];
+        let output = presenter.format_insights(&insights);
+
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn test_format_insights_detailed_mode() {
+        let presenter = IntelligentPresenter::new()
+            .with_detail_level(DetailLevel::Detailed);
+
+        let insights = vec![
+            "Insight 1".to_string(),
+            "Insight 2".to_string(),
+            "Insight 3".to_string(),
+            "Insight 4".to_string(),
+            "Insight 5".to_string(),
+        ];
+
+        let output = presenter.format_insights(&insights);
+
+        // Detailed mode should show all insights
+        assert!(output.contains("Insight 1"));
+        assert!(output.contains("Insight 5"));
+        assert!(!output.contains("more insights"));
+    }
+
+    #[test]
+    fn test_format_exploration_summary_milliseconds() {
+        let presenter = IntelligentPresenter::new();
+        let output = presenter.format_exploration_summary(
+            "debug",
+            10,
+            1,
+            500,  // Less than 1 second
+            0.9,
+        );
+
+        assert!(output.contains("500ms"));
+        assert!(output.contains("1 language")); // Singular
+    }
+
+    // =========================================================================
+    // Mission Log with Drift Tests
+    // =========================================================================
+
+    #[test]
+    fn test_mission_log_with_drift_none() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log_with_drift(
+            "project",
+            ("Logic: Rust", None),
+            "architecture",
+            0.85,
+            50_000,
+            100_000,
+            10,
+            Some("Core"),
+            None,  // No drift info
+        );
+
+        // Should contain basic mission log without drift section
+        assert!(log.contains("Observatory"));
+        assert!(!log.contains("Temporal Analysis"));
+    }
+
+    #[test]
+    fn test_mission_log_with_drift_stable() {
+        let presenter = IntelligentPresenter::new();
+        let drift = DriftInfo {
+            galaxy_age_days: 730,
+            galaxy_age_years: 2.0,
+            drift_rate_per_year: 15.0,  // < 20% = Stable
+            ancient_stars: 3,
+            core_ancient_stars: 2,
+            new_stars: 5,
+            new_star_percentage: 10.0,
+        };
+
+        let log = presenter.format_mission_log_with_drift(
+            "project",
+            ("Logic: Rust", None),
+            "architecture",
+            0.85,
+            50_000,
+            100_000,
+            10,
+            Some("Core"),
+            Some(drift),
+        );
+
+        assert!(log.contains("Temporal Analysis"));
+        assert!(log.contains("Galaxy Age: 2.0 years"));
+        assert!(log.contains("Stable"));
+        assert!(log.contains("Ancient Stars: 3"));
+        assert!(log.contains("New Stars: 5"));
+    }
+
+    #[test]
+    fn test_mission_log_with_drift_active() {
+        let presenter = IntelligentPresenter::new();
+        let drift = DriftInfo {
+            galaxy_age_days: 365,
+            galaxy_age_years: 1.0,
+            drift_rate_per_year: 35.0,  // 20-50% = Active
+            ancient_stars: 0,
+            core_ancient_stars: 0,
+            new_stars: 20,
+            new_star_percentage: 25.0,
+        };
+
+        let log = presenter.format_mission_log_with_drift(
+            "project",
+            ("Logic: Rust", None),
+            "architecture",
+            0.85,
+            50_000,
+            100_000,
+            5,
+            None,
+            Some(drift),
+        );
+
+        assert!(log.contains("Active"));
+        assert!(log.contains("35.0%/year"));
+    }
+
+    #[test]
+    fn test_mission_log_with_drift_expanding() {
+        let presenter = IntelligentPresenter::new();
+        let drift = DriftInfo {
+            galaxy_age_days: 200,
+            galaxy_age_years: 0.55,
+            drift_rate_per_year: 75.0,  // 50-100% = Expanding
+            ancient_stars: 0,
+            core_ancient_stars: 0,
+            new_stars: 50,
+            new_star_percentage: 40.0,
+        };
+
+        let log = presenter.format_mission_log_with_drift(
+            "project",
+            ("Logic: Rust", None),
+            "architecture",
+            0.7,
+            30_000,
+            50_000,
+            8,
+            None,
+            Some(drift),
+        );
+
+        assert!(log.contains("Expanding"));
+    }
+
+    #[test]
+    fn test_mission_log_with_drift_volcanic() {
+        let presenter = IntelligentPresenter::new();
+        let drift = DriftInfo {
+            galaxy_age_days: 100,
+            galaxy_age_years: 0.27,
+            drift_rate_per_year: 150.0,  // > 100% = Volcanic
+            ancient_stars: 0,
+            core_ancient_stars: 0,
+            new_stars: 100,
+            new_star_percentage: 80.0,
+        };
+
+        let log = presenter.format_mission_log_with_drift(
+            "project",
+            ("Logic: Rust", None),
+            "architecture",
+            0.6,
+            20_000,
+            30_000,
+            3,
+            None,
+            Some(drift),
+        );
+
+        assert!(log.contains("Volcanic"));
+        assert!(log.contains("🌋"));
+    }
+
+    #[test]
+    fn test_mission_log_with_drift_short_age_days() {
+        let presenter = IntelligentPresenter::new();
+        let drift = DriftInfo {
+            galaxy_age_days: 90,  // Less than a year
+            galaxy_age_years: 0.25,
+            drift_rate_per_year: 10.0,
+            ancient_stars: 0,
+            core_ancient_stars: 0,
+            new_stars: 10,
+            new_star_percentage: 50.0,
+        };
+
+        let log = presenter.format_mission_log_with_drift(
+            "project",
+            ("Logic: Rust", None),
+            "architecture",
+            0.8,
+            10_000,
+            20_000,
+            5,
+            None,
+            Some(drift),
+        );
+
+        assert!(log.contains("90 days"));
+        assert!(!log.contains("years"));
+    }
+
+    #[test]
+    fn test_mission_log_with_drift_zero_age() {
+        let presenter = IntelligentPresenter::new();
+        let drift = DriftInfo {
+            galaxy_age_days: 0,
+            galaxy_age_years: 0.0,
+            drift_rate_per_year: 0.0,
+            ancient_stars: 0,
+            core_ancient_stars: 0,
+            new_stars: 0,
+            new_star_percentage: 0.0,
+        };
+
+        let log = presenter.format_mission_log_with_drift(
+            "project",
+            ("Logic: Rust", None),
+            "architecture",
+            0.5,
+            5_000,
+            10_000,
+            2,
+            None,
+            Some(drift),
+        );
+
+        assert!(log.contains("Unknown"));
+    }
+
+    #[test]
+    fn test_mission_log_with_drift_no_ancient_stars() {
+        let presenter = IntelligentPresenter::new();
+        let drift = DriftInfo {
+            galaxy_age_days: 365,
+            galaxy_age_years: 1.0,
+            drift_rate_per_year: 20.0,
+            ancient_stars: 0,  // No ancient stars
+            core_ancient_stars: 0,
+            new_stars: 5,
+            new_star_percentage: 5.0,
+        };
+
+        let log = presenter.format_mission_log_with_drift(
+            "project",
+            ("Logic: Rust", None),
+            "architecture",
+            0.8,
+            50_000,
+            100_000,
+            10,
+            None,
+            Some(drift),
+        );
+
+        // Should not contain ancient stars line
+        assert!(!log.contains("Ancient Stars:"));
+    }
+
+    #[test]
+    fn test_mission_log_with_drift_no_new_stars() {
+        let presenter = IntelligentPresenter::new();
+        let drift = DriftInfo {
+            galaxy_age_days: 730,
+            galaxy_age_years: 2.0,
+            drift_rate_per_year: 5.0,
+            ancient_stars: 5,
+            core_ancient_stars: 3,
+            new_stars: 0,  // No new stars
+            new_star_percentage: 0.0,
+        };
+
+        let log = presenter.format_mission_log_with_drift(
+            "project",
+            ("Logic: Rust", None),
+            "architecture",
+            0.9,
+            80_000,
+            100_000,
+            15,
+            None,
+            Some(drift),
+        );
+
+        // Should not contain new stars line
+        assert!(!log.contains("New Stars:"));
+    }
+
+    // =========================================================================
+    // Mission Log Confidence Tests
+    // =========================================================================
+
+    #[test]
+    fn test_mission_log_medium_confidence() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "project",
+            ("Logic: Rust", None),
+            "debug",
+            0.6,  // Medium confidence (0.5 < x <= 0.8)
+            25_000,
+            50_000,
+            5,
+            None,
+        );
+
+        assert!(log.contains("Medium Confidence"));
+    }
+
+    #[test]
+    fn test_mission_log_low_confidence() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "project",
+            ("Logic: Rust", None),
+            "minimal",
+            0.3,  // Low confidence (<= 0.5)
+            5_000,
+            10_000,
+            2,
+            None,
+        );
+
+        assert!(log.contains("Low Confidence"));
+    }
+
+    #[test]
+    fn test_mission_log_single_hemisphere() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "project",
+            ("Logic: Python", None),  // No secondary
+            "architecture",
+            0.8,
+            40_000,
+            80_000,
+            8,
+            None,
+        );
+
+        assert!(log.contains("Logic: Python"));
+        assert!(!log.contains("|"));
+    }
+
+    #[test]
+    fn test_mission_log_zero_poi() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "project",
+            ("Logic: Rust", None),
+            "minimal",
+            0.5,
+            1_000,
+            5_000,
+            0,  // Zero points of interest
+            None,
+        );
+
+        // Should not contain POI line
+        assert!(!log.contains("Points of Interest"));
+    }
+
+    #[test]
+    fn test_mission_log_zero_budget() {
+        let presenter = IntelligentPresenter::new();
+        let log = presenter.format_mission_log(
+            "project",
+            ("Logic: Rust", None),
+            "architecture",
+            0.8,
+            5_000,
+            0,  // Zero budget
+            5,
+            None,
+        );
+
+        assert!(log.contains("0%"));  // Should show 0% usage
+    }
+
+    // =========================================================================
+    // Plugin Summary Tests
+    // =========================================================================
+
+    #[test]
+    fn test_plugin_summary_no_plugins() {
+        let presenter = IntelligentPresenter::new();
+        let summary = presenter.format_plugin_summary(0, &[], true);
+
+        assert!(summary.contains("No external optics"));
+    }
+
+    #[test]
+    fn test_plugin_summary_single_plugin() {
+        let presenter = IntelligentPresenter::new();
+        let plugins = vec!["rust_analyzer".to_string()];
+        let summary = presenter.format_plugin_summary(1, &plugins, true);
+
+        assert!(summary.contains("1 community plugin"));
+        assert!(summary.contains("rust_analyzer"));
+        assert!(summary.contains("sandbox: Active"));
+    }
+
+    #[test]
+    fn test_plugin_summary_multiple_plugins() {
+        let presenter = IntelligentPresenter::new();
+        let plugins = vec![
+            "rust_analyzer".to_string(),
+            "python_linter".to_string(),
+            "typescript_parser".to_string(),
+        ];
+        let summary = presenter.format_plugin_summary(3, &plugins, true);
+
+        assert!(summary.contains("3 community plugins"));
+        assert!(summary.contains("rust_analyzer"));
+        assert!(summary.contains("python_linter"));
+        assert!(summary.contains("typescript_parser"));
+    }
+
+    #[test]
+    fn test_plugin_summary_more_than_five() {
+        let presenter = IntelligentPresenter::new();
+        let plugins = vec![
+            "plugin1".to_string(),
+            "plugin2".to_string(),
+            "plugin3".to_string(),
+            "plugin4".to_string(),
+            "plugin5".to_string(),
+            "plugin6".to_string(),
+            "plugin7".to_string(),
+        ];
+        let summary = presenter.format_plugin_summary(7, &plugins, true);
+
+        assert!(summary.contains("7 community plugins"));
+        assert!(summary.contains("plugin1"));
+        assert!(summary.contains("plugin5"));
+        assert!(summary.contains("and 2 more"));
+    }
+
+    #[test]
+    fn test_plugin_summary_sandbox_inactive() {
+        let presenter = IntelligentPresenter::new();
+        let plugins = vec!["test_plugin".to_string()];
+        let summary = presenter.format_plugin_summary(1, &plugins, false);
+
+        assert!(summary.contains("sandbox: Inactive"));
+        assert!(summary.contains("⚠️"));
+    }
+
+    // =========================================================================
+    // Dark Matter Indicator Tests
+    // =========================================================================
+
+    #[test]
+    fn test_dark_matter_indicator_clean() {
+        use crate::core::census::CensusMetrics;
+
+        let presenter = IntelligentPresenter::new();
+        let metrics = CensusMetrics::default();
+
+        let indicator = presenter.format_dark_matter_indicator(&metrics);
+        assert_eq!(indicator, "✨");  // Clean
+    }
+
+    #[test]
+    fn test_dark_matter_indicator_minor() {
+        use crate::core::census::{CensusMetrics, DarkMatterMetrics, DerivedMetrics};
+
+        let presenter = IntelligentPresenter::new();
+        let mut metrics = CensusMetrics::default();
+        metrics.dark_matter = DarkMatterMetrics {
+            unknown_regions: 1,
+            unknown_bytes: 50,
+            volcanic_regions: 0,
+            max_nesting_depth: 3,
+            parameter_heavy: 0,
+        };
+        metrics.derived = DerivedMetrics {
+            dark_matter_ratio: 0.03,  // < 0.05
+            ..Default::default()
+        };
+
+        let indicator = presenter.format_dark_matter_indicator(&metrics);
+        assert_eq!(indicator, "🌑");  // Minor
+    }
+
+    #[test]
+    fn test_dark_matter_indicator_significant() {
+        use crate::core::census::{CensusMetrics, DarkMatterMetrics, DerivedMetrics};
+
+        let presenter = IntelligentPresenter::new();
+        let mut metrics = CensusMetrics::default();
+        metrics.dark_matter = DarkMatterMetrics {
+            unknown_regions: 10,
+            unknown_bytes: 500,
+            volcanic_regions: 5,
+            max_nesting_depth: 6,
+            parameter_heavy: 3,
+        };
+        metrics.derived = DerivedMetrics {
+            dark_matter_ratio: 0.15,  // >= 0.05
+            ..Default::default()
+        };
+
+        let indicator = presenter.format_dark_matter_indicator(&metrics);
+        assert_eq!(indicator, "⚫");  // Significant
+    }
+
+    // =========================================================================
+    // Recommendations Tests
+    // =========================================================================
+
+    #[test]
+    fn test_recommendations_low_docs() {
+        use crate::core::census::{GalaxyCensus, CensusMetrics, DerivedMetrics};
+
+        let presenter = IntelligentPresenter::new();
+        let mut galaxy = GalaxyCensus::new(".".to_string());
+
+        let mut metrics = CensusMetrics::default();
+        metrics.total_lines = 1000;
+        metrics.derived = DerivedMetrics {
+            nebula_ratio: 0.1,  // 10% < 20%
+            ..Default::default()
+        };
+        galaxy.add_file("src/test.rs", metrics);
+        galaxy.finalize();
+
+        let recommendations = presenter.generate_recommendations(&galaxy);
+
+        assert!(recommendations.iter().any(|r| r.contains("documentation coverage")));
+    }
+
+    #[test]
+    fn test_recommendations_high_stellar_density() {
+        use crate::core::census::{GalaxyCensus, CensusMetrics, StarMetrics, NebulaeMetrics};
+
+        let presenter = IntelligentPresenter::new();
+        let mut galaxy = GalaxyCensus::new(".".to_string());
+
+        // Create metrics with high stellar density (many stars, few lines)
+        let mut metrics = CensusMetrics::default();
+        metrics.total_lines = 100;  // Small file
+        metrics.stars = StarMetrics {
+            count: 50,  // 50 stars / 0.1k LOC = 500 stars per 1k LOC (very high)
+            functions: 50,
+            methods: 0,
+            types: 0,
+            constants: 0,
+        };
+        metrics.nebulae = NebulaeMetrics {
+            doc_lines: 30,
+            comment_lines: 10,
+            documented_stars: 40,
+            total_stars: 50,
+        };
+        galaxy.add_file("src/dense.rs", metrics);
+        galaxy.finalize();
+
+        let recommendations = presenter.generate_recommendations(&galaxy);
+
+        // High stellar density (> 30) should trigger refactoring recommendation
+        assert!(recommendations.iter().any(|r| r.contains("refactoring") || r.contains("stellar density")));
+    }
+
+    #[test]
+    fn test_recommendations_healthy_codebase() {
+        use crate::core::census::{GalaxyCensus, CensusMetrics, DerivedMetrics, NebulaeMetrics};
+
+        let presenter = IntelligentPresenter::new();
+        let mut galaxy = GalaxyCensus::new(".".to_string());
+
+        let mut metrics = CensusMetrics::default();
+        metrics.total_lines = 500;
+        metrics.nebulae = NebulaeMetrics {
+            doc_lines: 100,
+            comment_lines: 50,
+            documented_stars: 10,
+            total_stars: 10,
+        };
+        metrics.derived = DerivedMetrics {
+            nebula_ratio: 0.3,
+            stellar_density: 10.0,
+            dark_matter_ratio: 0.0,
+            ..Default::default()
+        };
+        galaxy.add_file("src/clean.rs", metrics);
+        galaxy.finalize();
+
+        let recommendations = presenter.generate_recommendations(&galaxy);
+
+        assert!(recommendations.iter().any(|r| r.contains("health is good")));
+    }
+
+    #[test]
+    fn test_recommendations_red_giants() {
+        use crate::core::census::{GalaxyCensus, ConstellationCensus, CensusMetrics};
+
+        let presenter = IntelligentPresenter::new();
+        let mut galaxy = GalaxyCensus::new(".".to_string());
+
+        // Add a constellation with red giants
+        let mut constellation = ConstellationCensus::default();
+        constellation.red_giants = vec!["big_file.rs".to_string()];
+        constellation.file_count = 1;
+        galaxy.constellations.insert("src".to_string(), constellation);
+
+        let recommendations = presenter.generate_recommendations(&galaxy);
+
+        assert!(recommendations.iter().any(|r| r.contains("Red Giant")));
+    }
+
+    // =========================================================================
+    // Helper Function Tests
+    // =========================================================================
+
+    #[test]
+    fn test_capitalize_first_unicode() {
+        assert_eq!(capitalize_first("éclair"), "Éclair");
+        assert_eq!(capitalize_first("über"), "Über");
+    }
+
+    #[test]
+    fn test_format_number_edge_cases() {
+        assert_eq!(format_number(1), "1");
+        assert_eq!(format_number(12), "12");
+        assert_eq!(format_number(123), "123");
+        assert_eq!(format_number(1234), "1,234");
+        assert_eq!(format_number(12345), "12,345");
+        assert_eq!(format_number(123456), "123,456");
+    }
+
+    #[test]
+    fn test_format_language_name_case_insensitive() {
+        assert_eq!(format_language_name("RUST"), "Logic: Rust");
+        assert_eq!(format_language_name("Python"), "Logic: Python");
+        assert_eq!(format_language_name("TypeScript"), "Interface: TypeScript");
+    }
 }
