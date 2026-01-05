@@ -347,6 +347,10 @@ pub struct LanguageStats {
 mod tests {
     use super::*;
 
+    // =========================================================================
+    // Language Tests
+    // =========================================================================
+
     #[test]
     fn test_language_from_extension() {
         assert_eq!(Language::from_extension("rs"), Some(Language::Rust));
@@ -356,6 +360,100 @@ mod tests {
         assert_eq!(Language::from_extension("go"), Some(Language::Go));
         assert_eq!(Language::from_extension("java"), Some(Language::Java));
         assert_eq!(Language::from_extension("unknown"), None);
+    }
+
+    #[test]
+    fn test_language_from_extension_systems() {
+        assert_eq!(Language::from_extension("rs"), Some(Language::Rust));
+        assert_eq!(Language::from_extension("c"), Some(Language::C));
+        assert_eq!(Language::from_extension("h"), Some(Language::C));
+        assert_eq!(Language::from_extension("cpp"), Some(Language::Cpp));
+        assert_eq!(Language::from_extension("cc"), Some(Language::Cpp));
+        assert_eq!(Language::from_extension("cxx"), Some(Language::Cpp));
+        assert_eq!(Language::from_extension("hpp"), Some(Language::Cpp));
+        assert_eq!(Language::from_extension("hxx"), Some(Language::Cpp));
+        assert_eq!(Language::from_extension("go"), Some(Language::Go));
+    }
+
+    #[test]
+    fn test_language_from_extension_jvm() {
+        assert_eq!(Language::from_extension("java"), Some(Language::Java));
+        assert_eq!(Language::from_extension("kt"), Some(Language::Kotlin));
+        assert_eq!(Language::from_extension("kts"), Some(Language::Kotlin));
+        assert_eq!(Language::from_extension("scala"), Some(Language::Scala));
+        assert_eq!(Language::from_extension("sc"), Some(Language::Scala));
+    }
+
+    #[test]
+    fn test_language_from_extension_dotnet() {
+        assert_eq!(Language::from_extension("cs"), Some(Language::CSharp));
+    }
+
+    #[test]
+    fn test_language_from_extension_scripting() {
+        assert_eq!(Language::from_extension("py"), Some(Language::Python));
+        assert_eq!(Language::from_extension("pyw"), Some(Language::Python));
+        assert_eq!(Language::from_extension("pyi"), Some(Language::Python));
+        assert_eq!(Language::from_extension("rb"), Some(Language::Ruby));
+        assert_eq!(Language::from_extension("rake"), Some(Language::Ruby));
+        assert_eq!(Language::from_extension("gemspec"), Some(Language::Ruby));
+        assert_eq!(Language::from_extension("php"), Some(Language::Php));
+        assert_eq!(Language::from_extension("phtml"), Some(Language::Php));
+        assert_eq!(Language::from_extension("lua"), Some(Language::Lua));
+    }
+
+    #[test]
+    fn test_language_from_extension_web() {
+        assert_eq!(Language::from_extension("js"), Some(Language::JavaScript));
+        assert_eq!(Language::from_extension("mjs"), Some(Language::JavaScript));
+        assert_eq!(Language::from_extension("cjs"), Some(Language::JavaScript));
+        assert_eq!(Language::from_extension("ts"), Some(Language::TypeScript));
+        assert_eq!(Language::from_extension("mts"), Some(Language::TypeScript));
+        assert_eq!(Language::from_extension("cts"), Some(Language::TypeScript));
+        assert_eq!(Language::from_extension("tsx"), Some(Language::Tsx));
+        assert_eq!(Language::from_extension("html"), Some(Language::Html));
+        assert_eq!(Language::from_extension("htm"), Some(Language::Html));
+        assert_eq!(Language::from_extension("css"), Some(Language::Css));
+        assert_eq!(Language::from_extension("scss"), Some(Language::Css));
+        assert_eq!(Language::from_extension("sass"), Some(Language::Css));
+    }
+
+    #[test]
+    fn test_language_from_extension_mobile() {
+        assert_eq!(Language::from_extension("swift"), Some(Language::Swift));
+    }
+
+    #[test]
+    fn test_language_from_extension_data() {
+        assert_eq!(Language::from_extension("json"), Some(Language::Json));
+        assert_eq!(Language::from_extension("jsonc"), Some(Language::Json));
+        assert_eq!(Language::from_extension("yaml"), Some(Language::Yaml));
+        assert_eq!(Language::from_extension("yml"), Some(Language::Yaml));
+        assert_eq!(Language::from_extension("toml"), Some(Language::Toml));
+        assert_eq!(Language::from_extension("sql"), Some(Language::Sql));
+    }
+
+    #[test]
+    fn test_language_from_extension_devops() {
+        assert_eq!(Language::from_extension("sh"), Some(Language::Bash));
+        assert_eq!(Language::from_extension("bash"), Some(Language::Bash));
+        assert_eq!(Language::from_extension("zsh"), Some(Language::Bash));
+        assert_eq!(Language::from_extension("tf"), Some(Language::Hcl));
+        assert_eq!(Language::from_extension("hcl"), Some(Language::Hcl));
+        assert_eq!(Language::from_extension("dockerfile"), Some(Language::Dockerfile));
+    }
+
+    #[test]
+    fn test_language_from_extension_docs() {
+        assert_eq!(Language::from_extension("md"), Some(Language::Markdown));
+        assert_eq!(Language::from_extension("markdown"), Some(Language::Markdown));
+    }
+
+    #[test]
+    fn test_language_from_extension_case_insensitive() {
+        assert_eq!(Language::from_extension("RS"), Some(Language::Rust));
+        assert_eq!(Language::from_extension("PY"), Some(Language::Python));
+        assert_eq!(Language::from_extension("Ts"), Some(Language::TypeScript));
     }
 
     #[test]
@@ -376,12 +474,146 @@ mod tests {
     }
 
     #[test]
+    fn test_language_extension_all() {
+        assert_eq!(Language::Rust.extension(), "rs");
+        assert_eq!(Language::C.extension(), "c");
+        assert_eq!(Language::Cpp.extension(), "cpp");
+        assert_eq!(Language::Go.extension(), "go");
+        assert_eq!(Language::Java.extension(), "java");
+        assert_eq!(Language::Kotlin.extension(), "kt");
+        assert_eq!(Language::Scala.extension(), "scala");
+        assert_eq!(Language::CSharp.extension(), "cs");
+        assert_eq!(Language::Python.extension(), "py");
+        assert_eq!(Language::Ruby.extension(), "rb");
+        assert_eq!(Language::Php.extension(), "php");
+        assert_eq!(Language::Lua.extension(), "lua");
+        assert_eq!(Language::JavaScript.extension(), "js");
+        assert_eq!(Language::TypeScript.extension(), "ts");
+        assert_eq!(Language::Tsx.extension(), "tsx");
+        assert_eq!(Language::Html.extension(), "html");
+        assert_eq!(Language::Css.extension(), "css");
+        assert_eq!(Language::Swift.extension(), "swift");
+        assert_eq!(Language::Json.extension(), "json");
+        assert_eq!(Language::Yaml.extension(), "yaml");
+        assert_eq!(Language::Toml.extension(), "toml");
+        assert_eq!(Language::Sql.extension(), "sql");
+        assert_eq!(Language::Bash.extension(), "sh");
+        assert_eq!(Language::Hcl.extension(), "tf");
+        assert_eq!(Language::Dockerfile.extension(), "dockerfile");
+        assert_eq!(Language::Markdown.extension(), "md");
+    }
+
+    #[test]
     fn test_language_names() {
         assert_eq!(Language::Rust.name(), "Rust");
         assert_eq!(Language::CSharp.name(), "C#");
         assert_eq!(Language::Cpp.name(), "C++");
         assert_eq!(Language::TypeScript.name(), "TypeScript");
     }
+
+    #[test]
+    fn test_language_names_all() {
+        assert_eq!(Language::Rust.name(), "Rust");
+        assert_eq!(Language::C.name(), "C");
+        assert_eq!(Language::Cpp.name(), "C++");
+        assert_eq!(Language::Go.name(), "Go");
+        assert_eq!(Language::Java.name(), "Java");
+        assert_eq!(Language::Kotlin.name(), "Kotlin");
+        assert_eq!(Language::Scala.name(), "Scala");
+        assert_eq!(Language::CSharp.name(), "C#");
+        assert_eq!(Language::Python.name(), "Python");
+        assert_eq!(Language::Ruby.name(), "Ruby");
+        assert_eq!(Language::Php.name(), "PHP");
+        assert_eq!(Language::Lua.name(), "Lua");
+        assert_eq!(Language::JavaScript.name(), "JavaScript");
+        assert_eq!(Language::TypeScript.name(), "TypeScript");
+        assert_eq!(Language::Tsx.name(), "TSX");
+        assert_eq!(Language::Html.name(), "HTML");
+        assert_eq!(Language::Css.name(), "CSS");
+        assert_eq!(Language::Swift.name(), "Swift");
+        assert_eq!(Language::Json.name(), "JSON");
+        assert_eq!(Language::Yaml.name(), "YAML");
+        assert_eq!(Language::Toml.name(), "TOML");
+        assert_eq!(Language::Sql.name(), "SQL");
+        assert_eq!(Language::Bash.name(), "Bash");
+        assert_eq!(Language::Hcl.name(), "HCL");
+        assert_eq!(Language::Dockerfile.name(), "Dockerfile");
+        assert_eq!(Language::Markdown.name(), "Markdown");
+    }
+
+    #[test]
+    fn test_language_clone_copy_eq() {
+        let lang = Language::Rust;
+        let cloned = lang;
+        assert_eq!(lang, cloned);
+        assert_eq!(lang, Language::Rust);
+        assert_ne!(lang, Language::Python);
+    }
+
+    #[test]
+    fn test_language_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(Language::Rust);
+        set.insert(Language::Python);
+        set.insert(Language::Rust); // Duplicate
+
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&Language::Rust));
+        assert!(set.contains(&Language::Python));
+    }
+
+    // =========================================================================
+    // SyntaxError Tests
+    // =========================================================================
+
+    #[test]
+    fn test_syntax_error_unsupported_language() {
+        let error = SyntaxError::UnsupportedLanguage("brainfuck".to_string());
+        let display = format!("{}", error);
+        assert!(display.contains("Unsupported language"));
+        assert!(display.contains("brainfuck"));
+    }
+
+    #[test]
+    fn test_syntax_error_parse_error() {
+        let error = SyntaxError::ParseError {
+            line: 10,
+            column: 5,
+            message: "unexpected token".to_string(),
+        };
+        let display = format!("{}", error);
+        assert!(display.contains("line 10"));
+        assert!(display.contains("column 5"));
+        assert!(display.contains("unexpected token"));
+    }
+
+    #[test]
+    fn test_syntax_error_initialization() {
+        let error = SyntaxError::InitializationError("failed to load grammar".to_string());
+        let display = format!("{}", error);
+        assert!(display.contains("initialization failed"));
+        assert!(display.contains("failed to load grammar"));
+    }
+
+    #[test]
+    fn test_syntax_error_plugin_hook() {
+        let error = SyntaxError::PluginHookError("hook failed".to_string());
+        let display = format!("{}", error);
+        assert!(display.contains("Plugin hook error"));
+        assert!(display.contains("hook failed"));
+    }
+
+    #[test]
+    fn test_syntax_error_debug() {
+        let error = SyntaxError::UnsupportedLanguage("test".to_string());
+        let debug = format!("{:?}", error);
+        assert!(debug.contains("UnsupportedLanguage"));
+    }
+
+    // =========================================================================
+    // PluginHook Tests
+    // =========================================================================
 
     #[test]
     fn test_plugin_hook_creation() {
@@ -394,5 +626,86 @@ mod tests {
 
         assert_eq!(hook.id, "test-hook");
         assert_eq!(hook.priority, 100);
+    }
+
+    #[test]
+    fn test_plugin_hook_with_lua_source() {
+        let hook = PluginHook {
+            id: "lua-hook".to_string(),
+            description: "A Lua hook".to_string(),
+            priority: 50,
+            lua_source: Some("return true".to_string()),
+        };
+
+        assert_eq!(hook.id, "lua-hook");
+        assert_eq!(hook.priority, 50);
+    }
+
+    #[test]
+    fn test_plugin_hook_clone() {
+        let hook = PluginHook {
+            id: "cloneable".to_string(),
+            description: "Test".to_string(),
+            priority: 1,
+            lua_source: None,
+        };
+        let cloned = hook.clone();
+        assert_eq!(cloned.id, "cloneable");
+    }
+
+    // =========================================================================
+    // ProviderStats Tests
+    // =========================================================================
+
+    #[test]
+    fn test_provider_stats_default() {
+        let stats = ProviderStats::default();
+        assert_eq!(stats.files_parsed, 0);
+        assert_eq!(stats.symbols_extracted, 0);
+        assert_eq!(stats.total_parse_time_ms, 0);
+        assert_eq!(stats.cache_hit_rate, 0.0);
+        assert!(stats.by_language.is_empty());
+    }
+
+    #[test]
+    fn test_provider_stats_with_data() {
+        let mut stats = ProviderStats {
+            files_parsed: 100,
+            symbols_extracted: 500,
+            total_parse_time_ms: 1500,
+            cache_hit_rate: 0.75,
+            by_language: HashMap::new(),
+        };
+
+        stats.by_language.insert(Language::Rust, LanguageStats {
+            files: 50,
+            symbols: 300,
+            avg_parse_time_ms: 10.5,
+        });
+
+        assert_eq!(stats.files_parsed, 100);
+        assert_eq!(stats.by_language.len(), 1);
+        assert_eq!(stats.by_language.get(&Language::Rust).unwrap().files, 50);
+    }
+
+    #[test]
+    fn test_language_stats_default() {
+        let stats = LanguageStats::default();
+        assert_eq!(stats.files, 0);
+        assert_eq!(stats.symbols, 0);
+        assert_eq!(stats.avg_parse_time_ms, 0.0);
+    }
+
+    #[test]
+    fn test_provider_stats_clone() {
+        let stats = ProviderStats {
+            files_parsed: 10,
+            symbols_extracted: 50,
+            total_parse_time_ms: 100,
+            cache_hit_rate: 0.5,
+            by_language: HashMap::new(),
+        };
+        let cloned = stats.clone();
+        assert_eq!(cloned.files_parsed, 10);
     }
 }
