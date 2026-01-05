@@ -47,6 +47,60 @@ pub struct SpectralSignature {
     pub extensions: &'static [&'static str],
 }
 
+impl SpectralSignature {
+    /// Count lines in source content, returning (total, code, comments, blanks)
+    ///
+    /// This provides tokei-style line counting using the language's comment patterns.
+    pub fn count_lines(&self, content: &str) -> (usize, usize, usize, usize) {
+        let mut total = 0;
+        let mut code = 0;
+        let mut comments = 0;
+        let mut blanks = 0;
+        let mut in_multiline_comment = false;
+
+        for line in content.lines() {
+            total += 1;
+            let trimmed = line.trim();
+
+            if trimmed.is_empty() {
+                blanks += 1;
+                continue;
+            }
+
+            // Check for multi-line comment state
+            if in_multiline_comment {
+                comments += 1;
+                // Check if this line ends the multi-line comment
+                if !self.comment_multi_end.is_empty() && trimmed.contains(self.comment_multi_end) {
+                    in_multiline_comment = false;
+                }
+                continue;
+            }
+
+            // Check for start of multi-line comment
+            if !self.comment_multi_start.is_empty() && trimmed.contains(self.comment_multi_start) {
+                comments += 1;
+                // Check if it also ends on the same line
+                if self.comment_multi_end.is_empty() || !trimmed.contains(self.comment_multi_end) {
+                    in_multiline_comment = true;
+                }
+                continue;
+            }
+
+            // Check for single-line comment
+            if !self.comment_single.is_empty() && trimmed.starts_with(self.comment_single) {
+                comments += 1;
+                continue;
+            }
+
+            // It's code
+            code += 1;
+        }
+
+        (total, code, comments, blanks)
+    }
+}
+
 /// Language hemisphere classification for Mission Log
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Hemisphere {

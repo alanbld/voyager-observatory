@@ -266,6 +266,10 @@ struct Cli {
     #[arg(long = "no-cache", help_heading = "📊 CENSUS")]
     no_cache: bool,
 
+    /// Show tokei-style lines-of-code statistics
+    #[arg(long = "stats", help_heading = "📊 CENSUS")]
+    stats: bool,
+
     // ═══════════════════════════════════════════════════════════════════════════
     // 🚀 SPECIAL MODES
     // ═══════════════════════════════════════════════════════════════════════════
@@ -2253,6 +2257,20 @@ pub fn run() {
         return;
     }
 
+    // Handle --stats (tokei-style LOC statistics)
+    if cli.stats {
+        let stats_root = cli.project_root.clone()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+        if !stats_root.exists() || !stats_root.is_dir() {
+            eprintln!("Error: Stats path '{}' must be a valid directory", stats_root.display());
+            std::process::exit(1);
+        }
+
+        run_stats(&stats_root);
+        return;
+    }
+
     // If no project root provided, show usage
     let project_root = match cli.project_root {
         Some(path) => path,
@@ -3131,6 +3149,102 @@ pub fn run() {
             std::process::exit(1);
         }
     }
+}
+
+// =============================================================================
+// 📊 CENSUS: TOKEI-STYLE LOC STATISTICS
+// =============================================================================
+
+/// Statistics for a single language
+#[derive(Default, Clone)]
+struct LanguageStats {
+    files: usize,
+    lines: usize,
+    code: usize,
+    comments: usize,
+    blanks: usize,
+}
+
+/// Run tokei-style lines-of-code statistics
+fn run_stats(root: &PathBuf) {
+    use pm_encoder::core::STELLAR_LIBRARY;
+    use std::collections::HashMap;
+    use std::time::Instant;
+
+    let start = Instant::now();
+
+    // Walk directory and collect files
+    let entries = match pm_encoder::walk_directory(
+        root.to_str().unwrap(),
+        &[], // no exclude patterns
+        &[], // no include patterns
+        10_000_000, // 10MB max file size
+    ) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("Error walking directory: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Aggregate stats by language
+    let mut stats: HashMap<String, LanguageStats> = HashMap::new();
+    let library = &*STELLAR_LIBRARY;
+
+    for entry in &entries {
+        // Get file extension
+        let path = std::path::Path::new(&entry.path);
+        let ext = match path.extension().and_then(|e| e.to_str()) {
+            Some(e) => e,
+            None => continue, // Skip files without extensions
+        };
+
+        // Look up language signature
+        if let Some(sig) = library.get_by_extension(ext) {
+            // Count lines using the language's comment patterns
+            let (total, code, comments, blanks) = sig.count_lines(&entry.content);
+
+            // Aggregate into language stats
+            let lang_stats = stats.entry(sig.display_name.to_string()).or_default();
+            lang_stats.files += 1;
+            lang_stats.lines += total;
+            lang_stats.code += code;
+            lang_stats.comments += comments;
+            lang_stats.blanks += blanks;
+        }
+    }
+
+    let elapsed = start.elapsed();
+
+    // Sort by code lines (descending)
+    let mut sorted: Vec<_> = stats.into_iter().collect();
+    sorted.sort_by(|a, b| b.1.code.cmp(&a.1.code));
+
+    // Calculate totals
+    let total_files: usize = sorted.iter().map(|(_, s)| s.files).sum();
+    let total_lines: usize = sorted.iter().map(|(_, s)| s.lines).sum();
+    let total_code: usize = sorted.iter().map(|(_, s)| s.code).sum();
+    let total_comments: usize = sorted.iter().map(|(_, s)| s.comments).sum();
+    let total_blanks: usize = sorted.iter().map(|(_, s)| s.blanks).sum();
+
+    // Print formatted table
+    println!("═══════════════════════════════════════════════════════════════════════");
+    println!(" {:<15} {:>8} {:>10} {:>10} {:>10} {:>10}",
+        "Language", "Files", "Lines", "Code", "Comments", "Blanks");
+    println!("═══════════════════════════════════════════════════════════════════════");
+
+    for (lang, s) in &sorted {
+        println!(" {:<15} {:>8} {:>10} {:>10} {:>10} {:>10}",
+            lang, s.files, s.lines, s.code, s.comments, s.blanks);
+    }
+
+    println!("───────────────────────────────────────────────────────────────────────");
+    println!(" {:<15} {:>8} {:>10} {:>10} {:>10} {:>10}",
+        "Total", total_files, total_lines, total_code, total_comments, total_blanks);
+    println!("═══════════════════════════════════════════════════════════════════════");
+
+    // Print timing
+    eprintln!("\n⏱️  Analyzed {} files in {:.2?}", total_files, elapsed);
 }
 
 /// Binary entry point - delegates to run().
