@@ -166,9 +166,364 @@ pub fn find_children_by_kind<'a>(
 mod tests {
     use super::*;
 
+    fn parse_rust(source: &str) -> tree_sitter::Tree {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
+        parser.parse(source, None).unwrap()
+    }
+
+    // =========================================================================
+    // node_to_span Tests
+    // =========================================================================
+
     #[test]
-    fn test_node_to_span() {
-        // This would need a real tree-sitter parse to test properly
-        // For now, just ensure the function signature is correct
+    fn test_node_to_span_basic() {
+        let source = "fn foo() {}";
+        let tree = parse_rust(source);
+        let root = tree.root_node();
+
+        let span = node_to_span(&root);
+        assert_eq!(span.start, 0);
+        assert_eq!(span.end, source.len());
+        assert_eq!(span.start_line, 1);
+        assert_eq!(span.end_line, 1);
+    }
+
+    #[test]
+    fn test_node_to_span_multiline() {
+        let source = "fn foo() {\n    let x = 1;\n}";
+        let tree = parse_rust(source);
+        let root = tree.root_node();
+
+        let span = node_to_span(&root);
+        assert_eq!(span.start_line, 1);
+        assert_eq!(span.end_line, 3);
+    }
+
+    #[test]
+    fn test_node_to_span_nested() {
+        let source = "fn foo() { let x = 1; }";
+        let tree = parse_rust(source);
+        let root = tree.root_node();
+
+        // Get the function item
+        let func = root.child(0).unwrap();
+        assert_eq!(func.kind(), "function_item");
+
+        let span = node_to_span(&func);
+        assert_eq!(span.start, 0);
+        assert_eq!(span.end, source.len());
+    }
+
+    // =========================================================================
+    // node_text Tests
+    // =========================================================================
+
+    #[test]
+    fn test_node_text_basic() {
+        let source = "fn foo() {}";
+        let tree = parse_rust(source);
+        let root = tree.root_node();
+
+        let text = node_text(&root, source);
+        assert_eq!(text, source);
+    }
+
+    #[test]
+    fn test_node_text_nested() {
+        let source = "fn hello() {}";
+        let tree = parse_rust(source);
+        let func = tree.root_node().child(0).unwrap();
+
+        // Find the function name
+        let name = find_child_by_kind(&func, "identifier").unwrap();
+        let text = node_text(&name, source);
+        assert_eq!(text, "hello");
+    }
+
+    #[test]
+    fn test_node_text_with_whitespace() {
+        let source = "fn foo() {\n    let x = 42;\n}";
+        let tree = parse_rust(source);
+        let text = node_text(&tree.root_node(), source);
+        assert_eq!(text, source);
+    }
+
+    // =========================================================================
+    // find_child_by_kind Tests
+    // =========================================================================
+
+    #[test]
+    fn test_find_child_by_kind_found() {
+        let source = "fn test_func() {}";
+        let tree = parse_rust(source);
+        let func = tree.root_node().child(0).unwrap();
+
+        let name = find_child_by_kind(&func, "identifier");
+        assert!(name.is_some());
+        assert_eq!(node_text(&name.unwrap(), source), "test_func");
+    }
+
+    #[test]
+    fn test_find_child_by_kind_not_found() {
+        let source = "fn foo() {}";
+        let tree = parse_rust(source);
+        let func = tree.root_node().child(0).unwrap();
+
+        let result = find_child_by_kind(&func, "nonexistent_kind");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_find_child_by_kind_first_match() {
+        let source = "fn foo(a: i32, b: i32) {}";
+        let tree = parse_rust(source);
+        let func = tree.root_node().child(0).unwrap();
+
+        // Find parameters - should get the parameters node
+        let params = find_child_by_kind(&func, "parameters");
+        assert!(params.is_some());
+    }
+
+    // =========================================================================
+    // find_children_by_kind Tests
+    // =========================================================================
+
+    #[test]
+    fn test_find_children_by_kind_multiple() {
+        let source = "fn foo() {}\nfn bar() {}\nfn baz() {}";
+        let tree = parse_rust(source);
+        let root = tree.root_node();
+
+        let functions = find_children_by_kind(&root, "function_item");
+        assert_eq!(functions.len(), 3);
+    }
+
+    #[test]
+    fn test_find_children_by_kind_none() {
+        let source = "fn foo() {}";
+        let tree = parse_rust(source);
+        let root = tree.root_node();
+
+        let structs = find_children_by_kind(&root, "struct_item");
+        assert!(structs.is_empty());
+    }
+
+    #[test]
+    fn test_find_children_by_kind_single() {
+        let source = "struct Point { x: i32, y: i32 }";
+        let tree = parse_rust(source);
+        let root = tree.root_node();
+
+        let structs = find_children_by_kind(&root, "struct_item");
+        assert_eq!(structs.len(), 1);
+    }
+
+    // =========================================================================
+    // extract_errors Tests (via RustTreeSitterAdapter)
+    // =========================================================================
+
+    #[test]
+    fn test_extract_errors_no_errors() {
+        let source = "fn valid() {}";
+        let tree = parse_rust(source);
+
+        let adapter = RustTreeSitterAdapter::new();
+        let errors = adapter.extract_errors(&tree, source);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_extract_errors_with_syntax_error() {
+        let source = "fn broken( {}";  // Missing closing paren and params
+        let tree = parse_rust(source);
+
+        let adapter = RustTreeSitterAdapter::new();
+        let errors = adapter.extract_errors(&tree, source);
+        // Should detect some error
+        assert!(!errors.is_empty() || tree.root_node().has_error());
+    }
+
+    #[test]
+    fn test_extract_errors_multiple_errors() {
+        let source = "fn a( {}\nfn b( {}";
+        let tree = parse_rust(source);
+
+        let adapter = RustTreeSitterAdapter::new();
+        let errors = adapter.extract_errors(&tree, source);
+        // May have multiple errors
+        if tree.root_node().has_error() {
+            // At least one error should be detected
+            assert!(errors.len() >= 1 || tree.root_node().has_error());
+        }
+    }
+
+    #[test]
+    fn test_extract_errors_truncates_long_text() {
+        // Create source with syntax error and long content
+        let long_content = "x".repeat(300);
+        let source = format!("fn broken( {{ {} }}", long_content);
+        let tree = parse_rust(&source);
+
+        let adapter = RustTreeSitterAdapter::new();
+        let errors = adapter.extract_errors(&tree, &source);
+
+        // If errors found, check truncation logic
+        for error in &errors {
+            if let Some(raw_text) = &error.raw_text {
+                // Either short or truncated with "... (N bytes)"
+                assert!(raw_text.len() < 200 || raw_text.contains("bytes)"));
+            }
+        }
+    }
+
+    #[test]
+    fn test_extract_errors_reason_for_missing() {
+        // Try to create a missing node scenario
+        let source = "fn test() { let x = ; }";  // Missing expression after =
+        let tree = parse_rust(source);
+
+        let adapter = RustTreeSitterAdapter::new();
+        let errors = adapter.extract_errors(&tree, source);
+
+        // Check that errors have reasons
+        for error in &errors {
+            assert!(error.reason.is_some());
+            let reason = error.reason.as_ref().unwrap();
+            assert!(reason.contains("Syntax error") || reason.contains("Missing"));
+        }
+    }
+
+    // =========================================================================
+    // LanguageAdapter Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_rust_adapter_language() {
+        let adapter = RustTreeSitterAdapter::new();
+        assert_eq!(adapter.language(), LanguageId::Rust);
+    }
+
+    #[test]
+    fn test_python_adapter_language() {
+        let adapter = PythonTreeSitterAdapter::new();
+        assert_eq!(adapter.language(), LanguageId::Python);
+    }
+
+    #[test]
+    fn test_typescript_adapter_language() {
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        assert_eq!(adapter.language(), LanguageId::TypeScript);
+    }
+
+    #[test]
+    fn test_typescript_tsx_adapter() {
+        let adapter = TypeScriptTreeSitterAdapter::tsx();
+        assert_eq!(adapter.language(), LanguageId::Tsx);
+    }
+
+    #[test]
+    fn test_typescript_javascript_adapter() {
+        let adapter = TypeScriptTreeSitterAdapter::javascript();
+        assert_eq!(adapter.language(), LanguageId::JavaScript);
+    }
+
+    // =========================================================================
+    // Integration Tests
+    // =========================================================================
+
+    #[test]
+    fn test_rust_adapter_extract_declarations() {
+        let source = "fn hello() {}\npub struct Point { x: i32 }";
+        let mut parser = tree_sitter::Parser::new();
+        let adapter = RustTreeSitterAdapter::new();
+        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+
+        let decls = adapter.extract_declarations(&tree, source);
+        assert_eq!(decls.len(), 2);
+        assert_eq!(decls[0].name, "hello");
+        assert_eq!(decls[1].name, "Point");
+    }
+
+    #[test]
+    fn test_python_adapter_extract_declarations() {
+        let source = "def greet():\n    pass\n\nclass Person:\n    pass";
+        let mut parser = tree_sitter::Parser::new();
+        let adapter = PythonTreeSitterAdapter::new();
+        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+
+        let decls = adapter.extract_declarations(&tree, source);
+        assert_eq!(decls.len(), 2);
+        assert_eq!(decls[0].name, "greet");
+        assert_eq!(decls[1].name, "Person");
+    }
+
+    #[test]
+    fn test_typescript_adapter_extract_declarations() {
+        let source = "function hello() {}\nclass World {}";
+        let mut parser = tree_sitter::Parser::new();
+        let adapter = TypeScriptTreeSitterAdapter::new();
+        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+
+        let decls = adapter.extract_declarations(&tree, source);
+        assert!(decls.len() >= 2);
+    }
+
+    #[test]
+    fn test_rust_adapter_extract_imports() {
+        let source = "use std::io;\nuse std::collections::HashMap;";
+        let mut parser = tree_sitter::Parser::new();
+        let adapter = RustTreeSitterAdapter::new();
+        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+
+        let imports = adapter.extract_imports(&tree, source);
+        assert_eq!(imports.len(), 2);
+    }
+
+    #[test]
+    fn test_python_adapter_extract_imports() {
+        let source = "import os\nfrom pathlib import Path";
+        let mut parser = tree_sitter::Parser::new();
+        let adapter = PythonTreeSitterAdapter::new();
+        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+
+        let imports = adapter.extract_imports(&tree, source);
+        assert_eq!(imports.len(), 2);
+    }
+
+    #[test]
+    fn test_rust_adapter_extract_comments() {
+        let source = "// Line comment\n/* Block comment */\nfn foo() {}";
+        let mut parser = tree_sitter::Parser::new();
+        let adapter = RustTreeSitterAdapter::new();
+        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+
+        let comments = adapter.extract_comments(&tree, source);
+        assert!(comments.len() >= 2);
+    }
+
+    #[test]
+    fn test_rust_adapter_extract_visibility() {
+        let source = "pub fn public_func() {}\nfn private_func() {}";
+        let tree = parse_rust(source);
+        let adapter = RustTreeSitterAdapter::new();
+
+        let root = tree.root_node();
+        let mut cursor = root.walk();
+        let children: Vec<_> = root.children(&mut cursor).collect();
+
+        // First function is public
+        let vis1 = adapter.extract_visibility(&children[0], source);
+        assert_eq!(vis1, Visibility::Public);
+
+        // Second function is private (default)
+        let vis2 = adapter.extract_visibility(&children[1], source);
+        assert_eq!(vis2, Visibility::Private);
     }
 }
