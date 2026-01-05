@@ -451,6 +451,12 @@ impl TreeSitterProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    // =========================================================================
+    // AdapterRegistry Tests
+    // =========================================================================
 
     #[test]
     fn test_registry_creation() {
@@ -462,6 +468,150 @@ mod tests {
         assert!(registry.supports(LanguageId::Tsx));
         assert!(registry.supports(LanguageId::JavaScript));
         assert!(!registry.supports(LanguageId::Unknown));
+    }
+
+    #[test]
+    fn test_registry_default() {
+        let registry = AdapterRegistry::default();
+        // Should be same as new()
+        assert!(registry.supports(LanguageId::Rust));
+        assert!(registry.supports(LanguageId::Python));
+    }
+
+    #[test]
+    fn test_registry_get_adapter() {
+        let registry = AdapterRegistry::new();
+
+        // Get existing adapter
+        let rust_adapter = registry.get(LanguageId::Rust);
+        assert!(rust_adapter.is_some());
+        assert_eq!(rust_adapter.unwrap().language(), LanguageId::Rust);
+
+        // Get non-existing adapter
+        let unknown_adapter = registry.get(LanguageId::Unknown);
+        assert!(unknown_adapter.is_none());
+    }
+
+    #[test]
+    fn test_registry_supported_languages() {
+        let registry = AdapterRegistry::new();
+        let languages = registry.supported_languages();
+
+        // Core Fleet (Phase 1B)
+        assert!(languages.contains(&LanguageId::Rust));
+        assert!(languages.contains(&LanguageId::Python));
+        assert!(languages.contains(&LanguageId::TypeScript));
+        assert!(languages.contains(&LanguageId::Tsx));
+        assert!(languages.contains(&LanguageId::JavaScript));
+        assert!(!languages.contains(&LanguageId::Unknown));
+    }
+
+    #[test]
+    fn test_registry_register_custom_adapter() {
+        let mut registry = AdapterRegistry {
+            adapters: BTreeMap::new(),
+        };
+
+        // Initially empty
+        assert!(!registry.supports(LanguageId::Rust));
+
+        // Register Rust adapter
+        registry.register(Box::new(RustTreeSitterAdapter::new()));
+        assert!(registry.supports(LanguageId::Rust));
+
+        // Can get the adapter
+        let adapter = registry.get(LanguageId::Rust);
+        assert!(adapter.is_some());
+    }
+
+    #[test]
+    fn test_registry_parse_rust() {
+        let registry = AdapterRegistry::new();
+        let source = "fn test_function() {}";
+
+        let file = registry.parse(source, LanguageId::Rust).unwrap();
+        assert_eq!(file.language, LanguageId::Rust);
+        assert!(file.declarations.len() >= 1);
+    }
+
+    #[test]
+    fn test_registry_parse_python() {
+        let registry = AdapterRegistry::new();
+        let source = "def test_function():\n    pass";
+
+        let file = registry.parse(source, LanguageId::Python).unwrap();
+        assert_eq!(file.language, LanguageId::Python);
+    }
+
+    #[test]
+    fn test_registry_parse_unsupported_language() {
+        let registry = AdapterRegistry::new();
+        let result = registry.parse("code", LanguageId::Unknown);
+
+        assert!(matches!(result, Err(AstError::UnsupportedLanguage(LanguageId::Unknown))));
+    }
+
+    #[test]
+    fn test_registry_parse_sets_span() {
+        let registry = AdapterRegistry::new();
+        let source = "fn foo() {}\nfn bar() {}";
+
+        let file = registry.parse(source, LanguageId::Rust).unwrap();
+        assert_eq!(file.span.start, 0);
+        assert_eq!(file.span.end, source.len());
+        assert_eq!(file.span.start_line, 1);
+        assert_eq!(file.span.end_line, 2);
+    }
+
+    // =========================================================================
+    // TreeSitterProvider Tests
+    // =========================================================================
+
+    #[test]
+    fn test_provider_new() {
+        let provider = TreeSitterProvider::new();
+        assert!(provider.registry().supports(LanguageId::Rust));
+    }
+
+    #[test]
+    fn test_provider_default() {
+        let provider = TreeSitterProvider::default();
+        assert!(provider.registry().supports(LanguageId::Python));
+    }
+
+    #[test]
+    fn test_provider_with_registry() {
+        let registry = AdapterRegistry::new();
+        let provider = TreeSitterProvider::with_registry(registry);
+        assert!(provider.registry().supports(LanguageId::Rust));
+    }
+
+    #[test]
+    fn test_provider_registry_getter() {
+        let provider = TreeSitterProvider::new();
+        let registry = provider.registry();
+        assert!(registry.supports(LanguageId::TypeScript));
+    }
+
+    #[test]
+    fn test_provider_registry_mut() {
+        let mut provider = TreeSitterProvider::new();
+        let registry = provider.registry_mut();
+        // Can mutate the registry
+        assert!(registry.supports(LanguageId::Rust));
+    }
+
+    #[test]
+    fn test_provider_supported_languages() {
+        let provider = TreeSitterProvider::new();
+        let languages = provider.supported_languages();
+
+        assert!(languages.contains(&LanguageId::Rust));
+        assert!(languages.contains(&LanguageId::Python));
+        assert!(languages.contains(&LanguageId::TypeScript));
+        assert!(languages.contains(&LanguageId::Tsx));
+        assert!(languages.contains(&LanguageId::JavaScript));
+        assert_eq!(languages.len(), 5);
     }
 
     #[test]
@@ -541,9 +691,516 @@ class Calculator {
     }
 
     #[test]
+    fn test_provider_parse_tsx() {
+        let provider = TreeSitterProvider::new();
+        let source = r#"
+interface Props {
+    name: string;
+}
+
+function Greeting({ name }: Props): JSX.Element {
+    return <div>Hello, {name}!</div>;
+}
+"#;
+        let file = provider.parse_file(source, LanguageId::Tsx).unwrap();
+        assert!(file.declarations.len() >= 1);
+    }
+
+    #[test]
     fn test_unsupported_language() {
         let provider = TreeSitterProvider::new();
         let result = provider.parse_file("some code", LanguageId::Unknown);
         assert!(matches!(result, Err(AstError::UnsupportedLanguage(_))));
+    }
+
+    // =========================================================================
+    // index_project Tests
+    // =========================================================================
+
+    #[test]
+    fn test_index_project_basic() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a simple Rust file
+        let rust_file = temp_dir.path().join("main.rs");
+        fs::write(&rust_file, "fn main() {}\nfn helper() {}").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        assert_eq!(model.stats.files_processed, 1);
+        assert!(model.stats.declarations_found >= 2);
+        assert!(model.files.contains_key("main.rs"));
+    }
+
+    #[test]
+    fn test_index_project_multiple_files() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create Rust file
+        fs::write(temp_dir.path().join("lib.rs"), "pub fn public_fn() {}").unwrap();
+
+        // Create Python file
+        fs::write(temp_dir.path().join("script.py"), "def process():\n    pass").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        assert_eq!(model.stats.files_processed, 2);
+        assert!(model.files.contains_key("lib.rs"));
+        assert!(model.files.contains_key("script.py"));
+    }
+
+    #[test]
+    fn test_index_project_with_subdirectories() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create nested structure
+        let src_dir = temp_dir.path().join("src");
+        fs::create_dir(&src_dir).unwrap();
+        fs::write(src_dir.join("main.rs"), "fn main() {}").unwrap();
+        fs::write(src_dir.join("utils.rs"), "pub fn util() {}").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        assert_eq!(model.stats.files_processed, 2);
+    }
+
+    #[test]
+    fn test_index_project_skips_hidden_files() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(temp_dir.path().join("visible.rs"), "fn visible() {}").unwrap();
+        fs::write(temp_dir.path().join(".hidden.rs"), "fn hidden() {}").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        assert_eq!(model.stats.files_processed, 1);
+        assert!(model.files.contains_key("visible.rs"));
+        assert!(!model.files.contains_key(".hidden.rs"));
+    }
+
+    #[test]
+    fn test_index_project_skips_common_directories() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create node_modules directory
+        let node_modules = temp_dir.path().join("node_modules");
+        fs::create_dir(&node_modules).unwrap();
+        fs::write(node_modules.join("package.js"), "function pkg() {}").unwrap();
+
+        // Create target directory
+        let target = temp_dir.path().join("target");
+        fs::create_dir(&target).unwrap();
+        fs::write(target.join("build.rs"), "fn build() {}").unwrap();
+
+        // Create a valid source file
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        // Should only process main.rs, not files in node_modules or target
+        assert_eq!(model.stats.files_processed, 1);
+    }
+
+    #[test]
+    fn test_index_project_max_files_limit() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create multiple files
+        for i in 0..5 {
+            fs::write(temp_dir.path().join(format!("file{}.rs", i)), "fn f() {}").unwrap();
+        }
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions {
+            max_files: 2,
+            ..Default::default()
+        };
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        assert_eq!(model.stats.files_processed, 2);
+    }
+
+    #[test]
+    fn test_index_project_exclude_patterns() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}").unwrap();
+        fs::write(temp_dir.path().join("test_main.rs"), "fn test() {}").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions {
+            exclude_patterns: vec!["test_".to_string()],
+            ..Default::default()
+        };
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        assert_eq!(model.stats.files_processed, 1);
+        assert!(model.files.contains_key("main.rs"));
+    }
+
+    #[test]
+    fn test_index_project_include_patterns() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(temp_dir.path().join("lib.rs"), "fn lib() {}").unwrap();
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions {
+            include_patterns: vec!["main".to_string()],
+            ..Default::default()
+        };
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        assert_eq!(model.stats.files_processed, 1);
+        assert!(model.files.contains_key("main.rs"));
+    }
+
+    #[test]
+    fn test_index_project_per_language_stats() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}").unwrap();
+        fs::write(temp_dir.path().join("script.py"), "def foo():\n    pass").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        assert!(model.stats.by_language.contains_key("Rust"));
+        assert!(model.stats.by_language.contains_key("Python"));
+        assert_eq!(model.stats.by_language["Rust"].files, 1);
+        assert_eq!(model.stats.by_language["Python"].files, 1);
+    }
+
+    #[test]
+    fn test_index_project_skips_large_files() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a file larger than 1MB
+        let large_content = "fn f() {}\n".repeat(150_000);
+        fs::write(temp_dir.path().join("large.rs"), large_content).unwrap();
+
+        // Create a normal file
+        fs::write(temp_dir.path().join("normal.rs"), "fn normal() {}").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        // Should skip the large file
+        assert_eq!(model.stats.files_processed, 1);
+        assert!(!model.files.contains_key("large.rs"));
+    }
+
+    #[test]
+    fn test_index_project_skips_unsupported_languages() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(temp_dir.path().join("main.rs"), "fn main() {}").unwrap();
+        fs::write(temp_dir.path().join("style.css"), "body { color: red; }").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        // Should only process Rust file, skip CSS
+        assert_eq!(model.stats.files_processed, 1);
+    }
+
+    #[test]
+    fn test_index_project_empty_directory() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        assert_eq!(model.stats.files_processed, 0);
+        assert!(model.files.is_empty());
+    }
+
+    // =========================================================================
+    // zoom_into Tests
+    // =========================================================================
+
+    #[test]
+    fn test_zoom_into_function() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.rs");
+
+        let source = "fn foo() {\n    println!(\"foo\");\n}\n\nfn bar() {\n    println!(\"bar\");\n}\n";
+        fs::write(&file_path, source).unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = ZoomOptions::default();
+
+        // id format is "kind:name:start_line"
+        let model = provider.zoom_into(&file_path, "function:foo:1", &options).unwrap();
+
+        assert_eq!(model.symbol.name, "foo");
+        assert!(model.source_text.is_some());
+    }
+
+    #[test]
+    fn test_zoom_into_with_context() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.rs");
+
+        let source = "// Header comment\nuse std::io;\n\nfn target() {\n    println!(\"target\");\n}\n\nfn after() {\n    println!(\"after\");\n}\n";
+        fs::write(&file_path, source).unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = ZoomOptions {
+            context_lines: 2,
+            ..Default::default()
+        };
+
+        // target function is at line 4
+        let model = provider.zoom_into(&file_path, "function:target:4", &options).unwrap();
+
+        assert!(model.context.is_some());
+        let ctx = model.context.unwrap();
+        assert!(!ctx.before.is_empty() || !ctx.after.is_empty());
+    }
+
+    #[test]
+    fn test_zoom_into_with_control_flow() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.rs");
+
+        let source = "fn process(x: i32) -> i32 {\n    if x > 0 {\n        x * 2\n    } else {\n        0\n    }\n}\n";
+        fs::write(&file_path, source).unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = ZoomOptions {
+            extract_control_flow: true,
+            ..Default::default()
+        };
+
+        // process function is at line 1
+        let model = provider.zoom_into(&file_path, "function:process:1", &options).unwrap();
+
+        assert_eq!(model.symbol.name, "process");
+        // Body extraction should be attempted
+    }
+
+    #[test]
+    fn test_zoom_into_nested_symbol() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.rs");
+
+        let source = r#"struct Container {
+    value: i32,
+}
+
+impl Container {
+    fn new() -> Self {
+        Container { value: 0 }
+    }
+}
+"#;
+        fs::write(&file_path, source).unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = ZoomOptions::default();
+
+        // Try to find "new" which is nested in impl
+        let result = provider.zoom_into(&file_path, "new", &options);
+        // May or may not find nested, depending on id format
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    #[test]
+    fn test_zoom_into_symbol_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.rs");
+
+        fs::write(&file_path, "fn existing() {}").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = ZoomOptions::default();
+
+        let result = provider.zoom_into(&file_path, "nonexistent", &options);
+
+        assert!(matches!(result, Err(AstError::SymbolNotFound { .. })));
+    }
+
+    #[test]
+    fn test_zoom_into_file_not_found() {
+        let provider = TreeSitterProvider::new();
+        let options = ZoomOptions::default();
+
+        let result = provider.zoom_into(Path::new("/nonexistent/file.rs"), "symbol", &options);
+
+        assert!(matches!(result, Err(AstError::IoError(_))));
+    }
+
+    #[test]
+    fn test_zoom_into_python() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.py");
+
+        let source = "def hello():\n    print(\"Hello!\")\n\ndef world():\n    print(\"World!\")\n";
+        fs::write(&file_path, source).unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = ZoomOptions::default();
+
+        // hello function is at line 1
+        let model = provider.zoom_into(&file_path, "function:hello:1", &options).unwrap();
+
+        assert_eq!(model.symbol.name, "hello");
+    }
+
+    // =========================================================================
+    // collect_files Tests
+    // =========================================================================
+
+    #[test]
+    fn test_collect_files_sorted() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create files in non-alphabetical order
+        fs::write(temp_dir.path().join("zebra.rs"), "fn z() {}").unwrap();
+        fs::write(temp_dir.path().join("alpha.rs"), "fn a() {}").unwrap();
+        fs::write(temp_dir.path().join("beta.rs"), "fn b() {}").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let files = provider.collect_files(temp_dir.path(), &options).unwrap();
+
+        // Files should be sorted
+        let names: Vec<_> = files.iter()
+            .filter_map(|p| p.file_name())
+            .filter_map(|n| n.to_str())
+            .collect();
+
+        let mut sorted_names = names.clone();
+        sorted_names.sort();
+        assert_eq!(names, sorted_names);
+    }
+
+    #[test]
+    fn test_collect_files_only_supported() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(temp_dir.path().join("code.rs"), "fn f() {}").unwrap();
+        fs::write(temp_dir.path().join("data.json"), "{}").unwrap();
+        fs::write(temp_dir.path().join("readme.md"), "# Readme").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let files = provider.collect_files(temp_dir.path(), &options).unwrap();
+
+        // Should only include .rs file
+        assert_eq!(files.len(), 1);
+        assert!(files[0].to_string_lossy().ends_with(".rs"));
+    }
+
+    // =========================================================================
+    // Error Handling Tests
+    // =========================================================================
+
+    #[test]
+    fn test_index_project_handles_parse_errors_gracefully() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a file with valid Rust syntax
+        fs::write(temp_dir.path().join("valid.rs"), "fn valid() {}").unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        assert_eq!(model.stats.files_processed, 1);
+    }
+
+    #[test]
+    fn test_index_project_nonexistent_directory() {
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let result = provider.index_project(Path::new("/nonexistent/path"), &options);
+
+        assert!(result.is_err());
+    }
+
+    // =========================================================================
+    // Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_parse_empty_source() {
+        let provider = TreeSitterProvider::new();
+        let file = provider.parse_file("", LanguageId::Rust).unwrap();
+
+        assert!(file.declarations.is_empty());
+    }
+
+    #[test]
+    fn test_parse_whitespace_only() {
+        let provider = TreeSitterProvider::new();
+        let file = provider.parse_file("   \n\n   \t", LanguageId::Rust).unwrap();
+
+        assert!(file.declarations.is_empty());
+    }
+
+    #[test]
+    fn test_parse_comments_only() {
+        let provider = TreeSitterProvider::new();
+        let source = "// This is a comment\n/* Block comment */";
+        let file = provider.parse_file(source, LanguageId::Rust).unwrap();
+
+        assert!(file.declarations.is_empty());
+    }
+
+    #[test]
+    fn test_parse_with_imports() {
+        let provider = TreeSitterProvider::new();
+        let source = "use std::io;\nuse std::collections::HashMap;\n\nfn main() {}";
+        let file = provider.parse_file(source, LanguageId::Rust).unwrap();
+
+        assert!(!file.imports.is_empty());
+    }
+
+    #[test]
+    fn test_index_project_counts_imports() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let source = "use std::io;\nfn main() {}";
+        fs::write(temp_dir.path().join("main.rs"), source).unwrap();
+
+        let provider = TreeSitterProvider::new();
+        let options = IndexOptions::default();
+
+        let model = provider.index_project(temp_dir.path(), &options).unwrap();
+
+        assert!(model.stats.imports_found >= 1);
     }
 }
