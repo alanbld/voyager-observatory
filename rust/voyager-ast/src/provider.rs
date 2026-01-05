@@ -298,4 +298,420 @@ mod tests {
         assert!(opts.extract_control_flow);
         assert_eq!(opts.max_depth, 10);
     }
+
+    // =========================================================================
+    // IndexOptions Tests
+    // =========================================================================
+
+    #[test]
+    fn test_index_options_fields() {
+        let opts = IndexOptions {
+            max_files: 100,
+            include_patterns: vec!["*.rs".to_string()],
+            exclude_patterns: vec!["target/**".to_string()],
+            extract_comments: true,
+            follow_symlinks: true,
+            languages: vec![LanguageId::Rust, LanguageId::Python],
+            extract_nested: true,
+        };
+
+        assert_eq!(opts.max_files, 100);
+        assert_eq!(opts.include_patterns.len(), 1);
+        assert_eq!(opts.exclude_patterns.len(), 1);
+        assert!(opts.extract_comments);
+        assert!(opts.follow_symlinks);
+        assert_eq!(opts.languages.len(), 2);
+        assert!(opts.extract_nested);
+    }
+
+    #[test]
+    fn test_index_options_clone() {
+        let opts = IndexOptions {
+            max_files: 50,
+            include_patterns: vec!["**/*.py".to_string()],
+            exclude_patterns: vec![],
+            extract_comments: true,
+            follow_symlinks: false,
+            languages: vec![LanguageId::Python],
+            extract_nested: false,
+        };
+
+        let cloned = opts.clone();
+        assert_eq!(cloned.max_files, 50);
+        assert_eq!(cloned.include_patterns.len(), 1);
+    }
+
+    #[test]
+    fn test_index_options_debug() {
+        let opts = IndexOptions::default();
+        let debug_str = format!("{:?}", opts);
+        assert!(debug_str.contains("IndexOptions"));
+        assert!(debug_str.contains("max_files"));
+    }
+
+    // =========================================================================
+    // ZoomOptions Tests
+    // =========================================================================
+
+    #[test]
+    fn test_zoom_options_fields() {
+        let opts = ZoomOptions {
+            max_depth: 5,
+            extract_calls: false,
+            extract_control_flow: true,
+            context_lines: 3,
+            extract_nested: false,
+        };
+
+        assert_eq!(opts.max_depth, 5);
+        assert!(!opts.extract_calls);
+        assert!(opts.extract_control_flow);
+        assert_eq!(opts.context_lines, 3);
+        assert!(!opts.extract_nested);
+    }
+
+    #[test]
+    fn test_zoom_options_clone() {
+        let opts = ZoomOptions::default();
+        let cloned = opts.clone();
+        assert_eq!(cloned.max_depth, opts.max_depth);
+        assert_eq!(cloned.extract_calls, opts.extract_calls);
+    }
+
+    #[test]
+    fn test_zoom_options_debug() {
+        let opts = ZoomOptions::default();
+        let debug_str = format!("{:?}", opts);
+        assert!(debug_str.contains("ZoomOptions"));
+        assert!(debug_str.contains("max_depth"));
+    }
+
+    // =========================================================================
+    // PlanetariumModel Tests
+    // =========================================================================
+
+    #[test]
+    fn test_planetarium_model_new() {
+        let model = PlanetariumModel::new("/project");
+        assert_eq!(model.root, "/project");
+        assert!(model.files.is_empty());
+        assert!(model.errors.is_empty());
+    }
+
+    #[test]
+    fn test_planetarium_model_all_declarations() {
+        use crate::ir::{Declaration, DeclarationKind, Span};
+
+        let mut model = PlanetariumModel::new("/test");
+
+        let mut file1 = File::new("a.rs".to_string(), LanguageId::Rust);
+        file1.declarations.push(Declaration::new(
+            "foo".to_string(),
+            DeclarationKind::Function,
+            Span::new(0, 10, 1, 5),
+        ));
+
+        let mut file2 = File::new("b.rs".to_string(), LanguageId::Rust);
+        file2.declarations.push(Declaration::new(
+            "bar".to_string(),
+            DeclarationKind::Function,
+            Span::new(0, 10, 1, 5),
+        ));
+
+        model.files.insert("a.rs".to_string(), file1);
+        model.files.insert("b.rs".to_string(), file2);
+
+        let all_decls: Vec<_> = model.all_declarations().collect();
+        assert_eq!(all_decls.len(), 2);
+    }
+
+    #[test]
+    fn test_planetarium_model_find_by_name() {
+        use crate::ir::{Declaration, DeclarationKind, Span};
+
+        let mut model = PlanetariumModel::new("/test");
+
+        let mut file = File::new("test.rs".to_string(), LanguageId::Rust);
+        file.declarations.push(Declaration::new(
+            "target_fn".to_string(),
+            DeclarationKind::Function,
+            Span::new(0, 10, 1, 5),
+        ));
+        file.declarations.push(Declaration::new(
+            "other_fn".to_string(),
+            DeclarationKind::Function,
+            Span::new(20, 30, 10, 15),
+        ));
+
+        model.files.insert("test.rs".to_string(), file);
+
+        let found = model.find_by_name("target_fn");
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].1.name, "target_fn");
+
+        let not_found = model.find_by_name("nonexistent");
+        assert!(not_found.is_empty());
+    }
+
+    #[test]
+    fn test_planetarium_model_total_declarations() {
+        use crate::ir::{Declaration, DeclarationKind, Span};
+
+        let mut model = PlanetariumModel::new("/test");
+
+        let mut file1 = File::new("a.rs".to_string(), LanguageId::Rust);
+        file1.declarations.push(Declaration::new(
+            "fn1".to_string(),
+            DeclarationKind::Function,
+            Span::new(0, 10, 1, 5),
+        ));
+        file1.declarations.push(Declaration::new(
+            "fn2".to_string(),
+            DeclarationKind::Function,
+            Span::new(20, 30, 10, 15),
+        ));
+
+        let file2 = File::new("b.rs".to_string(), LanguageId::Rust);
+
+        model.files.insert("a.rs".to_string(), file1);
+        model.files.insert("b.rs".to_string(), file2);
+
+        assert_eq!(model.total_declarations(), 2);
+    }
+
+    #[test]
+    fn test_planetarium_model_empty() {
+        let model = PlanetariumModel::new("/empty");
+        assert_eq!(model.total_declarations(), 0);
+        assert!(model.find_by_name("anything").is_empty());
+        assert_eq!(model.all_declarations().count(), 0);
+    }
+
+    // =========================================================================
+    // IndexStats Tests
+    // =========================================================================
+
+    #[test]
+    fn test_index_stats_default() {
+        let stats = IndexStats::default();
+        assert_eq!(stats.files_processed, 0);
+        assert_eq!(stats.files_skipped, 0);
+        assert_eq!(stats.declarations_found, 0);
+        assert_eq!(stats.imports_found, 0);
+        assert_eq!(stats.unknown_regions, 0);
+        assert_eq!(stats.parse_time_ms, 0);
+        assert!(stats.by_language.is_empty());
+    }
+
+    #[test]
+    fn test_index_stats_fields() {
+        let mut stats = IndexStats {
+            files_processed: 100,
+            files_skipped: 5,
+            declarations_found: 500,
+            imports_found: 200,
+            unknown_regions: 10,
+            parse_time_ms: 1500,
+            by_language: BTreeMap::new(),
+        };
+
+        stats.by_language.insert("rust".to_string(), LanguageStats {
+            files: 50,
+            declarations: 250,
+            imports: 100,
+        });
+
+        assert_eq!(stats.files_processed, 100);
+        assert_eq!(stats.by_language.len(), 1);
+    }
+
+    #[test]
+    fn test_index_stats_serialization() {
+        let stats = IndexStats {
+            files_processed: 10,
+            files_skipped: 2,
+            declarations_found: 50,
+            imports_found: 20,
+            unknown_regions: 1,
+            parse_time_ms: 500,
+            by_language: BTreeMap::new(),
+        };
+
+        let json = serde_json::to_string(&stats).unwrap();
+        let deserialized: IndexStats = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.files_processed, 10);
+        assert_eq!(deserialized.declarations_found, 50);
+    }
+
+    // =========================================================================
+    // LanguageStats Tests
+    // =========================================================================
+
+    #[test]
+    fn test_language_stats_default() {
+        let stats = LanguageStats::default();
+        assert_eq!(stats.files, 0);
+        assert_eq!(stats.declarations, 0);
+        assert_eq!(stats.imports, 0);
+    }
+
+    #[test]
+    fn test_language_stats_fields() {
+        let stats = LanguageStats {
+            files: 25,
+            declarations: 150,
+            imports: 75,
+        };
+
+        assert_eq!(stats.files, 25);
+        assert_eq!(stats.declarations, 150);
+        assert_eq!(stats.imports, 75);
+    }
+
+    // =========================================================================
+    // IndexError Tests
+    // =========================================================================
+
+    #[test]
+    fn test_index_error_fields() {
+        let err = IndexError {
+            path: "broken.rs".to_string(),
+            message: "syntax error at line 10".to_string(),
+            recoverable: true,
+        };
+
+        assert_eq!(err.path, "broken.rs");
+        assert!(err.message.contains("syntax error"));
+        assert!(err.recoverable);
+    }
+
+    #[test]
+    fn test_index_error_serialization() {
+        let err = IndexError {
+            path: "test.py".to_string(),
+            message: "indentation error".to_string(),
+            recoverable: false,
+        };
+
+        let json = serde_json::to_string(&err).unwrap();
+        let deserialized: IndexError = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.path, "test.py");
+        assert!(!deserialized.recoverable);
+    }
+
+    // =========================================================================
+    // MicroscopeModel Tests
+    // =========================================================================
+
+    #[test]
+    fn test_microscope_model_fields() {
+        use crate::ir::{Declaration, DeclarationKind, Span};
+
+        let model = MicroscopeModel {
+            file_path: "src/lib.rs".to_string(),
+            symbol: Declaration::new(
+                "calculate".to_string(),
+                DeclarationKind::Function,
+                Span::new(100, 200, 10, 25),
+            ),
+            body: None,
+            context: None,
+            source_text: Some("fn calculate() { ... }".to_string()),
+        };
+
+        assert_eq!(model.file_path, "src/lib.rs");
+        assert_eq!(model.symbol.name, "calculate");
+        assert!(model.body.is_none());
+        assert!(model.source_text.is_some());
+    }
+
+    #[test]
+    fn test_microscope_model_with_context() {
+        use crate::ir::{Declaration, DeclarationKind, Span};
+
+        let model = MicroscopeModel {
+            file_path: "test.rs".to_string(),
+            symbol: Declaration::new(
+                "test_fn".to_string(),
+                DeclarationKind::Function,
+                Span::new(0, 50, 5, 10),
+            ),
+            body: None,
+            context: Some(ContextWindow {
+                before: vec!["// comment".to_string(), "use std::io;".to_string()],
+                after: vec!["".to_string(), "fn next_fn() {}".to_string()],
+            }),
+            source_text: None,
+        };
+
+        assert!(model.context.is_some());
+        let ctx = model.context.unwrap();
+        assert_eq!(ctx.before.len(), 2);
+        assert_eq!(ctx.after.len(), 2);
+    }
+
+    #[test]
+    fn test_microscope_model_serialization() {
+        use crate::ir::{Declaration, DeclarationKind, Span};
+
+        let model = MicroscopeModel {
+            file_path: "test.rs".to_string(),
+            symbol: Declaration::new(
+                "my_func".to_string(),
+                DeclarationKind::Function,
+                Span::new(0, 10, 1, 5),
+            ),
+            body: None,
+            context: None,
+            source_text: None,
+        };
+
+        let json = serde_json::to_string(&model).unwrap();
+        let deserialized: MicroscopeModel = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.file_path, "test.rs");
+        assert_eq!(deserialized.symbol.name, "my_func");
+    }
+
+    // =========================================================================
+    // ContextWindow Tests
+    // =========================================================================
+
+    #[test]
+    fn test_context_window_fields() {
+        let ctx = ContextWindow {
+            before: vec!["line1".to_string(), "line2".to_string()],
+            after: vec!["line3".to_string()],
+        };
+
+        assert_eq!(ctx.before.len(), 2);
+        assert_eq!(ctx.after.len(), 1);
+    }
+
+    #[test]
+    fn test_context_window_empty() {
+        let ctx = ContextWindow {
+            before: vec![],
+            after: vec![],
+        };
+
+        assert!(ctx.before.is_empty());
+        assert!(ctx.after.is_empty());
+    }
+
+    #[test]
+    fn test_context_window_serialization() {
+        let ctx = ContextWindow {
+            before: vec!["// header".to_string()],
+            after: vec!["// footer".to_string()],
+        };
+
+        let json = serde_json::to_string(&ctx).unwrap();
+        let deserialized: ContextWindow = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.before[0], "// header");
+        assert_eq!(deserialized.after[0], "// footer");
+    }
 }
