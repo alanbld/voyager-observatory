@@ -208,6 +208,10 @@ impl std::error::Error for FallbackError {}
 mod tests {
     use super::*;
 
+    // =========================================================================
+    // AnalysisStrategy Tests
+    // =========================================================================
+
     #[test]
     fn test_analysis_strategy_fallback() {
         assert_eq!(
@@ -223,6 +227,69 @@ mod tests {
             Some(AnalysisStrategy::Minimal)
         );
         assert_eq!(AnalysisStrategy::Minimal.fallback(), None);
+    }
+
+    #[test]
+    fn test_analysis_strategy_timeout() {
+        assert_eq!(AnalysisStrategy::SemanticDeep.timeout(), Duration::from_secs(30));
+        assert_eq!(AnalysisStrategy::SemanticQuick.timeout(), Duration::from_millis(500));
+        assert_eq!(AnalysisStrategy::Heuristic.timeout(), Duration::from_millis(100));
+        assert_eq!(AnalysisStrategy::Minimal.timeout(), Duration::from_millis(10));
+    }
+
+    #[test]
+    fn test_analysis_strategy_description() {
+        assert_eq!(AnalysisStrategy::SemanticDeep.description(), "Deep semantic analysis");
+        assert_eq!(AnalysisStrategy::SemanticQuick.description(), "Quick semantic analysis");
+        assert_eq!(AnalysisStrategy::Heuristic.description(), "Pattern-based analysis");
+        assert_eq!(AnalysisStrategy::Minimal.description(), "Structural analysis");
+    }
+
+    #[test]
+    fn test_analysis_strategy_equality() {
+        assert_eq!(AnalysisStrategy::SemanticDeep, AnalysisStrategy::SemanticDeep);
+        assert_ne!(AnalysisStrategy::SemanticDeep, AnalysisStrategy::Minimal);
+    }
+
+    #[test]
+    fn test_analysis_strategy_clone() {
+        let strategy = AnalysisStrategy::SemanticDeep;
+        let cloned = strategy;
+        assert_eq!(strategy, cloned);
+    }
+
+    // =========================================================================
+    // FallbackSystem Tests
+    // =========================================================================
+
+    #[test]
+    fn test_fallback_system_new() {
+        let fallback = FallbackSystem::new();
+        // Test that it doesn't panic and can be used
+        assert!(fallback.execute_with_fallback(
+            AnalysisStrategy::Minimal,
+            |_| -> Result<(), &str> { Ok(()) },
+        ).is_ok());
+    }
+
+    #[test]
+    fn test_fallback_system_default() {
+        let fallback = FallbackSystem::default();
+        assert!(fallback.execute_with_fallback(
+            AnalysisStrategy::Minimal,
+            |_| -> Result<(), &str> { Ok(()) },
+        ).is_ok());
+    }
+
+    #[test]
+    fn test_fallback_system_with_logging() {
+        let fallback = FallbackSystem::new().with_logging();
+        // Just verify it can be created and used
+        let result = fallback.execute_with_fallback(
+            AnalysisStrategy::Minimal,
+            |_| -> Result<i32, &str> { Ok(42) },
+        );
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -271,5 +338,90 @@ mod tests {
         );
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_fallback_system_no_more_fallbacks() {
+        let fallback = FallbackSystem::new();
+
+        // Start from Minimal which has no fallback
+        let result = fallback.execute_with_fallback(
+            AnalysisStrategy::Minimal,
+            |_strategy| -> Result<i32, &str> { Err("fails") },
+        );
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            FallbackError::NoMoreFallbacks { last_strategy, .. } => {
+                assert_eq!(last_strategy, AnalysisStrategy::Minimal);
+            }
+            _ => panic!("Expected NoMoreFallbacks error"),
+        }
+    }
+
+    #[test]
+    fn test_fallback_system_strategy_for_depth() {
+        let fallback = FallbackSystem::new();
+
+        assert_eq!(
+            fallback.strategy_for_depth(super::super::SemanticDepth::Deep),
+            AnalysisStrategy::SemanticDeep
+        );
+        assert_eq!(
+            fallback.strategy_for_depth(super::super::SemanticDepth::Balanced),
+            AnalysisStrategy::SemanticQuick
+        );
+        assert_eq!(
+            fallback.strategy_for_depth(super::super::SemanticDepth::Quick),
+            AnalysisStrategy::Heuristic
+        );
+    }
+
+    // =========================================================================
+    // FallbackError Tests
+    // =========================================================================
+
+    #[test]
+    fn test_fallback_error_max_attempts_display() {
+        let error = FallbackError::MaxAttemptsReached {
+            attempts: 3,
+            last_error: "test error".to_string(),
+        };
+        let display = format!("{}", error);
+        assert!(display.contains("3 attempts"));
+        assert!(display.contains("test error"));
+    }
+
+    #[test]
+    fn test_fallback_error_no_more_fallbacks_display() {
+        let error = FallbackError::NoMoreFallbacks {
+            last_strategy: AnalysisStrategy::Minimal,
+            last_error: "test error".to_string(),
+        };
+        let display = format!("{}", error);
+        assert!(display.contains("exhausted"));
+        assert!(display.contains("Structural analysis"));
+        assert!(display.contains("test error"));
+    }
+
+    #[test]
+    fn test_fallback_error_is_error() {
+        let error: Box<dyn std::error::Error> = Box::new(FallbackError::MaxAttemptsReached {
+            attempts: 1,
+            last_error: "test".to_string(),
+        });
+        // Verify it implements Error trait
+        assert!(!error.to_string().is_empty());
+    }
+
+    #[test]
+    fn test_fallback_error_debug() {
+        let error = FallbackError::MaxAttemptsReached {
+            attempts: 2,
+            last_error: "debug test".to_string(),
+        };
+        let debug = format!("{:?}", error);
+        assert!(debug.contains("MaxAttemptsReached"));
+        assert!(debug.contains("2"));
     }
 }

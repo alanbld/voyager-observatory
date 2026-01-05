@@ -109,9 +109,19 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    // =========================================================================
+    // SmartOrchestrator Tests
+    // =========================================================================
+
     #[test]
     fn test_orchestrator_new() {
         let orchestrator = SmartOrchestrator::new();
+        assert_eq!(orchestrator.semantic_timeout(), Duration::from_millis(500));
+    }
+
+    #[test]
+    fn test_orchestrator_default() {
+        let orchestrator = SmartOrchestrator::default();
         assert_eq!(orchestrator.semantic_timeout(), Duration::from_millis(500));
     }
 
@@ -120,6 +130,13 @@ mod tests {
         let orchestrator = SmartOrchestrator::new()
             .with_timeout(Duration::from_secs(1));
         assert_eq!(orchestrator.semantic_timeout(), Duration::from_secs(1));
+    }
+
+    #[test]
+    fn test_orchestrator_with_custom_timeout() {
+        let orchestrator = SmartOrchestrator::new()
+            .with_timeout(Duration::from_millis(250));
+        assert_eq!(orchestrator.semantic_timeout(), Duration::from_millis(250));
     }
 
     #[test]
@@ -148,5 +165,97 @@ mod tests {
         // Directory should get wide-angle mode (truncation enabled)
         assert!(defaults.truncate_lines.is_some());
         assert!(defaults.truncate_lines.unwrap() > 0);
+    }
+
+    #[test]
+    fn test_fallback_accessor() {
+        let orchestrator = SmartOrchestrator::new();
+        let fallback = orchestrator.fallback();
+        // Verify we can use the fallback system
+        let result = fallback.execute_with_fallback(
+            AnalysisStrategy::Minimal,
+            |_| -> Result<i32, &str> { Ok(42) },
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_defaults_truncate() {
+        let orchestrator = SmartOrchestrator::new();
+        let mut config = EncoderConfig::default();
+        config.truncate_lines = 0; // Not set by user
+
+        let defaults = SmartDefaults {
+            truncate_lines: Some(50),
+            lens: Some("security".to_string()),
+            semantic_depth: SemanticDepth::Quick,
+            detail_level: DetailLevel::Summary,
+            estimated_tokens: None,
+        };
+
+        orchestrator.apply_defaults(&mut config, &defaults);
+
+        // Should have applied truncate_lines
+        assert_eq!(config.truncate_lines, 50);
+    }
+
+    #[test]
+    fn test_apply_defaults_respects_user_settings() {
+        let orchestrator = SmartOrchestrator::new();
+        let mut config = EncoderConfig::default();
+        config.truncate_lines = 200; // User explicitly set
+
+        let defaults = SmartDefaults {
+            truncate_lines: Some(50),
+            lens: Some("security".to_string()),
+            semantic_depth: SemanticDepth::Quick,
+            detail_level: DetailLevel::Summary,
+            estimated_tokens: None,
+        };
+
+        orchestrator.apply_defaults(&mut config, &defaults);
+
+        // Should NOT have overwritten user setting
+        assert_eq!(config.truncate_lines, 200);
+    }
+
+    #[test]
+    fn test_apply_defaults_lens() {
+        let orchestrator = SmartOrchestrator::new();
+        let mut config = EncoderConfig::default();
+        config.active_lens = None; // Not set by user
+
+        let defaults = SmartDefaults {
+            truncate_lines: Some(50),
+            lens: Some("security".to_string()),
+            semantic_depth: SemanticDepth::Quick,
+            detail_level: DetailLevel::Summary,
+            estimated_tokens: None,
+        };
+
+        orchestrator.apply_defaults(&mut config, &defaults);
+
+        // Should have applied lens
+        assert_eq!(config.active_lens, Some("security".to_string()));
+    }
+
+    #[test]
+    fn test_apply_defaults_lens_respects_user() {
+        let orchestrator = SmartOrchestrator::new();
+        let mut config = EncoderConfig::default();
+        config.active_lens = Some("debug".to_string()); // User explicitly set
+
+        let defaults = SmartDefaults {
+            truncate_lines: Some(50),
+            lens: Some("security".to_string()),
+            semantic_depth: SemanticDepth::Quick,
+            detail_level: DetailLevel::Summary,
+            estimated_tokens: None,
+        };
+
+        orchestrator.apply_defaults(&mut config, &defaults);
+
+        // Should NOT have overwritten user setting
+        assert_eq!(config.active_lens, Some("debug".to_string()));
     }
 }

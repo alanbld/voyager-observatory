@@ -194,12 +194,36 @@ impl SmartDefaults {
 mod tests {
     use super::*;
 
+    // =========================================================================
+    // SemanticDepth Tests
+    // =========================================================================
+
     #[test]
     fn test_semantic_depth_parse() {
         assert_eq!(SemanticDepth::parse("quick"), Some(SemanticDepth::Quick));
         assert_eq!(SemanticDepth::parse("balanced"), Some(SemanticDepth::Balanced));
         assert_eq!(SemanticDepth::parse("deep"), Some(SemanticDepth::Deep));
         assert_eq!(SemanticDepth::parse("invalid"), None);
+    }
+
+    #[test]
+    fn test_semantic_depth_parse_aliases() {
+        // Quick aliases
+        assert_eq!(SemanticDepth::parse("fast"), Some(SemanticDepth::Quick));
+        assert_eq!(SemanticDepth::parse("q"), Some(SemanticDepth::Quick));
+        // Balanced aliases
+        assert_eq!(SemanticDepth::parse("normal"), Some(SemanticDepth::Balanced));
+        assert_eq!(SemanticDepth::parse("b"), Some(SemanticDepth::Balanced));
+        // Deep aliases
+        assert_eq!(SemanticDepth::parse("full"), Some(SemanticDepth::Deep));
+        assert_eq!(SemanticDepth::parse("d"), Some(SemanticDepth::Deep));
+    }
+
+    #[test]
+    fn test_semantic_depth_parse_case_insensitive() {
+        assert_eq!(SemanticDepth::parse("QUICK"), Some(SemanticDepth::Quick));
+        assert_eq!(SemanticDepth::parse("Balanced"), Some(SemanticDepth::Balanced));
+        assert_eq!(SemanticDepth::parse("DEEP"), Some(SemanticDepth::Deep));
     }
 
     #[test]
@@ -210,6 +234,52 @@ mod tests {
     }
 
     #[test]
+    fn test_semantic_depth_default() {
+        let depth = SemanticDepth::default();
+        assert_eq!(depth, SemanticDepth::Balanced);
+    }
+
+    #[test]
+    fn test_semantic_depth_display() {
+        assert_eq!(format!("{}", SemanticDepth::Quick), "quick");
+        assert_eq!(format!("{}", SemanticDepth::Balanced), "balanced");
+        assert_eq!(format!("{}", SemanticDepth::Deep), "deep");
+    }
+
+    #[test]
+    fn test_semantic_depth_from_str() {
+        assert_eq!("quick".parse::<SemanticDepth>().unwrap(), SemanticDepth::Quick);
+        assert_eq!("balanced".parse::<SemanticDepth>().unwrap(), SemanticDepth::Balanced);
+        assert_eq!("deep".parse::<SemanticDepth>().unwrap(), SemanticDepth::Deep);
+    }
+
+    #[test]
+    fn test_semantic_depth_from_str_error() {
+        let result = "invalid".parse::<SemanticDepth>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid semantic depth"));
+    }
+
+    #[test]
+    fn test_semantic_depth_clone_copy() {
+        let depth = SemanticDepth::Deep;
+        let cloned = depth;
+        assert_eq!(depth, cloned);
+    }
+
+    #[test]
+    fn test_semantic_depth_serialization() {
+        let depth = SemanticDepth::Balanced;
+        let json = serde_json::to_string(&depth).unwrap();
+        let parsed: SemanticDepth = serde_json::from_str(&json).unwrap();
+        assert_eq!(depth, parsed);
+    }
+
+    // =========================================================================
+    // DetailLevel Tests
+    // =========================================================================
+
+    #[test]
     fn test_detail_level_parse() {
         assert_eq!(DetailLevel::parse("summary"), Some(DetailLevel::Summary));
         assert_eq!(DetailLevel::parse("smart"), Some(DetailLevel::Smart));
@@ -218,10 +288,81 @@ mod tests {
     }
 
     #[test]
+    fn test_detail_level_parse_aliases() {
+        // Summary aliases
+        assert_eq!(DetailLevel::parse("minimal"), Some(DetailLevel::Summary));
+        assert_eq!(DetailLevel::parse("s"), Some(DetailLevel::Summary));
+        // Smart aliases
+        assert_eq!(DetailLevel::parse("normal"), Some(DetailLevel::Smart));
+        assert_eq!(DetailLevel::parse("auto"), Some(DetailLevel::Smart));
+        // Detailed aliases
+        assert_eq!(DetailLevel::parse("full"), Some(DetailLevel::Detailed));
+        assert_eq!(DetailLevel::parse("verbose"), Some(DetailLevel::Detailed));
+        assert_eq!(DetailLevel::parse("d"), Some(DetailLevel::Detailed));
+    }
+
+    #[test]
+    fn test_detail_level_parse_case_insensitive() {
+        assert_eq!(DetailLevel::parse("SUMMARY"), Some(DetailLevel::Summary));
+        assert_eq!(DetailLevel::parse("Smart"), Some(DetailLevel::Smart));
+        assert_eq!(DetailLevel::parse("DETAILED"), Some(DetailLevel::Detailed));
+    }
+
+    #[test]
+    fn test_detail_level_default() {
+        let level = DetailLevel::default();
+        assert_eq!(level, DetailLevel::Smart);
+    }
+
+    #[test]
+    fn test_detail_level_display() {
+        assert_eq!(format!("{}", DetailLevel::Summary), "summary");
+        assert_eq!(format!("{}", DetailLevel::Smart), "smart");
+        assert_eq!(format!("{}", DetailLevel::Detailed), "detailed");
+    }
+
+    #[test]
+    fn test_detail_level_from_str() {
+        assert_eq!("summary".parse::<DetailLevel>().unwrap(), DetailLevel::Summary);
+        assert_eq!("smart".parse::<DetailLevel>().unwrap(), DetailLevel::Smart);
+        assert_eq!("detailed".parse::<DetailLevel>().unwrap(), DetailLevel::Detailed);
+    }
+
+    #[test]
+    fn test_detail_level_from_str_error() {
+        let result = "invalid".parse::<DetailLevel>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid detail level"));
+    }
+
+    #[test]
+    fn test_detail_level_serialization() {
+        let level = DetailLevel::Smart;
+        let json = serde_json::to_string(&level).unwrap();
+        let parsed: DetailLevel = serde_json::from_str(&json).unwrap();
+        assert_eq!(level, parsed);
+    }
+
+    // =========================================================================
+    // SmartDefaults Tests
+    // =========================================================================
+
+    #[test]
+    fn test_smart_defaults_default() {
+        let defaults = SmartDefaults::default();
+        assert_eq!(defaults.truncate_lines, Some(100));
+        assert_eq!(defaults.lens, Some("architecture".to_string()));
+        assert_eq!(defaults.semantic_depth, SemanticDepth::Balanced);
+        assert_eq!(defaults.detail_level, DetailLevel::Smart);
+        assert!(defaults.estimated_tokens.is_none());
+    }
+
+    #[test]
     fn test_smart_defaults_for_file() {
         let defaults = SmartDefaults::for_file();
-        assert_eq!(defaults.truncate_lines, Some(0));
+        assert_eq!(defaults.truncate_lines, Some(0)); // No truncation
         assert_eq!(defaults.semantic_depth, SemanticDepth::Deep);
+        assert_eq!(defaults.detail_level, DetailLevel::Detailed);
     }
 
     #[test]
@@ -229,5 +370,22 @@ mod tests {
         let defaults = SmartDefaults::for_directory();
         assert_eq!(defaults.truncate_lines, Some(100));
         assert_eq!(defaults.semantic_depth, SemanticDepth::Balanced);
+        assert_eq!(defaults.detail_level, DetailLevel::Smart);
+    }
+
+    #[test]
+    fn test_smart_defaults_for_large_project() {
+        let defaults = SmartDefaults::for_large_project();
+        assert_eq!(defaults.truncate_lines, Some(50));
+        assert_eq!(defaults.semantic_depth, SemanticDepth::Quick);
+        assert_eq!(defaults.detail_level, DetailLevel::Summary);
+    }
+
+    #[test]
+    fn test_smart_defaults_clone() {
+        let defaults = SmartDefaults::for_file();
+        let cloned = defaults.clone();
+        assert_eq!(cloned.truncate_lines, defaults.truncate_lines);
+        assert_eq!(cloned.semantic_depth, defaults.semantic_depth);
     }
 }
