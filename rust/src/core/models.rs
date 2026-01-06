@@ -489,4 +489,291 @@ mod tests {
         let hash = calculate_md5("hello world");
         assert_eq!(hash, "5eb63bbbe01eeed093cb22bb8f5acdc3");
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_file_entry_with_timestamps() {
+        let entry = FileEntry::new("test.rs", "fn main() {}")
+            .with_timestamps(1234567890, 1234567800);
+
+        assert_eq!(entry.mtime, 1234567890);
+        assert_eq!(entry.ctime, 1234567800);
+    }
+
+    #[test]
+    fn test_file_entry_with_size() {
+        let entry = FileEntry::new("test.rs", "fn main() {}")
+            .with_size(9999);
+
+        assert_eq!(entry.size, 9999);
+    }
+
+    #[test]
+    fn test_file_entry_extension_none() {
+        let entry = FileEntry::new("Makefile", "all: build");
+        assert_eq!(entry.extension(), None);
+    }
+
+    #[test]
+    fn test_output_format_extension() {
+        assert_eq!(OutputFormat::PlusMinus.extension(), "txt");
+        assert_eq!(OutputFormat::Xml.extension(), "xml");
+        assert_eq!(OutputFormat::Markdown.extension(), "md");
+        assert_eq!(OutputFormat::ClaudeXml.extension(), "xml");
+    }
+
+    #[test]
+    fn test_output_format_parse_variants() {
+        // PlusMinus variants
+        assert_eq!(OutputFormat::parse("pm"), Some(OutputFormat::PlusMinus));
+        assert_eq!(OutputFormat::parse("plus_minus"), Some(OutputFormat::PlusMinus));
+
+        // XML
+        assert_eq!(OutputFormat::parse("xml"), Some(OutputFormat::Xml));
+
+        // Markdown variants
+        assert_eq!(OutputFormat::parse("markdown"), Some(OutputFormat::Markdown));
+        assert_eq!(OutputFormat::parse("md"), Some(OutputFormat::Markdown));
+
+        // ClaudeXml variants
+        assert_eq!(OutputFormat::parse("claude_xml"), Some(OutputFormat::ClaudeXml));
+    }
+
+    #[test]
+    fn test_output_format_default() {
+        let format: OutputFormat = Default::default();
+        assert_eq!(format, OutputFormat::PlusMinus);
+    }
+
+    #[test]
+    fn test_skeleton_mode_parse() {
+        assert_eq!(SkeletonMode::parse("auto"), Some(SkeletonMode::Auto));
+        assert_eq!(SkeletonMode::parse("true"), Some(SkeletonMode::Enabled));
+        assert_eq!(SkeletonMode::parse("enabled"), Some(SkeletonMode::Enabled));
+        assert_eq!(SkeletonMode::parse("on"), Some(SkeletonMode::Enabled));
+        assert_eq!(SkeletonMode::parse("yes"), Some(SkeletonMode::Enabled));
+        assert_eq!(SkeletonMode::parse("false"), Some(SkeletonMode::Disabled));
+        assert_eq!(SkeletonMode::parse("disabled"), Some(SkeletonMode::Disabled));
+        assert_eq!(SkeletonMode::parse("off"), Some(SkeletonMode::Disabled));
+        assert_eq!(SkeletonMode::parse("no"), Some(SkeletonMode::Disabled));
+        assert_eq!(SkeletonMode::parse("invalid"), None);
+    }
+
+    #[test]
+    fn test_skeleton_mode_is_enabled() {
+        assert!(!SkeletonMode::Auto.is_enabled(false));
+        assert!(SkeletonMode::Auto.is_enabled(true));
+        assert!(SkeletonMode::Enabled.is_enabled(false));
+        assert!(SkeletonMode::Enabled.is_enabled(true));
+        assert!(!SkeletonMode::Disabled.is_enabled(false));
+        assert!(!SkeletonMode::Disabled.is_enabled(true));
+    }
+
+    #[test]
+    fn test_skeleton_mode_default() {
+        let mode: SkeletonMode = Default::default();
+        assert_eq!(mode, SkeletonMode::Auto);
+    }
+
+    #[test]
+    fn test_metadata_mode_parse() {
+        assert_eq!(MetadataMode::parse("auto"), Some(MetadataMode::Auto));
+        assert_eq!(MetadataMode::parse("all"), Some(MetadataMode::All));
+        assert_eq!(MetadataMode::parse("none"), Some(MetadataMode::None));
+        assert_eq!(MetadataMode::parse("size-only"), Some(MetadataMode::SizeOnly));
+        assert_eq!(MetadataMode::parse("size_only"), Some(MetadataMode::SizeOnly));
+        assert_eq!(MetadataMode::parse("sizeonly"), Some(MetadataMode::SizeOnly));
+        assert_eq!(MetadataMode::parse("invalid"), None);
+    }
+
+    #[test]
+    fn test_metadata_mode_default() {
+        let mode: MetadataMode = Default::default();
+        assert_eq!(mode, MetadataMode::Auto);
+    }
+
+    #[test]
+    fn test_encoder_config_with_skeleton_mode() {
+        let config = EncoderConfig::new()
+            .with_skeleton_mode(SkeletonMode::Enabled);
+
+        assert_eq!(config.skeleton_mode, SkeletonMode::Enabled);
+    }
+
+    #[test]
+    fn test_encoder_config_with_metadata_mode() {
+        let config = EncoderConfig::new()
+            .with_metadata_mode(MetadataMode::All);
+
+        assert_eq!(config.metadata_mode, MetadataMode::All);
+    }
+
+    #[test]
+    fn test_compression_level_default() {
+        let level: CompressionLevel = Default::default();
+        assert_eq!(level, CompressionLevel::Full);
+    }
+
+    #[test]
+    fn test_processed_file_default() {
+        let file: ProcessedFile = Default::default();
+        assert!(file.path.is_empty());
+        assert!(file.content.is_empty());
+        assert_eq!(file.tokens, 0);
+        assert!(!file.truncated);
+        assert_eq!(file.compression_level, CompressionLevel::Full);
+        assert_eq!(file.utility, None);
+    }
+
+    #[test]
+    fn test_processed_file_with_utility() {
+        let entry = FileEntry::new("test.rs", "fn main() {}");
+        let processed = ProcessedFile::from_entry(&entry, "rust", 100)
+            .with_utility(0.95);
+
+        assert_eq!(processed.utility, Some(0.95));
+    }
+
+    #[test]
+    fn test_processed_file_is_bright_star() {
+        let entry = FileEntry::new("test.rs", "fn main() {}");
+
+        // No utility
+        let processed = ProcessedFile::from_entry(&entry, "rust", 100);
+        assert!(!processed.is_bright_star());
+
+        // Low utility
+        let processed = ProcessedFile::from_entry(&entry, "rust", 100)
+            .with_utility(0.5);
+        assert!(!processed.is_bright_star());
+
+        // High utility
+        let processed = ProcessedFile::from_entry(&entry, "rust", 100)
+            .with_utility(0.8);
+        assert!(processed.is_bright_star());
+
+        let processed = ProcessedFile::from_entry(&entry, "rust", 100)
+            .with_utility(0.95);
+        assert!(processed.is_bright_star());
+    }
+
+    #[test]
+    fn test_processed_file_brightness_indicator() {
+        let entry = FileEntry::new("test.rs", "fn main() {}");
+
+        // Very bright (>= 0.9)
+        let p = ProcessedFile::from_entry(&entry, "rust", 100).with_utility(0.95);
+        assert_eq!(p.brightness_indicator(), "🌟 ");
+
+        // Bright (>= 0.8)
+        let p = ProcessedFile::from_entry(&entry, "rust", 100).with_utility(0.85);
+        assert_eq!(p.brightness_indicator(), "⭐ ");
+
+        // Notable (>= 0.5)
+        let p = ProcessedFile::from_entry(&entry, "rust", 100).with_utility(0.6);
+        assert_eq!(p.brightness_indicator(), "✨ ");
+
+        // Dim (< 0.5)
+        let p = ProcessedFile::from_entry(&entry, "rust", 100).with_utility(0.3);
+        assert_eq!(p.brightness_indicator(), "");
+
+        // No utility
+        let p = ProcessedFile::from_entry(&entry, "rust", 100);
+        assert_eq!(p.brightness_indicator(), "");
+    }
+
+    #[test]
+    fn test_processed_file_with_truncation() {
+        let entry = FileEntry::new("test.rs", "a".repeat(1000));
+        let original_tokens = entry.token_estimate();
+
+        let processed = ProcessedFile::from_entry(&entry, "rust", 100)
+            .with_truncation("truncated content".to_string(), original_tokens);
+
+        assert!(processed.truncated);
+        assert_eq!(processed.original_tokens, Some(250));
+        assert_eq!(processed.content, "truncated content");
+    }
+
+    #[test]
+    fn test_processed_file_with_skeleton() {
+        let entry = FileEntry::new("test.rs", "a".repeat(1000));
+        let original_tokens = entry.token_estimate();
+
+        let processed = ProcessedFile::from_entry(&entry, "rust", 100)
+            .with_skeleton("fn main();".to_string(), original_tokens);
+
+        assert_eq!(processed.compression_level, CompressionLevel::Skeleton);
+        assert_eq!(processed.original_tokens, Some(250));
+        assert_eq!(processed.content, "fn main();");
+        assert!(processed.is_skeleton());
+    }
+
+    #[test]
+    fn test_processed_file_is_skeleton() {
+        let entry = FileEntry::new("test.rs", "fn main() {}");
+
+        let full = ProcessedFile::from_entry(&entry, "rust", 100);
+        assert!(!full.is_skeleton());
+
+        let skeleton = ProcessedFile::from_entry(&entry, "rust", 100)
+            .with_skeleton("fn main();".to_string(), 10);
+        assert!(skeleton.is_skeleton());
+    }
+
+    #[test]
+    fn test_config_serde() {
+        let config = Config {
+            ignore: vec!["*.pyc".to_string()],
+            include: vec!["*.rs".to_string()],
+            max_file_size: 2_000_000,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let parsed: Config = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.ignore, config.ignore);
+        assert_eq!(parsed.include, config.include);
+        assert_eq!(parsed.max_file_size, config.max_file_size);
+    }
+
+    #[test]
+    fn test_config_default() {
+        // Note: serde default function is only used during deserialization
+        // Default trait uses u64 default (0)
+        let config: Config = Default::default();
+        assert!(config.ignore.is_empty());
+        assert!(config.include.is_empty());
+        // max_file_size is 0 with Default trait (serde default not applied)
+        assert_eq!(config.max_file_size, 0);
+    }
+
+    #[test]
+    fn test_config_serde_default() {
+        // Serde defaults are applied during deserialization
+        let json = "{}";
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert!(config.ignore.is_empty());
+        assert!(config.include.is_empty());
+        assert_eq!(config.max_file_size, 1_048_576); // serde default applied
+    }
+
+    #[test]
+    fn test_encoder_config_default() {
+        let config: EncoderConfig = Default::default();
+        assert!(!config.ignore_patterns.is_empty());
+        assert!(config.include_patterns.is_empty());
+        assert_eq!(config.truncate_lines, 0);
+        assert_eq!(config.truncate_mode, "simple");
+        assert_eq!(config.sort_by, "name");
+        assert_eq!(config.sort_order, "asc");
+        assert!(!config.stream);
+        assert!(config.truncate_summary);
+        assert!(!config.frozen);
+        assert!(!config.allow_sensitive);
+        assert!(!config.follow_symlinks);
+    }
 }
