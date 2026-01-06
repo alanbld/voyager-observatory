@@ -448,10 +448,16 @@ class ContextEngine:
 
 #[test]
 fn test_ast_analysis_on_actual_project() {
-    // Run on the actual pm_encoder project to verify real-world behavior
+    // Run on the actual vo project to verify real-world behavior
     // Use zoom to target a specific file since vo requires directories
     let mut cmd = Command::cargo_bin("vo").unwrap();
-    cmd.current_dir("/home/albalda/pm_encoder/rust")
+
+    // Get the project root (parent of target directory)
+    let project_root = std::env::var("CARGO_MANIFEST_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("."));
+
+    cmd.current_dir(&project_root)
         .arg("src/core")  // Run on the core directory
         .arg("--skeleton")
         .arg("auto")
