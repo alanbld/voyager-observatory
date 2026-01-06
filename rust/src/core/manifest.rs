@@ -289,4 +289,132 @@ mod tests {
 
         assert_eq!(manifest.manifest_files.len(), 2);
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_detect_from_file_path() {
+        let tmp = TempDir::new().unwrap();
+        let file_path = tmp.path().join("test.rs");
+        fs::write(&file_path, "fn main() {}").unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[package]").unwrap();
+
+        // Pass a file path (not directory)
+        let manifest = ProjectManifest::detect(&file_path);
+
+        assert_eq!(manifest.project_type, ProjectType::Rust);
+    }
+
+    #[test]
+    fn test_accessor_methods() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[workspace]\nmembers = []",
+        )
+        .unwrap();
+
+        let manifest = ProjectManifest::detect(tmp.path());
+
+        // Test root() accessor
+        assert_eq!(manifest.root(), tmp.path().canonicalize().unwrap());
+
+        // Test is_workspace() accessor
+        assert!(manifest.is_workspace());
+
+        // Test project_type() accessor
+        assert_eq!(manifest.project_type(), &ProjectType::Rust);
+    }
+
+    #[test]
+    fn test_rust_non_workspace() {
+        let tmp = TempDir::new().unwrap();
+        // Cargo.toml without [workspace]
+        fs::write(tmp.path().join("Cargo.toml"), "[package]\nname = \"single\"").unwrap();
+
+        let manifest = ProjectManifest::detect(tmp.path());
+
+        assert!(!manifest.is_workspace());
+        assert_eq!(manifest.project_type, ProjectType::Rust);
+    }
+
+    #[test]
+    fn test_node_non_workspace() {
+        let tmp = TempDir::new().unwrap();
+        // package.json without workspaces
+        fs::write(tmp.path().join("package.json"), r#"{"name": "single"}"#).unwrap();
+
+        let manifest = ProjectManifest::detect(tmp.path());
+
+        assert!(!manifest.is_workspace());
+        assert_eq!(manifest.project_type, ProjectType::Node);
+    }
+
+    #[test]
+    fn test_workspace_detection_go() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("go.mod"), "module test").unwrap();
+
+        let manifest = ProjectManifest::detect(tmp.path());
+
+        // Go doesn't have workspace detection, should be false
+        assert!(!manifest.is_workspace());
+    }
+
+    #[test]
+    fn test_workspace_detection_python() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("pyproject.toml"), "[project]").unwrap();
+
+        let manifest = ProjectManifest::detect(tmp.path());
+
+        // Python doesn't have workspace detection in this implementation
+        assert!(!manifest.is_workspace());
+    }
+
+    #[test]
+    fn test_workspace_detection_unknown() {
+        let tmp = TempDir::new().unwrap();
+        // No manifest files
+
+        let manifest = ProjectManifest::detect(tmp.path());
+
+        assert!(!manifest.is_workspace());
+        assert_eq!(manifest.project_type, ProjectType::Unknown);
+    }
+
+    #[test]
+    fn test_setup_py_detection() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("setup.py"), "from setuptools import setup").unwrap();
+
+        let manifest = ProjectManifest::detect(tmp.path());
+
+        assert_eq!(manifest.project_type, ProjectType::Python);
+    }
+
+    #[test]
+    fn test_project_type_equality() {
+        assert_eq!(ProjectType::Rust, ProjectType::Rust);
+        assert_eq!(ProjectType::Node, ProjectType::Node);
+        assert_eq!(ProjectType::Python, ProjectType::Python);
+        assert_eq!(ProjectType::Go, ProjectType::Go);
+        assert_eq!(ProjectType::Mixed, ProjectType::Mixed);
+        assert_eq!(ProjectType::Unknown, ProjectType::Unknown);
+        assert_ne!(ProjectType::Rust, ProjectType::Python);
+    }
+
+    #[test]
+    fn test_manifest_clone() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[package]").unwrap();
+
+        let manifest = ProjectManifest::detect(tmp.path());
+        let cloned = manifest.clone();
+
+        assert_eq!(manifest.root, cloned.root);
+        assert_eq!(manifest.project_type, cloned.project_type);
+    }
 }

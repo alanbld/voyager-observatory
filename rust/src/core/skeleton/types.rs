@@ -193,4 +193,112 @@ mod tests {
         alloc.level = CompressionLevel::Drop;
         assert_eq!(alloc.current_tokens(), 0);
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_language_uses_braces() {
+        assert!(Language::Rust.uses_braces());
+        assert!(Language::TypeScript.uses_braces());
+        assert!(Language::JavaScript.uses_braces());
+        assert!(Language::Go.uses_braces());
+        assert!(!Language::Python.uses_braces());
+    }
+
+    #[test]
+    fn test_language_uses_indentation() {
+        assert!(Language::Python.uses_indentation());
+        assert!(!Language::Rust.uses_indentation());
+        assert!(!Language::TypeScript.uses_indentation());
+        assert!(!Language::JavaScript.uses_indentation());
+        assert!(!Language::Go.uses_indentation());
+    }
+
+    #[test]
+    fn test_compression_ratio_zero_original() {
+        // When original_tokens is 0, compression_ratio should be 0.0
+        let result = SkeletonResult::new(
+            "".to_string(),
+            0,  // original_tokens = 0
+            0,
+            vec![],
+        );
+        assert_eq!(result.compression_ratio, 0.0);
+    }
+
+    #[test]
+    fn test_skeleton_result_default() {
+        let result = SkeletonResult::default();
+        assert!(result.content.is_empty());
+        assert_eq!(result.original_tokens, 0);
+        assert_eq!(result.skeleton_tokens, 0);
+        assert_eq!(result.compression_ratio, 0.0);
+        assert!(result.preserved_symbols.is_empty());
+    }
+
+    #[test]
+    fn test_compression_level_default() {
+        let level: CompressionLevel = Default::default();
+        assert_eq!(level, CompressionLevel::Full);
+    }
+
+    #[test]
+    fn test_language_from_extension_all_js_variants() {
+        assert_eq!(Language::from_extension("jsx"), Some(Language::JavaScript));
+        assert_eq!(Language::from_extension("mjs"), Some(Language::JavaScript));
+        assert_eq!(Language::from_extension("cjs"), Some(Language::JavaScript));
+    }
+
+    #[test]
+    fn test_file_allocation_upgrade_cost_non_skeleton() {
+        let mut alloc = FileAllocation::new("test.rs", FileTier::Core, 100, 10);
+
+        // Full level has 0 upgrade cost
+        alloc.level = CompressionLevel::Full;
+        assert_eq!(alloc.upgrade_cost(), 0);
+
+        // Drop level also has 0 upgrade cost
+        alloc.level = CompressionLevel::Drop;
+        assert_eq!(alloc.upgrade_cost(), 0);
+    }
+
+    #[test]
+    fn test_compression_level_equality() {
+        assert_eq!(CompressionLevel::Full, CompressionLevel::Full);
+        assert_eq!(CompressionLevel::Skeleton, CompressionLevel::Skeleton);
+        assert_eq!(CompressionLevel::Drop, CompressionLevel::Drop);
+        assert_ne!(CompressionLevel::Full, CompressionLevel::Skeleton);
+    }
+
+    #[test]
+    fn test_language_equality() {
+        assert_eq!(Language::Rust, Language::Rust);
+        assert_eq!(Language::Python, Language::Python);
+        assert_ne!(Language::Rust, Language::Python);
+    }
+
+    #[test]
+    fn test_skeleton_result_with_symbols() {
+        let result = SkeletonResult::new(
+            "fn foo(); fn bar();".to_string(),
+            200,
+            20,
+            vec!["foo".to_string(), "bar".to_string()],
+        );
+        assert_eq!(result.preserved_symbols.len(), 2);
+        assert!(result.preserved_symbols.contains(&"foo".to_string()));
+        assert!(result.preserved_symbols.contains(&"bar".to_string()));
+    }
+
+    #[test]
+    fn test_file_allocation_fields() {
+        let alloc = FileAllocation::new("src/lib.rs", FileTier::Core, 500, 50);
+        assert_eq!(alloc.path, "src/lib.rs");
+        assert_eq!(alloc.tier, FileTier::Core);
+        assert_eq!(alloc.full_tokens, 500);
+        assert_eq!(alloc.skeleton_tokens, 50);
+        assert_eq!(alloc.level, CompressionLevel::Skeleton); // default
+    }
 }
