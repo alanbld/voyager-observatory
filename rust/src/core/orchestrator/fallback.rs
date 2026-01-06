@@ -424,4 +424,74 @@ mod tests {
         assert!(debug.contains("MaxAttemptsReached"));
         assert!(debug.contains("2"));
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_fallback_with_logging_falls_back() {
+        let fallback = FallbackSystem::new().with_logging();
+        let mut attempts = 0;
+
+        // This will trigger the logging paths
+        let result = fallback.execute_with_fallback(
+            AnalysisStrategy::SemanticDeep,
+            |strategy| -> Result<i32, &str> {
+                attempts += 1;
+                if strategy == AnalysisStrategy::Heuristic {
+                    Ok(42)
+                } else {
+                    Err("not ready yet")
+                }
+            },
+        );
+
+        let (value, strategy) = result.unwrap();
+        assert_eq!(value, 42);
+        assert_eq!(strategy, AnalysisStrategy::Heuristic);
+        assert_eq!(attempts, 3);
+    }
+
+    #[test]
+    fn test_fallback_with_logging_max_attempts() {
+        let fallback = FallbackSystem::new().with_logging();
+
+        let result = fallback.execute_with_fallback(
+            AnalysisStrategy::SemanticDeep,
+            |_| -> Result<i32, &str> { Err("always fails with logging") },
+        );
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            FallbackError::MaxAttemptsReached { attempts, last_error } => {
+                assert_eq!(attempts, 3);
+                assert!(last_error.contains("always fails"));
+            }
+            _ => panic!("Expected MaxAttemptsReached error"),
+        }
+    }
+
+    #[test]
+    fn test_fallback_with_logging_no_more_fallbacks() {
+        let fallback = FallbackSystem::new().with_logging();
+
+        let result = fallback.execute_with_fallback(
+            AnalysisStrategy::Minimal,
+            |_| -> Result<i32, &str> { Err("fails with log") },
+        );
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_fallback_error_no_more_fallbacks_debug() {
+        let error = FallbackError::NoMoreFallbacks {
+            last_strategy: AnalysisStrategy::Minimal,
+            last_error: "debug test".to_string(),
+        };
+        let debug = format!("{:?}", error);
+        assert!(debug.contains("NoMoreFallbacks"));
+        assert!(debug.contains("Minimal"));
+    }
 }

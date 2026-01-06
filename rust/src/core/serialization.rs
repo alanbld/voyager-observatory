@@ -702,4 +702,230 @@ mod tests {
         assert_eq!(MetadataMode::parse("size_only"), Some(MetadataMode::SizeOnly));
         assert_eq!(MetadataMode::parse("invalid"), None);
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_format_timestamp_compact_future() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Future timestamp
+        let result = format_timestamp_compact(now + 86400);
+        assert_eq!(result, "future");
+    }
+
+    #[test]
+    fn test_xml_serialize_files_wrapper() {
+        let serializer = XmlSerializer::new();
+        let file = sample_file();
+        let output = serializer.serialize_files(&[file]);
+
+        assert!(output.starts_with("<?xml version=\"1.0\""));
+        assert!(output.contains("<context>"));
+        assert!(output.contains("</context>"));
+        assert!(output.contains("<file path=\"src/main.rs\""));
+    }
+
+    #[test]
+    fn test_plusminus_serialize_files_trait() {
+        let serializer = PlusMinusSerializer::new();
+        let file = sample_file();
+        let output = serializer.serialize_files(&[file.clone(), file]);
+
+        // Should have two file entries
+        assert_eq!(output.matches("+++ src/main.rs").count(), 2);
+    }
+
+    #[test]
+    fn test_markdown_serialize_files_trait() {
+        let serializer = MarkdownSerializer::new();
+        let file = sample_file();
+        let output = serializer.serialize_files(&[file]);
+
+        assert!(output.contains("## src/main.rs"));
+    }
+
+    #[test]
+    fn test_serializer_default_constructors() {
+        let pm = PlusMinusSerializer::default();
+        assert_eq!(pm.extension(), "txt");
+
+        let xml = XmlSerializer::default();
+        assert_eq!(xml.extension(), "xml");
+
+        let md = MarkdownSerializer::default();
+        assert_eq!(md.extension(), "md");
+    }
+
+    #[test]
+    fn test_skeleton_mode_plusminus() {
+        let mut file = sample_file();
+        file.compression_level = CompressionLevel::Skeleton;
+        file.original_tokens = Some(500);
+
+        let serializer = PlusMinusSerializer::new();
+        let output = serializer.serialize_file(&file);
+
+        assert!(output.contains("[SKELETON]"));
+        assert!(output.contains("original: 500 tokens"));
+    }
+
+    #[test]
+    fn test_skeleton_mode_plusminus_no_tokens() {
+        let mut file = sample_file();
+        file.compression_level = CompressionLevel::Skeleton;
+        file.original_tokens = None;
+
+        let serializer = PlusMinusSerializer::new();
+        let output = serializer.serialize_file(&file);
+
+        assert!(output.contains("[SKELETON]"));
+        assert!(!output.contains("original:"));
+    }
+
+    #[test]
+    fn test_skeleton_mode_xml() {
+        let mut file = sample_file();
+        file.compression_level = CompressionLevel::Skeleton;
+        file.original_tokens = Some(500);
+
+        let serializer = XmlSerializer::new();
+        let output = serializer.serialize_file(&file);
+
+        assert!(output.contains("skeleton=\"true\""));
+        assert!(output.contains("original_tokens=\"500\""));
+    }
+
+    #[test]
+    fn test_skeleton_mode_xml_no_tokens() {
+        let mut file = sample_file();
+        file.compression_level = CompressionLevel::Skeleton;
+        file.original_tokens = None;
+
+        let serializer = XmlSerializer::new();
+        let output = serializer.serialize_file(&file);
+
+        assert!(output.contains("skeleton=\"true\""));
+        assert!(!output.contains("original_tokens"));
+    }
+
+    #[test]
+    fn test_skeleton_mode_markdown() {
+        let mut file = sample_file();
+        file.compression_level = CompressionLevel::Skeleton;
+        file.original_tokens = Some(500);
+
+        let serializer = MarkdownSerializer::new();
+        let output = serializer.serialize_file(&file);
+
+        assert!(output.contains("[SKELETON]"));
+        assert!(output.contains("original: 500 tokens"));
+    }
+
+    #[test]
+    fn test_skeleton_mode_markdown_no_tokens() {
+        let mut file = sample_file();
+        file.compression_level = CompressionLevel::Skeleton;
+        file.original_tokens = None;
+
+        let serializer = MarkdownSerializer::new();
+        let output = serializer.serialize_file(&file);
+
+        assert!(output.contains("[SKELETON]"));
+        assert!(!output.contains("original:"));
+    }
+
+    #[test]
+    fn test_xml_utility_brightness() {
+        let mut file = sample_file();
+        file.utility = Some(0.9);
+
+        let serializer = XmlSerializer::new();
+        let output = serializer.serialize_file(&file);
+
+        assert!(output.contains("utility=\"0.90\""));
+        assert!(output.contains("bright=\"true\""));
+    }
+
+    #[test]
+    fn test_markdown_language_detection_all() {
+        assert_eq!(MarkdownSerializer::detect_language("test.jsx"), "jsx");
+        assert_eq!(MarkdownSerializer::detect_language("test.tsx"), "tsx");
+        assert_eq!(MarkdownSerializer::detect_language("test.sh"), "bash");
+        assert_eq!(MarkdownSerializer::detect_language("test.bash"), "bash");
+        assert_eq!(MarkdownSerializer::detect_language("test.json"), "json");
+        assert_eq!(MarkdownSerializer::detect_language("test.yaml"), "yaml");
+        assert_eq!(MarkdownSerializer::detect_language("test.yml"), "yaml");
+        assert_eq!(MarkdownSerializer::detect_language("test.toml"), "toml");
+        assert_eq!(MarkdownSerializer::detect_language("test.html"), "html");
+        assert_eq!(MarkdownSerializer::detect_language("test.css"), "css");
+        assert_eq!(MarkdownSerializer::detect_language("test.sql"), "sql");
+        assert_eq!(MarkdownSerializer::detect_language("test.go"), "go");
+        assert_eq!(MarkdownSerializer::detect_language("test.java"), "java");
+        assert_eq!(MarkdownSerializer::detect_language("test.c"), "c");
+        assert_eq!(MarkdownSerializer::detect_language("test.cpp"), "cpp");
+        assert_eq!(MarkdownSerializer::detect_language("test.cc"), "cpp");
+        assert_eq!(MarkdownSerializer::detect_language("test.cxx"), "cpp");
+        assert_eq!(MarkdownSerializer::detect_language("test.h"), "cpp");
+        assert_eq!(MarkdownSerializer::detect_language("test.hpp"), "cpp");
+        assert_eq!(MarkdownSerializer::detect_language("test.rb"), "ruby");
+        assert_eq!(MarkdownSerializer::detect_language("test.php"), "php");
+    }
+
+    #[test]
+    fn test_get_serializer_claude_xml() {
+        let serializer = get_serializer(OutputFormat::ClaudeXml);
+        // ClaudeXml falls back to PlusMinus (uses XmlWriter instead)
+        assert_eq!(serializer.extension(), "txt");
+    }
+
+    #[test]
+    fn test_human_bytes_terabytes() {
+        // Test the T (terabyte) case
+        let bytes = 2_199_023_255_552_u64; // ~2TB
+        let result = human_bytes(bytes);
+        assert!(result.contains("T"));
+    }
+
+    #[test]
+    fn test_format_xml_header_attrs_auto_large_recent() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Large and recent
+        let attrs = format_xml_header_attrs(50_000, now - 86400, MetadataMode::Auto);
+        assert!(attrs.contains("size=\"50000\""));
+        assert!(attrs.contains("mtime="));
+    }
+
+    #[test]
+    fn test_format_xml_header_attrs_auto_small_old() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        // Small and old (not recent, not ancient)
+        let attrs = format_xml_header_attrs(5_000, now - (365 * 86400), MetadataMode::Auto);
+        assert!(attrs.is_empty());
+    }
+
+    #[test]
+    fn test_markdown_content_no_trailing_newline() {
+        let entry = FileEntry::new("test.rs", "fn main() {}");
+        let file = ProcessedFile::from_entry(&entry, "rust", 100);
+
+        let serializer = MarkdownSerializer::new();
+        let output = serializer.serialize_file(&file);
+
+        // Should add newline if content doesn't end with one
+        assert!(output.contains("fn main() {}\n```"));
+    }
 }

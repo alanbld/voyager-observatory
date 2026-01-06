@@ -238,4 +238,175 @@ mod tests {
         assert_eq!(defaults.truncate_lines, Some(50));
         assert_eq!(defaults.semantic_depth, SemanticDepth::Quick);
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_auto_focus_default() {
+        let auto_focus = AutoFocus::default();
+        assert_eq!(auto_focus.default_directory_truncate, 100);
+        assert_eq!(auto_focus.default_large_project_truncate, 50);
+    }
+
+    #[test]
+    fn test_auto_focus_monorepo() {
+        let auto_focus = AutoFocus::new();
+        let defaults = auto_focus.defaults_for_type(InputType::Monorepo);
+
+        // Monorepo should have very aggressive truncation
+        assert_eq!(defaults.truncate_lines, Some(30));
+        assert_eq!(defaults.semantic_depth, SemanticDepth::Quick);
+        assert_eq!(defaults.detail_level, DetailLevel::Summary);
+    }
+
+    #[test]
+    fn test_auto_focus_small_project() {
+        let auto_focus = AutoFocus::new();
+        let defaults = auto_focus.defaults_for_type(InputType::SmallProject);
+
+        assert_eq!(defaults.truncate_lines, Some(200));
+        assert_eq!(defaults.semantic_depth, SemanticDepth::Balanced);
+        assert_eq!(defaults.detail_level, DetailLevel::Smart);
+    }
+
+    #[test]
+    fn test_auto_focus_analyze() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("test.rs");
+        fs::write(&file, "fn main() {}").unwrap();
+
+        let auto_focus = AutoFocus::new();
+        let defaults = auto_focus.analyze(&file);
+
+        // Single file should have no truncation
+        assert_eq!(defaults.truncate_lines, Some(0));
+    }
+
+    #[test]
+    fn test_input_type_nonexistent_path() {
+        // Non-existent path should default to Directory
+        let path = std::path::Path::new("/nonexistent/path/123456");
+        assert_eq!(InputType::detect(path), InputType::Directory);
+    }
+
+    #[test]
+    fn test_input_type_monorepo_packages() {
+        let dir = tempdir().unwrap();
+        fs::create_dir(dir.path().join("packages")).unwrap();
+
+        assert_eq!(InputType::detect(dir.path()), InputType::Monorepo);
+    }
+
+    #[test]
+    fn test_input_type_monorepo_apps() {
+        let dir = tempdir().unwrap();
+        fs::create_dir(dir.path().join("apps")).unwrap();
+
+        assert_eq!(InputType::detect(dir.path()), InputType::Monorepo);
+    }
+
+    #[test]
+    fn test_input_type_monorepo_services() {
+        let dir = tempdir().unwrap();
+        fs::create_dir(dir.path().join("services")).unwrap();
+
+        assert_eq!(InputType::detect(dir.path()), InputType::Monorepo);
+    }
+
+    #[test]
+    fn test_input_type_monorepo_lerna() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("lerna.json"), "{}").unwrap();
+
+        assert_eq!(InputType::detect(dir.path()), InputType::Monorepo);
+    }
+
+    #[test]
+    fn test_input_type_monorepo_pnpm() {
+        let dir = tempdir().unwrap();
+        fs::write(dir.path().join("pnpm-workspace.yaml"), "").unwrap();
+
+        assert_eq!(InputType::detect(dir.path()), InputType::Monorepo);
+    }
+
+    #[test]
+    fn test_input_type_equality() {
+        assert_eq!(InputType::SingleFile, InputType::SingleFile);
+        assert_eq!(InputType::Directory, InputType::Directory);
+        assert_eq!(InputType::SmallProject, InputType::SmallProject);
+        assert_eq!(InputType::LargeProject, InputType::LargeProject);
+        assert_eq!(InputType::Monorepo, InputType::Monorepo);
+        assert_ne!(InputType::SingleFile, InputType::Directory);
+    }
+
+    #[test]
+    fn test_count_files_quick_with_hidden_dirs() {
+        let dir = tempdir().unwrap();
+
+        // Create a hidden directory with files (should be skipped)
+        fs::create_dir(dir.path().join(".hidden")).unwrap();
+        fs::write(dir.path().join(".hidden/file.txt"), "content").unwrap();
+
+        // Create regular file
+        fs::write(dir.path().join("visible.txt"), "content").unwrap();
+
+        let count = count_files_quick(dir.path(), 100);
+        assert_eq!(count, 1); // Only visible.txt
+    }
+
+    #[test]
+    fn test_count_files_quick_skips_node_modules() {
+        let dir = tempdir().unwrap();
+
+        fs::create_dir(dir.path().join("node_modules")).unwrap();
+        fs::write(dir.path().join("node_modules/dep.js"), "").unwrap();
+        fs::write(dir.path().join("index.js"), "").unwrap();
+
+        let count = count_files_quick(dir.path(), 100);
+        assert_eq!(count, 1); // Only index.js
+    }
+
+    #[test]
+    fn test_count_files_quick_skips_target() {
+        let dir = tempdir().unwrap();
+
+        fs::create_dir(dir.path().join("target")).unwrap();
+        fs::write(dir.path().join("target/debug.txt"), "").unwrap();
+        fs::write(dir.path().join("main.rs"), "").unwrap();
+
+        let count = count_files_quick(dir.path(), 100);
+        assert_eq!(count, 1); // Only main.rs
+    }
+
+    #[test]
+    fn test_count_files_respects_limit() {
+        let dir = tempdir().unwrap();
+
+        // Create 20 files
+        for i in 0..20 {
+            fs::write(dir.path().join(format!("file{}.txt", i)), "").unwrap();
+        }
+
+        // Limit to 5
+        let count = count_files_quick(dir.path(), 5);
+        assert_eq!(count, 5);
+    }
+
+    #[test]
+    fn test_defaults_have_architecture_lens() {
+        let auto_focus = AutoFocus::new();
+
+        for input_type in [
+            InputType::SingleFile,
+            InputType::SmallProject,
+            InputType::Directory,
+            InputType::LargeProject,
+            InputType::Monorepo,
+        ] {
+            let defaults = auto_focus.defaults_for_type(input_type);
+            assert_eq!(defaults.lens, Some("architecture".to_string()));
+        }
+    }
 }
