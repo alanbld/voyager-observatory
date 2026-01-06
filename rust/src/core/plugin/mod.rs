@@ -409,4 +409,135 @@ mod tests {
         let error = PluginError::Timeout { limit_ms: 5000 };
         assert!(error.to_string().contains("5000"));
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_plugin_context_creation() {
+        let mut config = HashMap::new();
+        config.insert("key".to_string(), "value".to_string());
+
+        let context = PluginContext {
+            project_root: "/project".to_string(),
+            active_lens: Some("security".to_string()),
+            symbol_count: 42,
+            language: Some("rust".to_string()),
+            config,
+        };
+
+        assert_eq!(context.project_root, "/project");
+        assert_eq!(context.active_lens, Some("security".to_string()));
+        assert_eq!(context.symbol_count, 42);
+        assert_eq!(context.language, Some("rust".to_string()));
+        assert_eq!(context.config.get("key"), Some(&"value".to_string()));
+    }
+
+    #[test]
+    fn test_plugin_result_creation() {
+        let result = PluginResult {
+            success: true,
+            execution_time_ms: 100,
+            symbols_modified: 5,
+            warnings: vec!["warn1".to_string()],
+            error: None,
+        };
+
+        assert!(result.success);
+        assert_eq!(result.execution_time_ms, 100);
+        assert_eq!(result.symbols_modified, 5);
+        assert_eq!(result.warnings.len(), 1);
+        assert!(result.error.is_none());
+    }
+
+    #[test]
+    fn test_plugin_permissions_equality() {
+        assert_eq!(PluginPermission::ReadProjectFiles, PluginPermission::ReadProjectFiles);
+        assert_ne!(PluginPermission::ReadProjectFiles, PluginPermission::ModifySymbols);
+        assert_eq!(PluginPermission::RegisterLens, PluginPermission::RegisterLens);
+        assert_eq!(PluginPermission::RegisterFormat, PluginPermission::RegisterFormat);
+        assert_eq!(PluginPermission::RegisterIntent, PluginPermission::RegisterIntent);
+        assert_eq!(PluginPermission::AccessJournal, PluginPermission::AccessJournal);
+    }
+
+    #[test]
+    fn test_plugin_error_all_variants() {
+        // NotFound
+        let e = PluginError::NotFound("plugin".to_string());
+        assert!(e.to_string().contains("not found"));
+
+        // LoadError
+        let e = PluginError::LoadError("load failed".to_string());
+        assert!(e.to_string().contains("load"));
+
+        // ExecutionError
+        let e = PluginError::ExecutionError("execution failed".to_string());
+        assert!(e.to_string().contains("execution"));
+
+        // PermissionDenied
+        let e = PluginError::PermissionDenied("filesystem".to_string());
+        assert!(e.to_string().contains("Permission denied"));
+
+        // VersionMismatch
+        let e = PluginError::VersionMismatch {
+            required: "2.0.0".to_string(),
+            found: "1.0.0".to_string(),
+        };
+        assert!(e.to_string().contains("2.0.0"));
+        assert!(e.to_string().contains("1.0.0"));
+
+        // SandboxViolation
+        let e = PluginError::SandboxViolation("forbidden".to_string());
+        assert!(e.to_string().contains("Sandbox"));
+
+        // Timeout
+        let e = PluginError::Timeout { limit_ms: 1000 };
+        assert!(e.to_string().contains("1000"));
+    }
+
+    #[test]
+    fn test_plugin_error_is_error_trait() {
+        let error: Box<dyn std::error::Error> = Box::new(PluginError::NotFound("test".to_string()));
+        assert!(error.to_string().contains("test"));
+    }
+
+    #[test]
+    fn test_placeholder_host_execute() {
+        let host = PlaceholderPluginHost;
+        let context = PluginContext {
+            project_root: "/test".to_string(),
+            active_lens: None,
+            symbol_count: 0,
+            language: None,
+            config: HashMap::new(),
+        };
+
+        let result = host.execute("any-plugin", context);
+        assert!(result.is_err());
+        match result {
+            Err(PluginError::NotFound(id)) => assert!(id.contains("any-plugin")),
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[test]
+    fn test_placeholder_host_unload() {
+        let mut host = PlaceholderPluginHost;
+        // unload_plugin is a no-op, should return Ok
+        assert!(host.unload_plugin("any").is_ok());
+    }
+
+    #[test]
+    fn test_placeholder_host_loaded_plugins() {
+        let host = PlaceholderPluginHost;
+        let plugins = host.loaded_plugins();
+        assert!(plugins.is_empty());
+    }
+
+    #[test]
+    fn test_placeholder_host_is_loaded() {
+        let host = PlaceholderPluginHost;
+        assert!(!host.is_loaded("any-plugin"));
+    }
 }

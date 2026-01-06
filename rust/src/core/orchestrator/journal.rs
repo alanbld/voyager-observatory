@@ -487,4 +487,219 @@ mod tests {
         assert!(output.contains("OBSERVER'S JOURNAL"));
         assert!(output.contains("src/lib.rs"));
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_marked_star_brightness_levels() {
+        // Test is_bright at different utility levels
+        let bright = MarkedStar::new("bright.rs", 0.95);
+        assert!(bright.is_bright());
+
+        let borderline = MarkedStar::new("borderline.rs", 0.8);
+        assert!(borderline.is_bright());
+
+        let dim = MarkedStar::new("dim.rs", 0.79);
+        assert!(!dim.is_bright());
+    }
+
+    #[test]
+    fn test_marked_star_viewed() {
+        let mut star = MarkedStar::new("test.rs", 0.9);
+        assert_eq!(star.view_count, 0);
+
+        star.viewed();
+        assert_eq!(star.view_count, 1);
+
+        star.viewed();
+        star.viewed();
+        assert_eq!(star.view_count, 3);
+    }
+
+    #[test]
+    fn test_record_view() {
+        let mut journal = ObserversJournal::new();
+        journal.mark_star("src/lib.rs", 0.9);
+
+        journal.record_view("src/lib.rs");
+        journal.record_view("src/lib.rs");
+
+        let star = journal.get_star("src/lib.rs").unwrap();
+        assert_eq!(star.view_count, 2);
+
+        // Recording view for non-existent star is a no-op
+        journal.record_view("nonexistent.rs");
+    }
+
+    #[test]
+    fn test_recent_explorations() {
+        let mut journal = ObserversJournal::new();
+
+        for i in 0..10 {
+            let entry = ExplorationEntry::new(&format!("intent-{}", i), i * 10);
+            journal.record_exploration(entry);
+        }
+
+        let recent = journal.recent_explorations(3);
+        assert_eq!(recent.len(), 3);
+
+        // Should get the most recent (last 3)
+        assert_eq!(recent[0].intent, "intent-7");
+        assert_eq!(recent[1].intent, "intent-8");
+        assert_eq!(recent[2].intent, "intent-9");
+    }
+
+    #[test]
+    fn test_exploration_pruning() {
+        let mut journal = ObserversJournal::new();
+
+        // Add more than 50 explorations
+        for i in 0..55 {
+            let entry = ExplorationEntry::new(&format!("intent-{}", i), i);
+            journal.record_exploration(entry);
+        }
+
+        // Should be capped at 50
+        assert_eq!(journal.explorations.len(), 50);
+        // But total count is accurate
+        assert_eq!(journal.total_explorations, 55);
+        // First 5 should be pruned
+        assert_eq!(journal.explorations[0].intent, "intent-5");
+    }
+
+    #[test]
+    fn test_load_from_nonexistent_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("nonexistent.json");
+        let journal = ObserversJournal::load_from_file(&path);
+
+        // Should return a new empty journal
+        assert_eq!(journal.version, "1.0.0");
+        assert!(journal.bright_stars.is_empty());
+    }
+
+    #[test]
+    fn test_load_from_invalid_json() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("invalid.json");
+        fs::write(&path, "not valid json {").unwrap();
+
+        let journal = ObserversJournal::load_from_file(&path);
+        // Should return a new empty journal on parse error
+        assert_eq!(journal.version, "1.0.0");
+    }
+
+    #[test]
+    fn test_clear_journal() {
+        let mut journal = ObserversJournal::new();
+        journal.mark_star("star1.rs", 0.9);
+        journal.mark_star("star2.rs", 0.8);
+        journal.record_exploration(ExplorationEntry::new("test", 10));
+        journal.record_ignored("pattern");
+
+        assert!(!journal.bright_stars.is_empty());
+        assert!(!journal.explorations.is_empty());
+        assert!(!journal.faded_nebulae.is_empty());
+
+        journal.clear();
+
+        assert!(journal.bright_stars.is_empty());
+        assert!(journal.explorations.is_empty());
+        assert!(journal.faded_nebulae.is_empty());
+        assert_eq!(journal.total_explorations, 0);
+    }
+
+    #[test]
+    fn test_display_with_explorations() {
+        let mut journal = ObserversJournal::new();
+
+        let mut entry = ExplorationEntry::new("security", 50);
+        entry.starting_point = Some("src/auth.rs".to_string());
+        journal.record_exploration(entry);
+
+        let output = journal.display();
+        assert!(output.contains("RECENT EXPLORATIONS"));
+        assert!(output.contains("security"));
+        assert!(output.contains("src/auth.rs"));
+    }
+
+    #[test]
+    fn test_display_with_faded_nebulae() {
+        let mut journal = ObserversJournal::new();
+
+        // Need 5+ ignores for it to show as faded
+        for _ in 0..6 {
+            journal.record_ignored("vendor/**");
+        }
+
+        let output = journal.display();
+        assert!(output.contains("FADED NEBULAE"));
+        assert!(output.contains("vendor/**"));
+    }
+
+    #[test]
+    fn test_display_star_brightness_icons() {
+        let mut journal = ObserversJournal::new();
+        journal.mark_star("super_bright.rs", 0.95); // 🌟
+        journal.mark_star("bright.rs", 0.85);       // ⭐
+        journal.mark_star_with_note("dim.rs", 0.7, "Not so important"); // ✨
+
+        let output = journal.display();
+        // Contains stars with different brightness levels
+        assert!(output.contains("super_bright.rs"));
+        assert!(output.contains("bright.rs"));
+        assert!(output.contains("dim.rs"));
+        // Note should appear
+        assert!(output.contains("Not so important"));
+    }
+
+    #[test]
+    fn test_default_path() {
+        let path = ObserversJournal::default_path(Path::new("/project"));
+        assert_eq!(path, PathBuf::from("/project/.pm_encoder/journal.json"));
+    }
+
+    #[test]
+    fn test_exploration_entry_fields() {
+        let mut entry = ExplorationEntry::new("debugging", 100);
+        entry.key_insights.push("Found memory leak".to_string());
+        entry.starting_point = Some("src/mem.rs".to_string());
+
+        assert_eq!(entry.intent, "debugging");
+        assert_eq!(entry.files_analyzed, 100);
+        assert_eq!(entry.key_insights.len(), 1);
+        assert_eq!(entry.starting_point, Some("src/mem.rs".to_string()));
+    }
+
+    #[test]
+    fn test_faded_nebula_fields() {
+        let mut journal = ObserversJournal::new();
+        journal.record_ignored("test/**");
+        journal.record_ignored("test/**");
+
+        let nebula = journal.faded_nebulae.get("test/**").unwrap();
+        assert_eq!(nebula.pattern, "test/**");
+        assert_eq!(nebula.ignore_count, 2);
+        assert!(!nebula.last_ignored.is_empty());
+    }
+
+    #[test]
+    fn test_journal_default() {
+        // Test Default trait
+        let journal: ObserversJournal = Default::default();
+        assert!(journal.bright_stars.is_empty());
+        assert!(journal.explorations.is_empty());
+    }
+
+    #[test]
+    fn test_current_timestamp() {
+        let ts = current_timestamp();
+        // Should be in ISO format
+        assert!(ts.contains("T"));
+        assert!(ts.ends_with("Z"));
+        // Should have date
+        assert!(ts.contains("-"));
+    }
 }
