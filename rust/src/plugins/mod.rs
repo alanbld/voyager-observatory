@@ -661,4 +661,98 @@ mod tests {
         let plugin = shell::ShellPlugin::new();
         assert!(plugin.supports_file(Path::new(".bashrc.sh")));
     }
+
+    // ==================== infer_concept_from_symbol Tests ====================
+
+    #[test]
+    fn test_infer_concept_from_symbol_calculation() {
+        let symbol = make_test_symbol("calculate_total");
+        let concept = infer_concept_from_symbol(&symbol);
+        assert_eq!(concept, ConceptType::Calculation);
+    }
+
+    #[test]
+    fn test_infer_concept_from_symbol_validation() {
+        let symbol = make_test_symbol("validate_input");
+        let concept = infer_concept_from_symbol(&symbol);
+        assert_eq!(concept, ConceptType::Validation);
+    }
+
+    #[test]
+    fn test_infer_concept_from_symbol_error_handling() {
+        let symbol = make_test_symbol("handle_error");
+        let concept = infer_concept_from_symbol(&symbol);
+        assert_eq!(concept, ConceptType::ErrorHandling);
+    }
+
+    #[test]
+    fn test_infer_concept_from_symbol_logging() {
+        let symbol = make_test_symbol("log_event");
+        let concept = infer_concept_from_symbol(&symbol);
+        assert_eq!(concept, ConceptType::Logging);
+    }
+
+    #[test]
+    fn test_infer_concept_from_symbol_config() {
+        let symbol = make_test_symbol("init_config");
+        let concept = infer_concept_from_symbol(&symbol);
+        assert_eq!(concept, ConceptType::Configuration);
+    }
+
+    #[test]
+    fn test_infer_concept_from_symbol_transformation() {
+        let symbol = make_test_symbol("convert_data");
+        let concept = infer_concept_from_symbol(&symbol);
+        assert_eq!(concept, ConceptType::Transformation);
+    }
+
+    #[test]
+    fn test_infer_concept_from_symbol_public() {
+        use crate::core::fractal::{ExtractedSymbol, SymbolKind, Visibility, Range};
+        let symbol = ExtractedSymbol {
+            name: "public_function".to_string(),
+            kind: SymbolKind::Function,
+            signature: "pub fn public_function()".to_string(),
+            return_type: None,
+            parameters: Vec::new(),
+            documentation: None,
+            visibility: Visibility::Public,
+            range: Range::default(),
+            calls: Vec::new(),
+        };
+        let concept = infer_concept_from_symbol(&symbol);
+        // Just verifies no panic and returns a concept
+        let _ = concept;
+    }
+
+    #[test]
+    fn test_infer_concept_type_default_impl() {
+        let plugin = shell::ShellPlugin::new();
+        let symbol = make_test_symbol("calculate_total");
+        let concept = plugin.infer_concept_type(&symbol, "");
+        assert_eq!(concept, ConceptType::Calculation);
+    }
+
+    // ==================== Additional Registry Tests ====================
+
+    #[test]
+    fn test_registry_plugins_getter() {
+        let registry = PluginRegistry::with_defaults();
+        let plugins = registry.plugins();
+        assert!(plugins.len() >= 4);
+    }
+
+    #[test]
+    fn test_registry_find_for_file_with_path() {
+        let registry = PluginRegistry::with_defaults();
+        let plugin = registry.find_for_file(Path::new("/some/path/script.sh"));
+        assert!(plugin.is_some());
+    }
+
+    #[test]
+    fn test_registry_find_for_file_empty_extension() {
+        let registry = PluginRegistry::with_defaults();
+        let plugin = registry.find_for_file(Path::new("script."));
+        assert!(plugin.is_none());
+    }
 }

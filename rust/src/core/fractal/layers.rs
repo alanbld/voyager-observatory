@@ -880,4 +880,471 @@ mod tests {
         assert_eq!(deserialized.child_ids.len(), 1);
         assert_eq!(deserialized.parent_id, Some("mod_001".to_string()));
     }
+
+    // =========================================================================
+    // Default Trait Tests
+    // =========================================================================
+
+    #[test]
+    fn test_symbol_kind_default() {
+        assert_eq!(SymbolKind::default(), SymbolKind::Unknown);
+    }
+
+    #[test]
+    fn test_block_type_default() {
+        assert_eq!(BlockType::default(), BlockType::Unknown);
+    }
+
+    #[test]
+    fn test_token_type_default() {
+        assert_eq!(TokenType::default(), TokenType::Unknown);
+    }
+
+    #[test]
+    fn test_visibility_default() {
+        assert_eq!(Visibility::default(), Visibility::Internal);
+    }
+
+    #[test]
+    fn test_dependency_kind_default() {
+        assert_eq!(DependencyKind::default(), DependencyKind::Normal);
+    }
+
+    // =========================================================================
+    // Position Tests
+    // =========================================================================
+
+    #[test]
+    fn test_position_new() {
+        let pos = Position::new(42, 10);
+        assert_eq!(pos.line, 42);
+        assert_eq!(pos.column, 10);
+    }
+
+    #[test]
+    fn test_position_default() {
+        let pos = Position::default();
+        assert_eq!(pos.line, 0);
+        assert_eq!(pos.column, 0);
+    }
+
+    // =========================================================================
+    // LayerContent zoom_level Tests (all variants)
+    // =========================================================================
+
+    #[test]
+    fn test_layer_content_zoom_level_module() {
+        let module = LayerContent::Module {
+            name: "core".to_string(),
+            path: Some(PathBuf::from("src/core")),
+            file_count: 5,
+            exports: vec!["Engine".to_string()],
+        };
+        assert_eq!(module.zoom_level(), ZoomLevel::Module);
+    }
+
+    #[test]
+    fn test_layer_content_zoom_level_block() {
+        let block = LayerContent::Block {
+            block_type: BlockType::If,
+            condition: Some("x > 0".to_string()),
+            body_preview: "...".to_string(),
+            nested_depth: 1,
+            range: Range::default(),
+        };
+        assert_eq!(block.zoom_level(), ZoomLevel::Block);
+    }
+
+    #[test]
+    fn test_layer_content_zoom_level_line() {
+        let line = LayerContent::Line {
+            number: 42,
+            text: "let x = 1;".to_string(),
+            indentation: 4,
+            is_comment: false,
+            is_blank: false,
+        };
+        assert_eq!(line.zoom_level(), ZoomLevel::Line);
+    }
+
+    #[test]
+    fn test_layer_content_zoom_level_expression() {
+        let expr = LayerContent::Expression {
+            expression: "x + y * z".to_string(),
+            type_hint: Some("i32".to_string()),
+            range: Range::default(),
+        };
+        assert_eq!(expr.zoom_level(), ZoomLevel::Expression);
+    }
+
+    #[test]
+    fn test_layer_content_zoom_level_token() {
+        let token = LayerContent::Token {
+            token_type: TokenType::Keyword,
+            value: "fn".to_string(),
+            position: Position::new(1, 1),
+        };
+        assert_eq!(token.zoom_level(), ZoomLevel::Token);
+    }
+
+    // =========================================================================
+    // LayerContent name Tests (all variants)
+    // =========================================================================
+
+    #[test]
+    fn test_layer_content_name_module() {
+        let module = LayerContent::Module {
+            name: "serialization".to_string(),
+            path: None,
+            file_count: 0,
+            exports: vec![],
+        };
+        assert_eq!(module.name(), "serialization");
+    }
+
+    #[test]
+    fn test_layer_content_name_file() {
+        let file = LayerContent::File {
+            path: PathBuf::from("src/core/engine.rs"),
+            language: "rust".to_string(),
+            size_bytes: 0,
+            line_count: 0,
+            symbol_count: 0,
+            imports: vec![],
+        };
+        assert_eq!(file.name(), "engine.rs");
+    }
+
+    #[test]
+    fn test_layer_content_name_block_all_types() {
+        let test_cases = [
+            (BlockType::If, "if"),
+            (BlockType::Else, "else"),
+            (BlockType::ElseIf, "else if"),
+            (BlockType::For, "for"),
+            (BlockType::While, "while"),
+            (BlockType::Loop, "loop"),
+            (BlockType::Match, "match"),
+            (BlockType::Case, "case"),
+            (BlockType::Try, "try"),
+            (BlockType::Catch, "catch"),
+            (BlockType::Finally, "finally"),
+            (BlockType::With, "with"),
+            (BlockType::Unsafe, "unsafe"),
+            (BlockType::Async, "async"),
+            (BlockType::Closure, "closure"),
+            (BlockType::Unknown, "block"),
+        ];
+
+        for (block_type, expected_name) in test_cases {
+            let block = LayerContent::Block {
+                block_type: block_type.clone(),
+                condition: None,
+                body_preview: String::new(),
+                nested_depth: 0,
+                range: Range::default(),
+            };
+            assert_eq!(block.name(), expected_name, "BlockType::{:?} should have name '{}'", block_type, expected_name);
+        }
+    }
+
+    #[test]
+    fn test_layer_content_name_line_returns_empty() {
+        let line = LayerContent::Line {
+            number: 100,
+            text: "return result;".to_string(),
+            indentation: 8,
+            is_comment: false,
+            is_blank: false,
+        };
+        assert_eq!(line.name(), "");
+    }
+
+    #[test]
+    fn test_layer_content_name_expression_short() {
+        let expr = LayerContent::Expression {
+            expression: "x + y".to_string(),
+            type_hint: None,
+            range: Range::default(),
+        };
+        assert_eq!(expr.name(), "x + y");
+    }
+
+    #[test]
+    fn test_layer_content_name_expression_long_truncated() {
+        let expr = LayerContent::Expression {
+            expression: "some_very_long_expression_that_exceeds_twenty_characters".to_string(),
+            type_hint: None,
+            range: Range::default(),
+        };
+        assert_eq!(expr.name(), "some_very_long_expre");
+        assert_eq!(expr.name().len(), 20);
+    }
+
+    #[test]
+    fn test_layer_content_name_token() {
+        let token = LayerContent::Token {
+            token_type: TokenType::Identifier,
+            value: "my_variable".to_string(),
+            position: Position::default(),
+        };
+        assert_eq!(token.name(), "my_variable");
+    }
+
+    // =========================================================================
+    // ContextLayer with_metadata Test
+    // =========================================================================
+
+    #[test]
+    fn test_context_layer_with_metadata() {
+        let content = LayerContent::Symbol {
+            name: "test".to_string(),
+            kind: SymbolKind::Function,
+            signature: String::new(),
+            return_type: None,
+            parameters: vec![],
+            documentation: None,
+            visibility: Visibility::default(),
+            range: Range::default(),
+        };
+
+        let mut metadata = LayerMetadata::default();
+        metadata.source_line = 42;
+        metadata.extraction_method = "ast".to_string();
+        metadata.confidence = 0.95;
+        metadata.properties.insert("test_key".to_string(), "test_value".to_string());
+
+        let layer = ContextLayer::new("test_layer", content)
+            .with_metadata(metadata);
+
+        assert_eq!(layer.metadata.source_line, 42);
+        assert_eq!(layer.metadata.extraction_method, "ast");
+        assert_eq!(layer.metadata.confidence, 0.95);
+        assert_eq!(layer.metadata.properties.get("test_key"), Some(&"test_value".to_string()));
+    }
+
+    #[test]
+    fn test_context_layer_name() {
+        let content = LayerContent::Project {
+            name: "my_awesome_project".to_string(),
+            description: Some("A test project".to_string()),
+            root_path: Some(PathBuf::from("/home/user/project")),
+            file_count: 42,
+            dependencies: vec![],
+        };
+
+        let layer = ContextLayer::new("proj_001", content);
+        assert_eq!(layer.name(), "my_awesome_project");
+    }
+
+    // =========================================================================
+    // ZoomLevel Display Tests (remaining variants)
+    // =========================================================================
+
+    #[test]
+    fn test_zoom_level_display_all() {
+        assert_eq!(format!("{}", ZoomLevel::Project), "project");
+        assert_eq!(format!("{}", ZoomLevel::Module), "module");
+        assert_eq!(format!("{}", ZoomLevel::File), "file");
+        assert_eq!(format!("{}", ZoomLevel::Symbol), "symbol");
+        assert_eq!(format!("{}", ZoomLevel::Block), "block");
+        assert_eq!(format!("{}", ZoomLevel::Line), "line");
+        assert_eq!(format!("{}", ZoomLevel::Expression), "expression");
+        assert_eq!(format!("{}", ZoomLevel::Token), "token");
+    }
+
+    // =========================================================================
+    // Dependency Tests
+    // =========================================================================
+
+    #[test]
+    fn test_dependency_creation() {
+        let dep = Dependency {
+            name: "serde".to_string(),
+            version: Some("1.0".to_string()),
+            kind: DependencyKind::Normal,
+        };
+        assert_eq!(dep.name, "serde");
+        assert_eq!(dep.version, Some("1.0".to_string()));
+        assert_eq!(dep.kind, DependencyKind::Normal);
+    }
+
+    #[test]
+    fn test_dependency_kinds() {
+        assert_eq!(DependencyKind::Normal, DependencyKind::default());
+
+        // Ensure all kinds are distinct
+        let kinds = [
+            DependencyKind::Normal,
+            DependencyKind::Dev,
+            DependencyKind::Build,
+            DependencyKind::Optional,
+        ];
+        for (i, k1) in kinds.iter().enumerate() {
+            for (j, k2) in kinds.iter().enumerate() {
+                if i != j {
+                    assert_ne!(k1, k2);
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // Import Tests
+    // =========================================================================
+
+    #[test]
+    fn test_import_creation() {
+        let import = Import {
+            module: "std::collections".to_string(),
+            items: vec!["HashMap".to_string(), "HashSet".to_string()],
+            alias: Some("coll".to_string()),
+            line: 5,
+        };
+        assert_eq!(import.module, "std::collections");
+        assert_eq!(import.items.len(), 2);
+        assert_eq!(import.alias, Some("coll".to_string()));
+        assert_eq!(import.line, 5);
+    }
+
+    // =========================================================================
+    // Parameter Tests
+    // =========================================================================
+
+    #[test]
+    fn test_parameter_creation() {
+        let param = Parameter {
+            name: "count".to_string(),
+            type_hint: Some("usize".to_string()),
+            default_value: Some("0".to_string()),
+        };
+        assert_eq!(param.name, "count");
+        assert_eq!(param.type_hint, Some("usize".to_string()));
+        assert_eq!(param.default_value, Some("0".to_string()));
+    }
+
+    // =========================================================================
+    // SymbolKind Variants Test
+    // =========================================================================
+
+    #[test]
+    fn test_symbol_kind_variants_distinct() {
+        let kinds = [
+            SymbolKind::Function,
+            SymbolKind::Method,
+            SymbolKind::Class,
+            SymbolKind::Struct,
+            SymbolKind::Enum,
+            SymbolKind::Trait,
+            SymbolKind::Interface,
+            SymbolKind::Module,
+            SymbolKind::Constant,
+            SymbolKind::Variable,
+            SymbolKind::Type,
+            SymbolKind::Macro,
+            SymbolKind::Test,
+            SymbolKind::Unknown,
+        ];
+
+        // All variants should be distinct
+        for (i, k1) in kinds.iter().enumerate() {
+            for (j, k2) in kinds.iter().enumerate() {
+                if i != j {
+                    assert_ne!(k1, k2);
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // TokenType Variants Test
+    // =========================================================================
+
+    #[test]
+    fn test_token_type_variants_distinct() {
+        let types = [
+            TokenType::Keyword,
+            TokenType::Identifier,
+            TokenType::Literal,
+            TokenType::Operator,
+            TokenType::Punctuation,
+            TokenType::Comment,
+            TokenType::Whitespace,
+            TokenType::Unknown,
+        ];
+
+        for (i, t1) in types.iter().enumerate() {
+            for (j, t2) in types.iter().enumerate() {
+                if i != j {
+                    assert_ne!(t1, t2);
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // Visibility Variants Test
+    // =========================================================================
+
+    #[test]
+    fn test_visibility_variants() {
+        let vis = [
+            Visibility::Public,
+            Visibility::Private,
+            Visibility::Protected,
+            Visibility::Internal,
+        ];
+
+        for (i, v1) in vis.iter().enumerate() {
+            for (j, v2) in vis.iter().enumerate() {
+                if i != j {
+                    assert_ne!(v1, v2);
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // Range Edge Cases
+    // =========================================================================
+
+    #[test]
+    fn test_range_default() {
+        let range = Range::default();
+        assert_eq!(range.start_line, 0);
+        assert_eq!(range.start_col, 0);
+        assert_eq!(range.end_line, 0);
+        assert_eq!(range.end_col, 0);
+    }
+
+    #[test]
+    fn test_range_single_line_properties() {
+        let range = Range::single_line(42);
+        assert_eq!(range.start_line, 42);
+        assert_eq!(range.end_line, 42);
+        assert_eq!(range.start_col, 0);
+        assert_eq!(range.end_col, usize::MAX);
+        assert!(range.contains_line(42));
+        assert!(!range.contains_line(41));
+        assert!(!range.contains_line(43));
+    }
+
+    #[test]
+    fn test_range_line_count_same_line() {
+        let range = Range::new(5, 0, 5, 10);
+        assert_eq!(range.line_count(), 1);
+    }
+
+    // =========================================================================
+    // LayerMetadata Tests
+    // =========================================================================
+
+    #[test]
+    fn test_layer_metadata_default() {
+        let meta = LayerMetadata::default();
+        assert_eq!(meta.source_line, 0);
+        assert_eq!(meta.extraction_method, "");
+        assert_eq!(meta.confidence, 0.0);
+        assert!(meta.properties.is_empty());
+    }
 }

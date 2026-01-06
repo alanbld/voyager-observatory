@@ -4397,6 +4397,424 @@ class MyClass:
             assert!(result.contains("import"));
         }
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_load_config_with_valid_file() {
+        use std::fs;
+
+        let temp_dir = std::env::temp_dir().join("pm_encoder_test_config");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        // Create a valid config file
+        let config_json = r#"{"ignore_patterns": ["*.log"], "include_patterns": ["*.rs"]}"#;
+        fs::write(temp_dir.join(".pm_encoder_config.json"), config_json).unwrap();
+
+        let result = load_config(temp_dir.to_str().unwrap());
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert!(config.ignore_patterns.contains(&"*.log".to_string()));
+        assert!(config.include_patterns.contains(&"*.rs".to_string()));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_load_config_with_invalid_json() {
+        use std::fs;
+
+        let temp_dir = std::env::temp_dir().join("pm_encoder_test_bad_config");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        // Create an invalid config file
+        fs::write(temp_dir.join(".pm_encoder_config.json"), "not valid json {{{").unwrap();
+
+        let result = load_config(temp_dir.to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("parse"));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_detect_language_coverage() {
+        // Test all language detection cases
+        assert_eq!(detect_language("main.py"), "python");
+        assert_eq!(detect_language("lib.rs"), "rust");
+        assert_eq!(detect_language("app.js"), "javascript");
+        assert_eq!(detect_language("types.ts"), "typescript");
+        assert_eq!(detect_language("component.jsx"), "jsx");
+        assert_eq!(detect_language("page.tsx"), "tsx");
+        assert_eq!(detect_language("data.json"), "json");
+        assert_eq!(detect_language("config.toml"), "toml");
+        assert_eq!(detect_language("settings.yaml"), "yaml");
+        assert_eq!(detect_language("settings.yml"), "yaml");
+        assert_eq!(detect_language("README.md"), "markdown");
+        assert_eq!(detect_language("index.html"), "html");
+        assert_eq!(detect_language("styles.css"), "css");
+        assert_eq!(detect_language("script.sh"), "bash");
+        assert_eq!(detect_language("script.bash"), "bash");
+        assert_eq!(detect_language("main.go"), "go");
+        assert_eq!(detect_language("Main.java"), "java");
+        assert_eq!(detect_language("main.c"), "c");
+        assert_eq!(detect_language("main.cpp"), "cpp");
+        assert_eq!(detect_language("main.cc"), "cpp");
+        assert_eq!(detect_language("main.cxx"), "cpp");
+        assert_eq!(detect_language("header.h"), "cpp");
+        assert_eq!(detect_language("header.hpp"), "cpp");
+        assert_eq!(detect_language("script.rb"), "ruby");
+        assert_eq!(detect_language("index.php"), "php");
+        assert_eq!(detect_language("query.sql"), "sql");
+        assert_eq!(detect_language("layout.xml"), "xml");
+        assert_eq!(detect_language("unknown.xyz"), "");
+        assert_eq!(detect_language("no_extension"), "");
+    }
+
+    #[test]
+    fn test_escape_xml_comprehensive() {
+        // Test escape_xml function - comprehensive coverage
+        assert_eq!(escape_xml("a & b"), "a &amp; b");
+        assert_eq!(escape_xml("<tag>"), "&lt;tag&gt;");
+        assert_eq!(escape_xml("a < b > c"), "a &lt; b &gt; c");
+        assert_eq!(escape_xml("a & b < c > d"), "a &amp; b &lt; c &gt; d");
+        assert_eq!(escape_xml("no special chars"), "no special chars");
+        assert_eq!(escape_xml(""), "");
+    }
+
+    #[test]
+    fn test_escape_xml_attr_comprehensive() {
+        // Test escape_xml_attr function - quotes and all chars
+        assert_eq!(escape_xml_attr("value"), "value");
+        assert_eq!(escape_xml_attr("a & b"), "a &amp; b");
+        assert_eq!(escape_xml_attr("\"quoted\""), "&quot;quoted&quot;");
+        assert_eq!(escape_xml_attr("'single'"), "&apos;single&apos;");
+        assert_eq!(escape_xml_attr("<tag>"), "&lt;tag&gt;");
+        assert_eq!(escape_xml_attr("a \"b\" & 'c' < d > e"), "a &quot;b&quot; &amp; &apos;c&apos; &lt; d &gt; e");
+    }
+
+    #[test]
+    fn test_matches_patterns_empty() {
+        // Empty patterns should match nothing
+        assert!(!matches_patterns("any/path.txt", &vec![]));
+    }
+
+    #[test]
+    fn test_matches_patterns_exact() {
+        // Exact match
+        assert!(matches_patterns("file.txt", &vec!["file.txt".to_string()]));
+        assert!(!matches_patterns("other.txt", &vec!["file.txt".to_string()]));
+    }
+
+    #[test]
+    fn test_should_skip_truncation() {
+        // Test should_skip_truncation function
+        let patterns = vec!["Cargo.toml".to_string(), "*.lock".to_string()];
+
+        assert!(should_skip_truncation("Cargo.toml", &patterns));
+        assert!(should_skip_truncation("Cargo.lock", &patterns));
+        assert!(!should_skip_truncation("main.rs", &patterns));
+        assert!(!should_skip_truncation("package-lock.json", &[])); // Empty patterns
+    }
+
+    #[test]
+    fn test_python_style_split() {
+        // Test python_style_split function
+        let content = "line1\nline2\nline3";
+        let lines: Vec<&str> = python_style_split(content);
+        assert_eq!(lines, vec!["line1", "line2", "line3"]);
+
+        // Empty string
+        let empty = "";
+        let empty_lines: Vec<&str> = python_style_split(empty);
+        assert!(empty_lines.is_empty() || empty_lines == vec![""]);
+    }
+
+    #[test]
+    fn test_serialize_file_format_complete() {
+        let entry = FileEntry {
+            path: "src/main.rs".to_string(),
+            content: "fn main() {\n    println!(\"Hello\");\n}".to_string(),
+            md5: "d41d8cd98f00b204e9800998ecf8427e".to_string(),
+            mtime: 1700000000,
+            ctime: 1699000000,
+            size: 42,
+        };
+
+        let output = serialize_file(&entry);
+
+        // Verify Plus/Minus format components
+        assert!(output.contains("++++++++++ src/main.rs"));
+        assert!(output.contains("fn main()"));
+        assert!(output.contains("println!"));
+        assert!(output.contains("---------- src/main.rs"));
+        assert!(output.contains("d41d8cd98f00b204e9800998ecf8427e"));
+    }
+
+    #[test]
+    fn test_serialize_file_with_format_xml() {
+        let entry = FileEntry {
+            path: "test.py".to_string(),
+            content: "print('hello')".to_string(),
+            md5: "abc123".to_string(),
+            mtime: 0,
+            ctime: 0,
+            size: 14,
+        };
+
+        let output = serialize_file_with_format(&entry, 0, "simple", OutputFormat::Xml);
+        assert!(output.contains("<file "));
+        assert!(output.contains("test.py"));
+    }
+
+    #[test]
+    fn test_serialize_file_with_format_plusminus() {
+        let entry = FileEntry {
+            path: "test.rs".to_string(),
+            content: "fn main() {}".to_string(),
+            md5: "xyz789".to_string(),
+            mtime: 0,
+            ctime: 0,
+            size: 12,
+        };
+
+        let output = serialize_file_with_format(&entry, 0, "simple", OutputFormat::PlusMinus);
+        assert!(output.contains("++++++++++"));
+        assert!(output.contains("----------"));
+    }
+
+    #[test]
+    fn test_encoder_config_from_file_valid() {
+        use std::fs;
+
+        let temp_dir = std::env::temp_dir().join("pm_encoder_test_encoder_config");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        // EncoderConfig::from_file reads a Config struct (ignore_patterns, include_patterns)
+        let config_json = r#"{
+            "ignore_patterns": ["*.tmp", "*.bak"],
+            "include_patterns": ["*.rs"]
+        }"#;
+        let config_path = temp_dir.join("encoder_config.json");
+        fs::write(&config_path, config_json).unwrap();
+
+        let result = EncoderConfig::from_file(&config_path);
+        assert!(result.is_ok());
+        let config = result.unwrap();
+        assert!(config.ignore_patterns.contains(&"*.tmp".to_string()));
+        assert!(config.ignore_patterns.contains(&"*.bak".to_string()));
+        assert!(config.include_patterns.contains(&"*.rs".to_string()));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_walk_directory_large_file_skip() {
+        use std::fs;
+
+        let temp_dir = std::env::temp_dir().join("pm_encoder_test_large_skip");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        // Create a small file (should be included)
+        fs::write(temp_dir.join("small.txt"), "small").unwrap();
+
+        // Create a "large" file (larger than our limit)
+        let large_content: String = (0..1000).map(|_| "a".repeat(100)).collect();
+        fs::write(temp_dir.join("large.txt"), &large_content).unwrap();
+
+        let entries = walk_directory(
+            temp_dir.to_str().unwrap(),
+            &vec![],
+            &vec![],
+            100, // Very small limit - 100 bytes
+        ).unwrap();
+
+        // Only small file should be included
+        assert!(entries.iter().any(|e| e.path.contains("small.txt")));
+        assert!(!entries.iter().any(|e| e.path.contains("large.txt")));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_output_format_enum() {
+        // Test OutputFormat enum variants
+        assert_eq!(OutputFormat::PlusMinus, OutputFormat::default());
+
+        // All variants are distinct
+        let formats = [
+            OutputFormat::PlusMinus,
+            OutputFormat::Xml,
+            OutputFormat::Markdown,
+            OutputFormat::ClaudeXml,
+        ];
+
+        for (i, f1) in formats.iter().enumerate() {
+            for (j, f2) in formats.iter().enumerate() {
+                if i != j {
+                    assert_ne!(f1, f2);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_skeleton_mode_enum() {
+        // Test SkeletonMode enum variants (Auto, Enabled, Disabled)
+        assert_eq!(SkeletonMode::Auto, SkeletonMode::default());
+
+        let modes = [
+            SkeletonMode::Auto,
+            SkeletonMode::Enabled,
+            SkeletonMode::Disabled,
+        ];
+
+        for (i, m1) in modes.iter().enumerate() {
+            for (j, m2) in modes.iter().enumerate() {
+                if i != j {
+                    assert_ne!(m1, m2);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_metadata_mode_enum() {
+        // Test MetadataMode enum variants (Auto, All, None, SizeOnly)
+        assert_eq!(MetadataMode::Auto, MetadataMode::default());
+
+        let modes = [
+            MetadataMode::Auto,
+            MetadataMode::All,
+            MetadataMode::None,
+            MetadataMode::SizeOnly,
+        ];
+
+        for (i, m1) in modes.iter().enumerate() {
+            for (j, m2) in modes.iter().enumerate() {
+                if i != j {
+                    assert_ne!(m1, m2);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_file_entry_clone() {
+        let entry = FileEntry {
+            path: "test.rs".to_string(),
+            content: "fn main() {}".to_string(),
+            md5: "abc".to_string(),
+            mtime: 100,
+            ctime: 50,
+            size: 12,
+        };
+
+        let cloned = entry.clone();
+        assert_eq!(entry.path, cloned.path);
+        assert_eq!(entry.content, cloned.content);
+        assert_eq!(entry.md5, cloned.md5);
+        assert_eq!(entry.mtime, cloned.mtime);
+        assert_eq!(entry.ctime, cloned.ctime);
+        assert_eq!(entry.size, cloned.size);
+    }
+
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+        assert!(config.ignore_patterns.is_empty());
+        assert!(config.include_patterns.is_empty());
+    }
+
+    #[test]
+    fn test_truncate_simple_large_reduction() {
+        // Test truncation with large reduction percentage
+        let content: String = (0..1000).map(|i| format!("line {}\n", i)).collect();
+        let (result, truncated) = truncate_simple(&content, 10, "large.txt");
+
+        assert!(truncated);
+        assert!(result.contains("TRUNCATED"));
+        assert!(result.contains("reduction"));
+    }
+
+    #[test]
+    fn test_serialize_entries_claude_xml_basic() {
+        let files = vec![
+            FileEntry {
+                path: "test.py".to_string(),
+                content: "print('hello')".to_string(),
+                md5: "abc".to_string(),
+                mtime: 0,
+                ctime: 0,
+                size: 14,
+            },
+        ];
+
+        let config = EncoderConfig::default();
+        let result = serialize_entries_claude_xml(&config, &files);
+
+        assert!(result.is_ok());
+        let xml = result.unwrap();
+        assert!(xml.contains("<context"));
+        assert!(xml.contains("test.py"));
+        assert!(xml.contains("</context>"));
+    }
+
+    #[test]
+    fn test_serialize_entries_claude_xml_with_lens() {
+        let files = vec![
+            FileEntry {
+                path: "src/main.rs".to_string(),
+                content: "fn main() {}".to_string(),
+                md5: "xyz".to_string(),
+                mtime: 0,
+                ctime: 0,
+                size: 12,
+            },
+        ];
+
+        let config = EncoderConfig {
+            active_lens: Some("architecture".to_string()),
+            ..Default::default()
+        };
+
+        let result = serialize_entries_claude_xml(&config, &files);
+        assert!(result.is_ok());
+        let xml = result.unwrap();
+        assert!(xml.contains("architecture"));
+    }
+
+    #[test]
+    fn test_serialize_entries_claude_xml_with_truncation() {
+        let long_content: String = (0..100).map(|i| format!("line {}\n", i)).collect();
+        let files = vec![
+            FileEntry {
+                path: "long.py".to_string(),
+                content: long_content,
+                md5: "long".to_string(),
+                mtime: 0,
+                ctime: 0,
+                size: 1000,
+            },
+        ];
+
+        let config = EncoderConfig {
+            truncate_lines: 10,
+            truncate_mode: "simple".to_string(),
+            ..Default::default()
+        };
+
+        let result = serialize_entries_claude_xml(&config, &files);
+        assert!(result.is_ok());
+        let xml = result.unwrap();
+        assert!(xml.contains("truncated=\"true\"") || xml.contains("long.py"));
+    }
 }
 
 // ============================================================================

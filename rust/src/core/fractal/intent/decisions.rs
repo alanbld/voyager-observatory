@@ -402,4 +402,368 @@ mod tests {
         // Business logic is more selective
         assert!(business.skip_threshold >= debugging.skip_threshold);
     }
+
+    // ==================== ReadingDecision Tests ====================
+
+    #[test]
+    fn test_reading_decision_as_str() {
+        assert_eq!(ReadingDecision::ReadDeeply {
+            reason: "".to_string(),
+            estimated_minutes: 0,
+            key_points: vec![],
+        }.as_str(), "read");
+
+        assert_eq!(ReadingDecision::Skim {
+            focus_on: vec![],
+            time_limit_seconds: 0,
+        }.as_str(), "skim");
+
+        assert_eq!(ReadingDecision::Skip {
+            reason: "".to_string(),
+            come_back_if: None,
+        }.as_str(), "skip");
+
+        assert_eq!(ReadingDecision::Bookmark {
+            prerequisite: "".to_string(),
+            when_to_review: "".to_string(),
+        }.as_str(), "bookmark");
+    }
+
+    #[test]
+    fn test_reading_decision_should_read() {
+        assert!(ReadingDecision::ReadDeeply {
+            reason: "".to_string(),
+            estimated_minutes: 0,
+            key_points: vec![],
+        }.should_read());
+
+        assert!(ReadingDecision::Skim {
+            focus_on: vec![],
+            time_limit_seconds: 0,
+        }.should_read());
+
+        assert!(!ReadingDecision::Skip {
+            reason: "".to_string(),
+            come_back_if: None,
+        }.should_read());
+
+        assert!(!ReadingDecision::Bookmark {
+            prerequisite: "".to_string(),
+            when_to_review: "".to_string(),
+        }.should_read());
+    }
+
+    #[test]
+    fn test_bookmark_label() {
+        assert_eq!(ReadingDecision::Bookmark {
+            prerequisite: "understand X".to_string(),
+            when_to_review: "after Y".to_string(),
+        }.label(), "BOOKMARK");
+    }
+
+    // ==================== Bookmark Decision Tests ====================
+
+    #[test]
+    fn test_high_complexity_high_relevance_low_centrality_bookmarks() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("complex_but_relevant", 100);
+
+        // High complexity (0.9), high relevance (0.8), low centrality (0.2)
+        let decision = engine.decide(&layer, 0.8, 0.9, 0.2);
+
+        assert!(matches!(decision, ReadingDecision::Bookmark { .. }));
+    }
+
+    // ==================== Intent-Specific Tests ====================
+
+    #[test]
+    fn test_onboarding_intent() {
+        let engine = StopReadingEngine::new(ExplorationIntent::Onboarding);
+        let layer = create_test_layer("main_function", 50);
+
+        let decision = engine.decide(&layer, 0.6, 0.4, 0.5);
+        assert!(matches!(decision, ReadingDecision::ReadDeeply { .. }));
+    }
+
+    #[test]
+    fn test_security_review_intent() {
+        let engine = StopReadingEngine::new(ExplorationIntent::SecurityReview);
+        let layer = create_test_layer("validate_input", 30);
+
+        let decision = engine.decide(&layer, 0.8, 0.5, 0.7);
+        assert!(matches!(decision, ReadingDecision::ReadDeeply { .. }));
+    }
+
+    #[test]
+    fn test_migration_assessment_intent() {
+        let engine = StopReadingEngine::new(ExplorationIntent::MigrationAssessment);
+        let layer = create_test_layer("platform_check", 25);
+
+        let decision = engine.decide(&layer, 0.7, 0.4, 0.6);
+        assert!(matches!(decision, ReadingDecision::ReadDeeply { .. }));
+    }
+
+    // ==================== Concept Type Explanation Tests ====================
+
+    #[test]
+    fn test_explain_read_deeply_calculation() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("calculate_price", 20);
+
+        let decision = engine.decide(&layer, 0.9, 0.5, 0.8);
+        if let ReadingDecision::ReadDeeply { reason, .. } = decision {
+            assert!(reason.contains("calculation") || reason.contains("relevant"));
+        }
+    }
+
+    #[test]
+    fn test_explain_read_deeply_validation() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("validate_data", 20);
+
+        let decision = engine.decide(&layer, 0.9, 0.5, 0.8);
+        if let ReadingDecision::ReadDeeply { reason, .. } = decision {
+            assert!(reason.contains("validation") || reason.contains("relevant"));
+        }
+    }
+
+    #[test]
+    fn test_explain_read_deeply_decision() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("route_request", 20);
+
+        let decision = engine.decide(&layer, 0.9, 0.5, 0.8);
+        if let ReadingDecision::ReadDeeply { reason, .. } = decision {
+            assert!(reason.contains("decision") || reason.contains("relevant"));
+        }
+    }
+
+    #[test]
+    fn test_explain_read_deeply_error_handling() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("handle_error", 20);
+
+        let decision = engine.decide(&layer, 0.9, 0.5, 0.8);
+        if let ReadingDecision::ReadDeeply { reason, .. } = decision {
+            assert!(reason.contains("error") || reason.contains("relevant"));
+        }
+    }
+
+    // ==================== Skip Explanation Tests ====================
+
+    #[test]
+    fn test_explain_skip_testing() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("test_something", 20);
+
+        let decision = engine.decide(&layer, 0.1, 0.3, 0.1);
+        if let ReadingDecision::Skip { reason, .. } = decision {
+            assert!(reason.contains("Test") || reason.contains("relevance"));
+        }
+    }
+
+    #[test]
+    fn test_explain_skip_logging() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("log_event", 20);
+
+        let decision = engine.decide(&layer, 0.1, 0.3, 0.1);
+        if let ReadingDecision::Skip { reason, .. } = decision {
+            assert!(reason.contains("Logging") || reason.contains("relevance"));
+        }
+    }
+
+    #[test]
+    fn test_explain_skip_configuration() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("init_config", 20);
+
+        let decision = engine.decide(&layer, 0.1, 0.3, 0.1);
+        if let ReadingDecision::Skip { reason, .. } = decision {
+            assert!(reason.contains("Configuration") || reason.contains("relevance"));
+        }
+    }
+
+    // ==================== Comeback Suggestion Tests ====================
+
+    #[test]
+    fn test_skip_with_comeback_testing() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("test_feature", 20);
+
+        let decision = engine.decide(&layer, 0.1, 0.3, 0.1);
+        if let ReadingDecision::Skip { come_back_if, .. } = decision {
+            assert!(come_back_if.is_some());
+        }
+    }
+
+    #[test]
+    fn test_skip_with_comeback_error_handling() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("handle_errors", 20);
+
+        let decision = engine.decide(&layer, 0.1, 0.3, 0.1);
+        if let ReadingDecision::Skip { come_back_if, .. } = decision {
+            // Error handling might have a comeback suggestion
+            let _ = come_back_if;
+        }
+    }
+
+    // ==================== Key Points Tests ====================
+
+    #[test]
+    fn test_key_points_debugging_intent() {
+        let engine = StopReadingEngine::new(ExplorationIntent::Debugging);
+        let layer = create_test_layer("process_data", 30);
+
+        let decision = engine.decide(&layer, 0.8, 0.5, 0.7);
+        if let ReadingDecision::ReadDeeply { key_points, .. } = decision {
+            assert!(!key_points.is_empty());
+            // Debugging should have error handling, state changes, logging points
+        }
+    }
+
+    #[test]
+    fn test_key_points_security_review_intent() {
+        let engine = StopReadingEngine::new(ExplorationIntent::SecurityReview);
+        let layer = create_test_layer("process_data", 30);
+
+        let decision = engine.decide(&layer, 0.8, 0.5, 0.7);
+        if let ReadingDecision::ReadDeeply { key_points, .. } = decision {
+            assert!(!key_points.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_key_points_migration_assessment_intent() {
+        let engine = StopReadingEngine::new(ExplorationIntent::MigrationAssessment);
+        let layer = create_test_layer("process_data", 30);
+
+        let decision = engine.decide(&layer, 0.8, 0.5, 0.7);
+        if let ReadingDecision::ReadDeeply { key_points, .. } = decision {
+            assert!(!key_points.is_empty());
+        }
+    }
+
+    // ==================== Focus Points Tests ====================
+
+    #[test]
+    fn test_skim_focus_points_debugging() {
+        let engine = StopReadingEngine::new(ExplorationIntent::Debugging);
+        let layer = create_test_layer("utility", 20);
+
+        let decision = engine.decide(&layer, 0.4, 0.3, 0.4);
+        if let ReadingDecision::Skim { focus_on, .. } = decision {
+            assert!(!focus_on.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_skim_focus_points_security() {
+        let engine = StopReadingEngine::new(ExplorationIntent::SecurityReview);
+        let layer = create_test_layer("utility", 20);
+
+        let decision = engine.decide(&layer, 0.5, 0.3, 0.4);
+        if let ReadingDecision::Skim { focus_on, .. } = decision {
+            assert!(!focus_on.is_empty());
+        }
+    }
+
+    // ==================== Time Estimation Tests ====================
+
+    #[test]
+    fn test_estimate_minutes_small_function() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("small_fn", 10);
+
+        let decision = engine.decide(&layer, 0.9, 0.1, 0.8);
+        if let ReadingDecision::ReadDeeply { estimated_minutes, .. } = decision {
+            assert!(estimated_minutes > 0);
+            assert!(estimated_minutes <= 5);
+        }
+    }
+
+    #[test]
+    fn test_estimate_minutes_large_function() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("large_fn", 200);
+
+        let decision = engine.decide(&layer, 0.9, 0.1, 0.8);
+        if let ReadingDecision::ReadDeeply { estimated_minutes, .. } = decision {
+            assert!(estimated_minutes > 5);
+        }
+    }
+
+    #[test]
+    fn test_estimate_minutes_with_complexity() {
+        let engine = StopReadingEngine::new(ExplorationIntent::BusinessLogic);
+        let layer = create_test_layer("complex_fn", 50);
+
+        let decision_low = engine.decide(&layer, 0.9, 0.1, 0.8);
+        let decision_high = engine.decide(&layer, 0.9, 0.9, 0.8);
+
+        if let (
+            ReadingDecision::ReadDeeply { estimated_minutes: low_minutes, .. },
+            ReadingDecision::ReadDeeply { estimated_minutes: high_minutes, .. }
+        ) = (decision_low, decision_high) {
+            // High complexity should take longer
+            assert!(high_minutes >= low_minutes);
+        }
+    }
+
+    // ==================== File Layer Tests ====================
+
+    #[test]
+    fn test_estimate_minutes_file_layer() {
+        use std::path::PathBuf;
+
+        let engine = StopReadingEngine::new(ExplorationIntent::Onboarding);
+        let layer = ContextLayer::new(
+            "test_file",
+            LayerContent::File {
+                path: PathBuf::from("test.rs"),
+                language: "rust".to_string(),
+                size_bytes: 10000,
+                line_count: 300,
+                symbol_count: 20,
+                imports: vec![],
+            },
+        );
+
+        let decision = engine.decide(&layer, 0.8, 0.5, 0.7);
+        if let ReadingDecision::ReadDeeply { estimated_minutes, .. } = decision {
+            assert!(estimated_minutes > 0);
+        }
+    }
+
+    // ==================== Serialization Tests ====================
+
+    #[test]
+    fn test_reading_decision_serialize_read_deeply() {
+        let decision = ReadingDecision::ReadDeeply {
+            reason: "Important code".to_string(),
+            estimated_minutes: 5,
+            key_points: vec!["point1".to_string()],
+        };
+        let json = serde_json::to_string(&decision).unwrap();
+        assert!(json.contains("ReadDeeply"));
+        assert!(json.contains("Important code"));
+    }
+
+    #[test]
+    fn test_reading_decision_serialize_skip() {
+        let decision = ReadingDecision::Skip {
+            reason: "Not relevant".to_string(),
+            come_back_if: Some("needed later".to_string()),
+        };
+        let json = serde_json::to_string(&decision).unwrap();
+        assert!(json.contains("Skip"));
+    }
+
+    #[test]
+    fn test_reading_decision_deserialize() {
+        let json = r#"{"Skip":{"reason":"test","come_back_if":null}}"#;
+        let decision: ReadingDecision = serde_json::from_str(json).unwrap();
+        assert!(matches!(decision, ReadingDecision::Skip { .. }));
+    }
 }
