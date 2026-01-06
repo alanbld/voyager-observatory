@@ -786,4 +786,286 @@ mod tests {
             elapsed
         );
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_regex_error_new() {
+        let err = RegexError::new("pattern", "message");
+        assert_eq!(err.pattern, "pattern");
+        assert_eq!(err.message, "message");
+    }
+
+    #[test]
+    fn test_regex_error_display() {
+        let err = RegexError::new("[invalid", "unclosed bracket");
+        let display = format!("{}", err);
+        assert!(display.contains("[invalid"));
+        assert!(display.contains("unclosed bracket"));
+    }
+
+    #[test]
+    fn test_regex_error_is_error_trait() {
+        let err: Box<dyn std::error::Error> = Box::new(RegexError::new("test", "error"));
+        assert!(err.to_string().contains("test"));
+    }
+
+    #[test]
+    fn test_compiled_regex_pattern() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"\d+").unwrap();
+        assert_eq!(regex.pattern(), r"\d+");
+    }
+
+    #[test]
+    fn test_compiled_regex_debug() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"\w+").unwrap();
+        let debug = format!("{:?}", regex);
+        assert!(debug.contains("CompiledRegex"));
+        assert!(debug.contains(r"\w+"));
+    }
+
+    #[test]
+    fn test_compiled_regex_captures_iter() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"(\w+)").unwrap();
+        let text = "hello world";
+
+        let count = regex.captures_iter(text).count();
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn test_compiled_regex_captures() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"(?P<word>\w+)").unwrap();
+
+        let caps = regex.captures("hello").unwrap();
+        assert_eq!(caps.name("word").unwrap().as_str(), "hello");
+    }
+
+    #[test]
+    fn test_compiled_regex_captures_no_match() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"\d+").unwrap();
+
+        let caps = regex.captures("hello");
+        assert!(caps.is_none());
+    }
+
+    #[test]
+    fn test_compiled_regex_find_iter() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"\d+").unwrap();
+
+        let matches: Vec<_> = regex.find_iter("a1b2c3").collect();
+        assert_eq!(matches.len(), 3);
+    }
+
+    #[test]
+    fn test_compiled_regex_find() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"\d+").unwrap();
+
+        let m = regex.find("abc123def").unwrap();
+        assert_eq!(m.as_str(), "123");
+    }
+
+    #[test]
+    fn test_compiled_regex_find_no_match() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"\d+").unwrap();
+
+        let m = regex.find("hello");
+        assert!(m.is_none());
+    }
+
+    #[test]
+    fn test_compiled_regex_replace_all() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"\d+").unwrap();
+
+        let result = regex.replace_all("a1b2c3", "X");
+        assert_eq!(result, "aXbXcX");
+    }
+
+    #[test]
+    fn test_compiled_regex_capture_names() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"(?P<first>\w+)\s+(?P<last>\w+)").unwrap();
+
+        let names: Vec<_> = regex.capture_names().flatten().collect();
+        assert!(names.contains(&"first"));
+        assert!(names.contains(&"last"));
+    }
+
+    #[test]
+    fn test_match_range_is_empty() {
+        let empty = MatchRange::new(5, 5);
+        assert!(empty.is_empty());
+        assert_eq!(empty.len(), 0);
+
+        let non_empty = MatchRange::new(0, 5);
+        assert!(!non_empty.is_empty());
+        assert_eq!(non_empty.len(), 5);
+    }
+
+    #[test]
+    fn test_match_result_get_nonexistent() {
+        let result = MatchResult {
+            range: MatchRange::new(0, 5),
+            named: BTreeMap::new(),
+            indexed: vec![Some("match".to_string())],
+        };
+
+        assert!(result.get("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_match_result_group_nonexistent() {
+        let result = MatchResult {
+            range: MatchRange::new(0, 5),
+            named: BTreeMap::new(),
+            indexed: vec![Some("match".to_string())],
+        };
+
+        assert!(result.group(99).is_none());
+    }
+
+    #[test]
+    fn test_match_result_group_none_value() {
+        let result = MatchResult {
+            range: MatchRange::new(0, 5),
+            named: BTreeMap::new(),
+            indexed: vec![Some("match".to_string()), None],
+        };
+
+        assert!(result.group(1).is_none());
+    }
+
+    #[test]
+    fn test_regex_engine_default() {
+        let engine = RegexEngine::default();
+        let regex = engine.compile(r"\d+").unwrap();
+        assert!(engine.is_match(&regex, "123"));
+    }
+
+    #[test]
+    fn test_regex_engine_find() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"\d+").unwrap();
+
+        let found = engine.find(&regex, "abc123def");
+        assert!(found.is_some());
+        let range = found.unwrap();
+        assert_eq!(range.start, 3);
+        assert_eq!(range.end, 6);
+    }
+
+    #[test]
+    fn test_regex_engine_find_no_match() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"\d+").unwrap();
+
+        let found = engine.find(&regex, "hello");
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_regex_engine_match_captures_no_match() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"(?P<num>\d+)").unwrap();
+
+        let caps = engine.match_captures(&regex, "hello");
+        assert!(caps.is_none());
+    }
+
+    #[test]
+    fn test_regex_engine_match_full_no_match() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"\d+").unwrap();
+
+        let result = engine.match_full(&regex, "hello");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_regex_engine_replace_single() {
+        let engine = RegexEngine::new();
+        let regex = engine.compile(r"\d+").unwrap();
+
+        let result = engine.replace(&regex, "a1b2c3", "X");
+        assert_eq!(result, "aXb2c3"); // Only first match replaced
+    }
+
+    #[test]
+    fn test_pattern_set_first_match() {
+        let mut set = PatternSet::new();
+        set.add("digits", r"\d+").unwrap();
+        set.add("alpha", r"[a-z]+").unwrap();
+
+        let first = set.first_match("abc123");
+        assert!(first.is_some());
+    }
+
+    #[test]
+    fn test_pattern_set_first_match_none() {
+        let mut set = PatternSet::new();
+        set.add("digits", r"\d+").unwrap();
+
+        let first = set.first_match("hello");
+        assert!(first.is_none());
+    }
+
+    #[test]
+    fn test_pattern_set_default() {
+        let set = PatternSet::default();
+        let matches = set.match_all("test");
+        assert!(matches.is_empty());
+    }
+
+    #[test]
+    fn test_pattern_set_invalid_pattern() {
+        let mut set = PatternSet::new();
+        let result = set.add("invalid", r"[unclosed");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_is_match_global_error() {
+        let result = is_match(r"[invalid", "text");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_find_all_global_error() {
+        let result = find_all(r"[invalid", "text");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_replace_all_global_error() {
+        let result = replace_all(r"[invalid", "text", "rep");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_match_range_equality() {
+        let r1 = MatchRange::new(0, 5);
+        let r2 = MatchRange::new(0, 5);
+        let r3 = MatchRange::new(0, 6);
+
+        assert_eq!(r1, r2);
+        assert_ne!(r1, r3);
+    }
+
+    #[test]
+    fn test_match_range_copy() {
+        let r1 = MatchRange::new(0, 5);
+        let r2 = r1; // Copy
+        assert_eq!(r1, r2);
+    }
 }

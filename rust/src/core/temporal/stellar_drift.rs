@@ -974,4 +974,351 @@ mod tests {
         assert_eq!(ANCIENT_STAR_THRESHOLD_DAYS, 730);
         assert_eq!(DRIFT_WINDOW_DAYS, 180);
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_analyze_with_big_bang_date() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
+            galaxy_age_days: 500,
+            ..Default::default()
+        };
+
+        let big_bang = Utc::now() - Duration::days(500);
+        let report = analyzer.analyze(&temporal_census, &HashMap::new(), Some(big_bang), None);
+
+        assert!(report.big_bang_date.is_some());
+    }
+
+    #[test]
+    fn test_analyze_active_star_classification() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let mut files = BTreeMap::new();
+        // Active file - has activity in last 90 days but not new
+        files.insert("active.rs".to_string(), make_file_churn(200, 10, Some(30)));
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
+            galaxy_age_days: 500,
+            files,
+            ..Default::default()
+        };
+
+        let mut star_counts = HashMap::new();
+        star_counts.insert("active.rs".to_string(), 5);
+
+        let report = analyzer.analyze(&temporal_census, &star_counts, None, None);
+
+        assert_eq!(report.active_star_total, 5);
+    }
+
+    #[test]
+    fn test_analyze_dormant_star_classification() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let mut files = BTreeMap::new();
+        // Dormant file - no activity but not ancient
+        files.insert("dormant.rs".to_string(), make_file_churn(400, 0, Some(400)));
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
+            galaxy_age_days: 500,
+            files,
+            ..Default::default()
+        };
+
+        let mut star_counts = HashMap::new();
+        star_counts.insert("dormant.rs".to_string(), 5);
+
+        let report = analyzer.analyze(&temporal_census, &star_counts, None, None);
+
+        assert_eq!(report.dormant_star_total, 5);
+    }
+
+    #[test]
+    fn test_analyze_with_constellations() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let mut files = BTreeMap::new();
+        files.insert("src/lib.rs".to_string(), make_file_churn(200, 5, Some(30)));
+        files.insert("src/utils.rs".to_string(), make_file_churn(300, 2, Some(60)));
+
+        let mut constellations = BTreeMap::new();
+        constellations.insert("src".to_string(), ConstellationChurn {
+            path: "src".to_string(),
+            file_count: 2,
+            churn_90d: 7,
+            avg_age_days: 250,
+            primary_observers: vec![],
+            classification: ChurnClassification::Moderate,
+        });
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
+            galaxy_age_days: 500,
+            files,
+            constellations,
+            ..Default::default()
+        };
+
+        let mut star_counts = HashMap::new();
+        star_counts.insert("src/lib.rs".to_string(), 10);
+        star_counts.insert("src/utils.rs".to_string(), 5);
+
+        let report = analyzer.analyze(&temporal_census, &star_counts, None, None);
+
+        assert!(!report.constellations.is_empty());
+        assert!(report.constellations.contains_key("src"));
+    }
+
+    #[test]
+    fn test_constellation_evolution_with_no_temporal_data() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let mut constellations = BTreeMap::new();
+        constellations.insert("src".to_string(), ConstellationChurn {
+            path: "src".to_string(),
+            file_count: 2,
+            churn_90d: 5,
+            avg_age_days: 200,
+            primary_observers: vec![],
+            classification: ChurnClassification::Low,
+        });
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::Active {
+                total_events: 50,
+                galaxy_age_days: 500,
+                observer_count: 3,
+            },
+            galaxy_age_days: 500,
+            constellations,
+            files: BTreeMap::new(), // No file data
+            ..Default::default()
+        };
+
+        // Star counts exist but no matching temporal data
+        let mut star_counts = HashMap::new();
+        star_counts.insert("src/lib.rs".to_string(), 5);
+
+        let report = analyzer.analyze(&temporal_census, &star_counts, None, None);
+
+        assert!(!report.constellations.is_empty());
+    }
+
+    #[test]
+    fn test_report_is_static_no_repository() {
+        let report = StellarDriftReport {
+            state: ChronosState::NoRepository,
+            ..Default::default()
+        };
+        assert!(report.is_static());
+    }
+
+    #[test]
+    fn test_health_indicator_high_drift() {
+        let report = StellarDriftReport {
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
+            // No flags set - should be "High Drift"
+            ..Default::default()
+        };
+        assert_eq!(report.health_indicator(), "🌊");
+    }
+
+    #[test]
+    fn test_stellar_drift_report_default() {
+        let report = StellarDriftReport::default();
+        assert!(matches!(report.state, ChronosState::StaticGalaxy));
+        assert_eq!(report.total_stars, 0);
+        assert_eq!(report.stellar_drift_percent, 0.0);
+        assert!(!report.is_expanding);
+        assert!(!report.is_stable);
+        assert!(!report.is_ossifying);
+        assert!(!report.has_supernovas);
+    }
+
+    #[test]
+    fn test_analyze_file_with_no_star_count() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let mut files = BTreeMap::new();
+        files.insert("orphan.rs".to_string(), make_file_churn(200, 5, Some(30)));
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
+            galaxy_age_days: 500,
+            files,
+            ..Default::default()
+        };
+
+        // No star counts for orphan.rs
+        let report = analyzer.analyze(&temporal_census, &HashMap::new(), None, None);
+
+        // Should handle missing star count gracefully
+        assert_eq!(report.total_stars, 0);
+    }
+
+    #[test]
+    fn test_analyze_file_with_no_last_observation() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let mut files = BTreeMap::new();
+        // File with no last_observation - uses age_days as dormant fallback
+        let mut churn = make_file_churn(1000, 0, None);
+        churn.last_observation = None;
+        files.insert("mystery.rs".to_string(), churn);
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 1000,
+                observer_count: 5,
+            },
+            galaxy_age_days: 1000,
+            files,
+            ..Default::default()
+        };
+
+        let mut star_counts = HashMap::new();
+        star_counts.insert("mystery.rs".to_string(), 5);
+
+        let report = analyzer.analyze(&temporal_census, &star_counts, None, None);
+
+        // Should classify as ancient (dormant_days falls back to age_days)
+        assert_eq!(report.ancient_star_total, 5);
+    }
+
+    #[test]
+    fn test_constellation_with_empty_path() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let mut files = BTreeMap::new();
+        files.insert("lib.rs".to_string(), make_file_churn(200, 5, Some(30)));
+
+        let mut constellations = BTreeMap::new();
+        constellations.insert("".to_string(), ConstellationChurn {
+            path: "".to_string(),
+            file_count: 1,
+            churn_90d: 5,
+            avg_age_days: 200,
+            primary_observers: vec![],
+            classification: ChurnClassification::Moderate,
+        });
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::Active {
+                total_events: 50,
+                galaxy_age_days: 500,
+                observer_count: 3,
+            },
+            galaxy_age_days: 500,
+            files,
+            constellations,
+            ..Default::default()
+        };
+
+        let mut star_counts = HashMap::new();
+        star_counts.insert("lib.rs".to_string(), 5);
+
+        let report = analyzer.analyze(&temporal_census, &star_counts, None, None);
+
+        // Should handle empty constellation path (normalized to ".")
+        assert!(report.constellations.contains_key(""));
+    }
+
+    #[test]
+    fn test_constellation_with_root_files() {
+        let analyzer = StellarDriftAnalyzer::new();
+
+        let mut constellations = BTreeMap::new();
+        constellations.insert(".".to_string(), ConstellationChurn {
+            path: ".".to_string(),
+            file_count: 1,
+            churn_90d: 5,
+            avg_age_days: 200,
+            primary_observers: vec![],
+            classification: ChurnClassification::Low,
+        });
+
+        let mut files = BTreeMap::new();
+        files.insert("main.rs".to_string(), make_file_churn(200, 5, Some(30)));
+
+        let temporal_census = TemporalCensus {
+            state: ChronosState::Active {
+                total_events: 50,
+                galaxy_age_days: 500,
+                observer_count: 3,
+            },
+            galaxy_age_days: 500,
+            files,
+            constellations,
+            ..Default::default()
+        };
+
+        let mut star_counts = HashMap::new();
+        star_counts.insert("main.rs".to_string(), 5);
+
+        let report = analyzer.analyze(&temporal_census, &star_counts, None, None);
+
+        // Files at root should be in "." constellation
+        let constellation = report.constellations.get(".").unwrap();
+        assert!(constellation.active_star_count > 0 || constellation.new_star_count > 0 || constellation.dormant_star_count > 0);
+    }
+
+    #[test]
+    fn test_new_star_clone() {
+        let star = NewStar {
+            path: "test.rs".to_string(),
+            age_days: 30,
+            star_count: 5,
+            is_expansion: true,
+        };
+        let cloned = star.clone();
+        assert_eq!(star.path, cloned.path);
+        assert_eq!(star.age_days, cloned.age_days);
+    }
+
+    #[test]
+    fn test_constellation_evolution_clone() {
+        let evolution = ConstellationEvolution::default();
+        let cloned = evolution.clone();
+        assert_eq!(evolution.file_count, cloned.file_count);
+    }
+
+    #[test]
+    fn test_stellar_drift_report_clone() {
+        let report = StellarDriftReport::default();
+        let cloned = report.clone();
+        assert_eq!(report.total_stars, cloned.total_stars);
+    }
 }
