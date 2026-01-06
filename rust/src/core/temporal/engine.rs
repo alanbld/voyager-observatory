@@ -1206,4 +1206,218 @@ mod tests {
             let _census = engine.build_census();
         }
     }
+
+    // ==================== Additional Coverage Tests ====================
+
+    #[test]
+    fn test_build_census_constellations() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(mut engine) = ChronosEngine::with_depth(&cwd, 50) {
+            let _ = engine.extract_history();
+            let census = engine.build_census();
+
+            // If there are files, there should be constellations
+            if !census.files.is_empty() {
+                assert!(!census.constellations.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn test_calculate_file_metrics_lines_tracking() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            let now = Utc::now();
+            let observations = vec![
+                FileObservation {
+                    timestamp: now - Duration::days(5),
+                    observer_name: "Alice".to_string(),
+                    observer_email: "alice@example.com".to_string(),
+                    lines_added: 100,
+                    lines_removed: 20,
+                },
+                FileObservation {
+                    timestamp: now - Duration::days(10),
+                    observer_name: "Bob".to_string(),
+                    observer_email: "bob@example.com".to_string(),
+                    lines_added: 50,
+                    lines_removed: 30,
+                },
+            ];
+
+            let metrics = engine.calculate_file_metrics(&observations, &now);
+
+            // Total lines added/removed should be tracked
+            assert_eq!(metrics.volcanic_churn.lines_added_90d, 150);
+            assert_eq!(metrics.volcanic_churn.lines_removed_90d, 50);
+        }
+    }
+
+    #[test]
+    fn test_calculate_file_metrics_observers_truncated() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            let now = Utc::now();
+
+            // Create 5 different observers
+            let observations = vec![
+                FileObservation {
+                    timestamp: now - Duration::days(1),
+                    observer_name: "Alice".to_string(),
+                    observer_email: "alice@example.com".to_string(),
+                    lines_added: 10,
+                    lines_removed: 0,
+                },
+                FileObservation {
+                    timestamp: now - Duration::days(2),
+                    observer_name: "Bob".to_string(),
+                    observer_email: "bob@example.com".to_string(),
+                    lines_added: 10,
+                    lines_removed: 0,
+                },
+                FileObservation {
+                    timestamp: now - Duration::days(3),
+                    observer_name: "Charlie".to_string(),
+                    observer_email: "charlie@example.com".to_string(),
+                    lines_added: 10,
+                    lines_removed: 0,
+                },
+                FileObservation {
+                    timestamp: now - Duration::days(4),
+                    observer_name: "Diana".to_string(),
+                    observer_email: "diana@example.com".to_string(),
+                    lines_added: 10,
+                    lines_removed: 0,
+                },
+                FileObservation {
+                    timestamp: now - Duration::days(5),
+                    observer_name: "Eve".to_string(),
+                    observer_email: "eve@example.com".to_string(),
+                    lines_added: 10,
+                    lines_removed: 0,
+                },
+            ];
+
+            let metrics = engine.calculate_file_metrics(&observations, &now);
+
+            // Should be truncated to 3 observers
+            assert_eq!(metrics.primary_observers.len(), 3);
+        }
+    }
+
+    #[test]
+    fn test_file_metrics_with_extraction() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(mut engine) = ChronosEngine::with_depth(&cwd, 50) {
+            let _ = engine.extract_history();
+
+            // Try to get metrics for a file that likely exists
+            if let Some(path) = engine.file_histories.keys().next().cloned() {
+                let metrics = engine.file_metrics(&path);
+                // Should have at least some observations
+                assert!(metrics.total_observations > 0);
+            }
+        }
+    }
+
+    #[test]
+    fn test_calculate_file_metrics_churn_windows() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(engine) = ChronosEngine::new(&cwd) {
+            let now = Utc::now();
+            let observations = vec![
+                // Recent (in 30d)
+                FileObservation {
+                    timestamp: now - Duration::days(15),
+                    observer_name: "Dev".to_string(),
+                    observer_email: "dev@example.com".to_string(),
+                    lines_added: 10,
+                    lines_removed: 0,
+                },
+                // In 90d but not 30d
+                FileObservation {
+                    timestamp: now - Duration::days(60),
+                    observer_name: "Dev".to_string(),
+                    observer_email: "dev@example.com".to_string(),
+                    lines_added: 20,
+                    lines_removed: 0,
+                },
+                // In year but not 90d
+                FileObservation {
+                    timestamp: now - Duration::days(200),
+                    observer_name: "Dev".to_string(),
+                    observer_email: "dev@example.com".to_string(),
+                    lines_added: 30,
+                    lines_removed: 0,
+                },
+            ];
+
+            let metrics = engine.calculate_file_metrics(&observations, &now);
+
+            assert_eq!(metrics.volcanic_churn.last_30_days, 1);
+            assert_eq!(metrics.volcanic_churn.last_90_days, 2);
+            assert_eq!(metrics.volcanic_churn.last_year, 3);
+        }
+    }
+
+    #[test]
+    fn test_census_top_observers() {
+        let cwd = env::current_dir().expect("Failed to get current dir");
+        if let Some(mut engine) = ChronosEngine::with_depth(&cwd, 50) {
+            let _ = engine.extract_history();
+            let census = engine.build_census();
+
+            // Top observers should be populated and limited to 10
+            assert!(census.top_observers.len() <= 10);
+        }
+    }
+
+    #[test]
+    fn test_commit_data_clone() {
+        let data = CommitData {
+            timestamp: Utc::now(),
+            observer_name: "Dev".to_string(),
+            observer_email: "dev@example.com".to_string(),
+            files_changed: vec!["file.rs".to_string()],
+        };
+        let cloned = data.clone();
+        assert_eq!(data.observer_name, cloned.observer_name);
+        assert_eq!(data.files_changed.len(), cloned.files_changed.len());
+    }
+
+    #[test]
+    fn test_file_observation_clone() {
+        let obs = FileObservation {
+            timestamp: Utc::now(),
+            observer_name: "Dev".to_string(),
+            observer_email: "dev@example.com".to_string(),
+            lines_added: 10,
+            lines_removed: 5,
+        };
+        let cloned = obs.clone();
+        assert_eq!(obs.lines_added, cloned.lines_added);
+        assert_eq!(obs.lines_removed, cloned.lines_removed);
+    }
+
+    #[test]
+    fn test_galaxy_stats_clone() {
+        let stats = GalaxyStats::default();
+        let cloned = stats.clone();
+        assert_eq!(stats.total_observations, cloned.total_observations);
+    }
+
+    #[test]
+    fn test_observer_stats_clone() {
+        let stats = ObserverStats {
+            name: "Dev".to_string(),
+            email: "dev@example.com".to_string(),
+            observations: 10,
+            lines_added: 100,
+            lines_removed: 20,
+            first_seen: Some(Utc::now()),
+            last_seen: Some(Utc::now()),
+        };
+        let cloned = stats.clone();
+        assert_eq!(stats.observations, cloned.observations);
+    }
 }
