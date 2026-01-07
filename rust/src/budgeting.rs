@@ -801,4 +801,235 @@ mod tests {
             assert!(has_core || selected_paths.is_empty(), "Core files should be prioritized");
         }
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_file_data_struct() {
+        let fd = FileData {
+            path: "test.py".to_string(),
+            content: "x = 1".to_string(),
+            priority: 100,
+            tokens: 10,
+            original_tokens: 10,
+            method: "full".to_string(),
+        };
+
+        assert_eq!(fd.path, "test.py");
+        assert_eq!(fd.content, "x = 1");
+        assert_eq!(fd.priority, 100);
+        assert_eq!(fd.tokens, 10);
+        assert_eq!(fd.original_tokens, 10);
+        assert_eq!(fd.method, "full");
+    }
+
+    #[test]
+    fn test_file_data_clone() {
+        let fd = FileData {
+            path: "test.py".to_string(),
+            content: "x = 1".to_string(),
+            priority: 100,
+            tokens: 10,
+            original_tokens: 10,
+            method: "full".to_string(),
+        };
+
+        let cloned = fd.clone();
+        assert_eq!(cloned.path, "test.py");
+        assert_eq!(cloned.method, "full");
+    }
+
+    #[test]
+    fn test_budget_report_clone() {
+        let report = BudgetReport {
+            budget: 1000,
+            used: 500,
+            selected_count: 5,
+            dropped_count: 2,
+            dropped_files: vec![("test.py".to_string(), 50, 100)],
+            estimation_method: "Heuristic".to_string(),
+            strategy: "drop".to_string(),
+            included_files: vec![("main.py".to_string(), 100, 200, "full".to_string())],
+            truncated_count: 0,
+        };
+
+        let cloned = report.clone();
+        assert_eq!(cloned.budget, 1000);
+        assert_eq!(cloned.selected_count, 5);
+        assert_eq!(cloned.dropped_files.len(), 1);
+    }
+
+    #[test]
+    fn test_token_estimator_empty_content() {
+        assert_eq!(TokenEstimator::estimate_tokens(""), 0);
+    }
+
+    #[test]
+    fn test_token_estimator_short_content() {
+        // Less than 4 chars should still give 0 or 1
+        assert_eq!(TokenEstimator::estimate_tokens("abc"), 0);
+        assert_eq!(TokenEstimator::estimate_tokens("abcd"), 1);
+    }
+
+    #[test]
+    fn test_file_token_estimation_empty_file() {
+        let path = Path::new("empty.py");
+        let tokens = TokenEstimator::estimate_file_tokens(path, "");
+        // Should have overhead even for empty content
+        assert!(tokens > 0);
+    }
+
+    #[test]
+    fn test_file_token_estimation_long_path() {
+        let path = Path::new("very/long/nested/directory/structure/deep/file.py");
+        let content = "x = 1";
+        let tokens = TokenEstimator::estimate_file_tokens(path, content);
+        // Long path should increase overhead
+        assert!(tokens > TokenEstimator::estimate_tokens(content));
+    }
+
+    #[test]
+    fn test_try_truncate_to_structure() {
+        // Python file with class
+        let python_content = r#"class Foo:
+    def bar(self):
+        x = 1
+        y = 2
+        return x + y
+"#;
+        let (result, _was_truncated) = try_truncate_to_structure("test.py", python_content);
+
+        // Result should be non-empty
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_try_truncate_to_structure_non_code() {
+        // Plain text file shouldn't truncate
+        let content = "This is just plain text without any code structure.";
+        let (result, was_truncated) = try_truncate_to_structure("readme.txt", content);
+
+        // Plain text may or may not truncate depending on implementation
+        assert!(!result.is_empty());
+        // If not truncated, content should be same
+        if !was_truncated {
+            assert_eq!(result, content);
+        }
+    }
+
+    #[test]
+    fn test_budget_report_full_usage() {
+        let report = BudgetReport {
+            budget: 1000,
+            used: 1000,
+            selected_count: 10,
+            dropped_count: 0,
+            dropped_files: vec![],
+            estimation_method: "Heuristic".to_string(),
+            strategy: "drop".to_string(),
+            included_files: vec![],
+            truncated_count: 0,
+        };
+
+        assert_eq!(report.used_percentage(), 100.0);
+        assert_eq!(report.remaining(), 0);
+    }
+
+    #[test]
+    fn test_apply_budget_with_group_truncation() {
+        let mut lens_manager = LensManager::new();
+        // Apply a lens that might have group-level truncation
+        let _ = lens_manager.apply_lens("architecture");
+
+        let files = vec![
+            ("src/main.py".to_string(), "def main():\n    pass".to_string()),
+        ];
+
+        let (selected, report) = apply_token_budget(files, 1000, &lens_manager, "drop");
+
+        // File should be selected
+        assert!(!selected.is_empty());
+        assert_eq!(report.strategy, "drop");
+    }
+
+    #[test]
+    fn test_hybrid_strategy_all_small_files() {
+        let lens_manager = LensManager::new();
+        // All files are small (< 10% of budget)
+        let files = vec![
+            ("a.py".to_string(), "x = 1".to_string()),
+            ("b.py".to_string(), "y = 2".to_string()),
+            ("c.py".to_string(), "z = 3".to_string()),
+        ];
+
+        let (selected, report) = apply_token_budget(files, 1000, &lens_manager, "hybrid");
+
+        // All small files should be included without truncation
+        assert_eq!(selected.len(), 3);
+        assert_eq!(report.truncated_count, 0);
+    }
+
+    #[test]
+    fn test_budget_report_debug() {
+        let report = BudgetReport {
+            budget: 1000,
+            used: 500,
+            selected_count: 5,
+            dropped_count: 2,
+            dropped_files: vec![],
+            estimation_method: "Heuristic".to_string(),
+            strategy: "drop".to_string(),
+            included_files: vec![],
+            truncated_count: 0,
+        };
+
+        let debug_str = format!("{:?}", report);
+        assert!(debug_str.contains("BudgetReport"));
+        assert!(debug_str.contains("1000"));
+    }
+
+    #[test]
+    fn test_file_data_debug() {
+        let fd = FileData {
+            path: "test.py".to_string(),
+            content: "x = 1".to_string(),
+            priority: 100,
+            tokens: 10,
+            original_tokens: 10,
+            method: "full".to_string(),
+        };
+
+        let debug_str = format!("{:?}", fd);
+        assert!(debug_str.contains("FileData"));
+        assert!(debug_str.contains("test.py"));
+    }
+
+    #[test]
+    fn test_parse_token_budget_single_digit() {
+        assert_eq!(parse_token_budget("5").unwrap(), 5);
+        assert_eq!(parse_token_budget("1k").unwrap(), 1000);
+        assert_eq!(parse_token_budget("1M").unwrap(), 1000000);
+    }
+
+    #[test]
+    fn test_deterministic_ordering() {
+        let lens_manager = LensManager::new();
+        // Files with same tier and priority
+        let files = vec![
+            ("src/c.py".to_string(), "c".to_string()),
+            ("src/a.py".to_string(), "a".to_string()),
+            ("src/b.py".to_string(), "b".to_string()),
+        ];
+
+        let (selected1, _) = apply_token_budget(files.clone(), 1000, &lens_manager, "drop");
+        let (selected2, _) = apply_token_budget(files, 1000, &lens_manager, "drop");
+
+        // Order should be deterministic (sorted by path)
+        assert_eq!(selected1.len(), selected2.len());
+        for (f1, f2) in selected1.iter().zip(selected2.iter()) {
+            assert_eq!(f1.0, f2.0);
+        }
+    }
 }
