@@ -417,4 +417,89 @@ mod tests {
         assert_eq!(manifest.root, cloned.root);
         assert_eq!(manifest.project_type, cloned.project_type);
     }
+
+    #[test]
+    fn test_project_type_debug() {
+        let debug_str = format!("{:?}", ProjectType::Rust);
+        assert!(debug_str.contains("Rust"));
+
+        let debug_str = format!("{:?}", ProjectType::Mixed);
+        assert!(debug_str.contains("Mixed"));
+    }
+
+    #[test]
+    fn test_manifest_debug() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[package]").unwrap();
+
+        let manifest = ProjectManifest::detect(tmp.path());
+        let debug_str = format!("{:?}", manifest);
+
+        assert!(debug_str.contains("ProjectManifest"));
+        assert!(debug_str.contains("Rust"));
+    }
+
+    #[test]
+    fn test_project_type_hash() {
+        use std::collections::HashSet;
+
+        let mut set = HashSet::new();
+        set.insert(ProjectType::Rust);
+        set.insert(ProjectType::Python);
+        set.insert(ProjectType::Rust); // duplicate
+
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&ProjectType::Rust));
+        assert!(set.contains(&ProjectType::Python));
+    }
+
+    #[test]
+    fn test_project_type_clone() {
+        let original = ProjectType::Go;
+        let cloned = original.clone();
+        assert_eq!(original, cloned);
+    }
+
+    #[test]
+    fn test_manifest_files_accessor() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[package]").unwrap();
+        fs::write(tmp.path().join("package.json"), "{}").unwrap();
+        fs::write(tmp.path().join("go.mod"), "module test").unwrap();
+
+        let manifest = ProjectManifest::detect(tmp.path());
+
+        // Should have 3 manifest files
+        assert_eq!(manifest.manifest_files.len(), 3);
+    }
+
+    #[test]
+    fn test_markers_constant() {
+        // Verify the MARKERS constant is accessible and correct
+        assert!(ProjectManifest::MARKERS.iter().any(|(m, _)| *m == "Cargo.toml"));
+        assert!(ProjectManifest::MARKERS.iter().any(|(m, _)| *m == "package.json"));
+        assert!(ProjectManifest::MARKERS.iter().any(|(m, _)| *m == "go.mod"));
+        assert!(ProjectManifest::MARKERS.iter().any(|(m, _)| *m == ".git"));
+    }
+
+    #[test]
+    fn test_workspace_detection_mixed() {
+        let tmp = TempDir::new().unwrap();
+        // Mixed project with both Rust workspace and Node workspace
+        fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[workspace]\nmembers = []",
+        ).unwrap();
+        fs::write(
+            tmp.path().join("package.json"),
+            r#"{"workspaces": ["packages/*"]}"#,
+        ).unwrap();
+
+        let manifest = ProjectManifest::detect(tmp.path());
+
+        // Mixed type, but workspace detection runs for first matching type
+        assert_eq!(manifest.project_type, ProjectType::Mixed);
+        // Mixed doesn't trigger workspace detection
+        assert!(!manifest.is_workspace());
+    }
 }
