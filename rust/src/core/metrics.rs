@@ -534,4 +534,159 @@ mod tests {
 
         assert_eq!(results.len(), 3);
     }
+
+    // =========================================================================
+    // Additional coverage tests
+    // =========================================================================
+
+    #[test]
+    fn test_metric_result_clone() {
+        let result = MetricResult::confident(42.0, "test");
+        let cloned = result.clone();
+
+        assert_eq!(cloned.value, 42.0);
+        assert_eq!(cloned.confidence, 1.0);
+        assert_eq!(cloned.explanation, "test");
+    }
+
+    #[test]
+    fn test_metric_result_debug() {
+        let result = MetricResult::new(10.0, 0.8, "debug test");
+        let debug_str = format!("{:?}", result);
+
+        assert!(debug_str.contains("MetricResult"));
+        assert!(debug_str.contains("10.0") || debug_str.contains("10"));
+    }
+
+    #[test]
+    fn test_registry_empty_analyze_all() {
+        let registry = MetricRegistry::new();
+        let file = make_test_file();
+        let results = registry.analyze_all(&file);
+
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_registry_find_returns_trait_object() {
+        let mut registry = MetricRegistry::new();
+        registry.register(Box::new(DeclarationCountMetric));
+
+        if let Some(collector) = registry.find("declaration_count") {
+            // Can call trait methods on the returned reference
+            assert_eq!(collector.name(), "declaration_count");
+            assert!(!collector.description().is_empty());
+        } else {
+            panic!("Expected to find collector");
+        }
+    }
+
+    #[test]
+    fn test_parameter_complexity_with_methods() {
+        // Test that Method kind is also counted
+        let mut declarations = vec![];
+        let mut method = Declaration::new(
+            "method".to_string(),
+            DeclarationKind::Method,
+            Span::default(),
+        );
+        method.parameters.push(Parameter {
+            name: "self".to_string(),
+            type_annotation: None,
+            default_value: None,
+            span: Span::default(),
+        });
+        method.parameters.push(Parameter {
+            name: "arg".to_string(),
+            type_annotation: None,
+            default_value: None,
+            span: Span::default(),
+        });
+        declarations.push(method);
+
+        let file = File {
+            path: "test.rs".to_string(),
+            language: LanguageId::Rust,
+            declarations,
+            imports: vec![],
+            comments: vec![],
+            unknown_regions: vec![],
+            span: Span::default(),
+            metadata: Default::default(),
+        };
+
+        let metric = ParameterComplexityMetric;
+        let result = metric.analyze(&file);
+
+        // Method has 2 params
+        assert_eq!(result.value, 2.0);
+    }
+
+    #[test]
+    fn test_format_human_for_all_metrics() {
+        let file = make_file_with_params(&[2, 3]);
+
+        let metric1 = DeclarationCountMetric;
+        let result1 = metric1.analyze(&file);
+        let human1 = metric1.format_human(&result1);
+        assert!(human1.contains("declaration_count"));
+
+        let metric2 = ParameterComplexityMetric;
+        let result2 = metric2.analyze(&file);
+        let human2 = metric2.format_human(&result2);
+        assert!(human2.contains("avg_parameters"));
+
+        let metric3 = DocCoverageMetric;
+        let result3 = metric3.analyze(&file);
+        let human3 = metric3.format_human(&result3);
+        assert!(human3.contains("doc_coverage"));
+    }
+
+    #[test]
+    fn test_format_machine_for_all_metrics() {
+        let file = make_file_with_params(&[2, 3]);
+
+        let metric1 = ParameterComplexityMetric;
+        let result1 = metric1.analyze(&file);
+        let json1 = metric1.format_machine(&result1);
+        assert_eq!(json1["metric"], "avg_parameters");
+        assert!(json1["value"].is_number());
+        assert!(json1["confidence"].is_number());
+        assert!(json1["explanation"].is_string());
+    }
+
+    #[test]
+    fn test_metric_result_boundary_confidence() {
+        // Test exact boundary values
+        let at_zero = MetricResult::new(1.0, 0.0, "zero");
+        assert_eq!(at_zero.confidence, 0.0);
+
+        let at_one = MetricResult::new(1.0, 1.0, "one");
+        assert_eq!(at_one.confidence, 1.0);
+
+        let mid = MetricResult::new(1.0, 0.5, "mid");
+        assert_eq!(mid.confidence, 0.5);
+    }
+
+    #[test]
+    fn test_collectors_accessor_iteration() {
+        let mut registry = MetricRegistry::new();
+        registry.register(Box::new(DeclarationCountMetric));
+        registry.register(Box::new(ParameterComplexityMetric));
+
+        let names: Vec<&str> = registry.collectors().iter().map(|c| c.name()).collect();
+
+        assert!(names.contains(&"declaration_count"));
+        assert!(names.contains(&"avg_parameters"));
+    }
+
+    #[test]
+    fn test_registry_register_multiple_same_type() {
+        let mut registry = MetricRegistry::new();
+        // Can register same metric type multiple times (not recommended but allowed)
+        registry.register(Box::new(DeclarationCountMetric));
+        registry.register(Box::new(DeclarationCountMetric));
+
+        assert_eq!(registry.collectors().len(), 2);
+    }
 }
