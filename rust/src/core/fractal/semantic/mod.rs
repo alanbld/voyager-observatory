@@ -301,4 +301,297 @@ mod tests {
         assert!(!ctx.should_ignore(Language::Python));
         assert_eq!(ctx.time_budget_minutes, Some(60));
     }
+
+    // =========================================================================
+    // Language Enum Comprehensive Tests
+    // =========================================================================
+
+    #[test]
+    fn test_language_from_extension_all_abl() {
+        assert_eq!(Language::from_extension("p"), Language::ABL);
+        assert_eq!(Language::from_extension("w"), Language::ABL);
+        assert_eq!(Language::from_extension("cls"), Language::ABL);
+        assert_eq!(Language::from_extension("i"), Language::ABL);
+    }
+
+    #[test]
+    fn test_language_from_extension_all_python() {
+        assert_eq!(Language::from_extension("py"), Language::Python);
+        assert_eq!(Language::from_extension("pyw"), Language::Python);
+        assert_eq!(Language::from_extension("pyi"), Language::Python);
+    }
+
+    #[test]
+    fn test_language_from_extension_all_typescript() {
+        assert_eq!(Language::from_extension("ts"), Language::TypeScript);
+        assert_eq!(Language::from_extension("tsx"), Language::TypeScript);
+    }
+
+    #[test]
+    fn test_language_from_extension_all_javascript() {
+        assert_eq!(Language::from_extension("js"), Language::JavaScript);
+        assert_eq!(Language::from_extension("jsx"), Language::JavaScript);
+        assert_eq!(Language::from_extension("mjs"), Language::JavaScript);
+        assert_eq!(Language::from_extension("cjs"), Language::JavaScript);
+    }
+
+    #[test]
+    fn test_language_from_extension_all_shell() {
+        assert_eq!(Language::from_extension("sh"), Language::Shell);
+        assert_eq!(Language::from_extension("bash"), Language::Shell);
+        assert_eq!(Language::from_extension("zsh"), Language::Shell);
+        assert_eq!(Language::from_extension("ksh"), Language::Shell);
+    }
+
+    #[test]
+    fn test_language_from_extension_other_languages() {
+        assert_eq!(Language::from_extension("rs"), Language::Rust);
+        assert_eq!(Language::from_extension("go"), Language::Go);
+        assert_eq!(Language::from_extension("java"), Language::Java);
+        assert_eq!(Language::from_extension("cs"), Language::CSharp);
+        assert_eq!(Language::from_extension("rb"), Language::Ruby);
+    }
+
+    #[test]
+    fn test_language_from_extension_case_insensitive() {
+        assert_eq!(Language::from_extension("PY"), Language::Python);
+        assert_eq!(Language::from_extension("Ts"), Language::TypeScript);
+        assert_eq!(Language::from_extension("RS"), Language::Rust);
+    }
+
+    #[test]
+    fn test_language_display_name_all() {
+        assert_eq!(Language::ABL.display_name(), "ABL (OpenEdge)");
+        assert_eq!(Language::Python.display_name(), "Python");
+        assert_eq!(Language::TypeScript.display_name(), "TypeScript");
+        assert_eq!(Language::JavaScript.display_name(), "JavaScript");
+        assert_eq!(Language::Shell.display_name(), "Shell");
+        assert_eq!(Language::Rust.display_name(), "Rust");
+        assert_eq!(Language::Go.display_name(), "Go");
+        assert_eq!(Language::Java.display_name(), "Java");
+        assert_eq!(Language::CSharp.display_name(), "C#");
+        assert_eq!(Language::Ruby.display_name(), "Ruby");
+        assert_eq!(Language::Unknown.display_name(), "Unknown");
+    }
+
+    #[test]
+    fn test_language_has_plugin() {
+        assert!(Language::ABL.has_plugin());
+        assert!(Language::Python.has_plugin());
+        assert!(Language::TypeScript.has_plugin());
+        assert!(Language::JavaScript.has_plugin());
+        assert!(Language::Shell.has_plugin());
+        assert!(!Language::Rust.has_plugin());
+        assert!(!Language::Go.has_plugin());
+        assert!(!Language::Java.has_plugin());
+        assert!(!Language::CSharp.has_plugin());
+        assert!(!Language::Ruby.has_plugin());
+        assert!(!Language::Unknown.has_plugin());
+    }
+
+    #[test]
+    fn test_language_extensions_all_variants() {
+        assert!(!Language::ABL.extensions().is_empty());
+        assert!(!Language::Python.extensions().is_empty());
+        assert!(!Language::TypeScript.extensions().is_empty());
+        assert!(!Language::JavaScript.extensions().is_empty());
+        assert!(!Language::Shell.extensions().is_empty());
+        assert!(!Language::Rust.extensions().is_empty());
+        assert!(!Language::Go.extensions().is_empty());
+        assert!(!Language::Java.extensions().is_empty());
+        assert!(!Language::CSharp.extensions().is_empty());
+        assert!(!Language::Ruby.extensions().is_empty());
+        assert!(Language::Unknown.extensions().is_empty());
+    }
+
+    #[test]
+    fn test_language_display_trait() {
+        assert_eq!(format!("{}", Language::Python), "Python");
+        assert_eq!(format!("{}", Language::ABL), "ABL (OpenEdge)");
+        assert_eq!(format!("{}", Language::CSharp), "C#");
+    }
+
+    #[test]
+    fn test_language_from_str_all_aliases() {
+        // ABL aliases
+        assert_eq!("abl".parse::<Language>().unwrap(), Language::ABL);
+        assert_eq!("openedge".parse::<Language>().unwrap(), Language::ABL);
+        assert_eq!("progress".parse::<Language>().unwrap(), Language::ABL);
+
+        // Python aliases
+        assert_eq!("python".parse::<Language>().unwrap(), Language::Python);
+        assert_eq!("py".parse::<Language>().unwrap(), Language::Python);
+
+        // TypeScript aliases
+        assert_eq!("typescript".parse::<Language>().unwrap(), Language::TypeScript);
+        assert_eq!("ts".parse::<Language>().unwrap(), Language::TypeScript);
+
+        // JavaScript aliases
+        assert_eq!("javascript".parse::<Language>().unwrap(), Language::JavaScript);
+        assert_eq!("js".parse::<Language>().unwrap(), Language::JavaScript);
+
+        // Shell aliases
+        assert_eq!("shell".parse::<Language>().unwrap(), Language::Shell);
+        assert_eq!("bash".parse::<Language>().unwrap(), Language::Shell);
+        assert_eq!("sh".parse::<Language>().unwrap(), Language::Shell);
+
+        // Rust aliases
+        assert_eq!("rust".parse::<Language>().unwrap(), Language::Rust);
+        assert_eq!("rs".parse::<Language>().unwrap(), Language::Rust);
+
+        // Go aliases
+        assert_eq!("go".parse::<Language>().unwrap(), Language::Go);
+        assert_eq!("golang".parse::<Language>().unwrap(), Language::Go);
+
+        // Java
+        assert_eq!("java".parse::<Language>().unwrap(), Language::Java);
+
+        // CSharp aliases
+        assert_eq!("csharp".parse::<Language>().unwrap(), Language::CSharp);
+        assert_eq!("c#".parse::<Language>().unwrap(), Language::CSharp);
+        assert_eq!("cs".parse::<Language>().unwrap(), Language::CSharp);
+
+        // Ruby aliases
+        assert_eq!("ruby".parse::<Language>().unwrap(), Language::Ruby);
+        assert_eq!("rb".parse::<Language>().unwrap(), Language::Ruby);
+    }
+
+    #[test]
+    fn test_language_from_str_case_insensitive() {
+        assert_eq!("PYTHON".parse::<Language>().unwrap(), Language::Python);
+        assert_eq!("Python".parse::<Language>().unwrap(), Language::Python);
+        assert_eq!("RUST".parse::<Language>().unwrap(), Language::Rust);
+    }
+
+    #[test]
+    fn test_language_from_str_error() {
+        let result = "unknown_language".parse::<Language>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown language"));
+    }
+
+    #[test]
+    fn test_language_clone() {
+        let lang = Language::Python;
+        let cloned = lang.clone();
+        assert_eq!(lang, cloned);
+    }
+
+    #[test]
+    fn test_language_copy() {
+        let lang = Language::Rust;
+        let copied: Language = lang;
+        assert_eq!(lang, copied);
+    }
+
+    #[test]
+    fn test_language_ordering() {
+        // PartialOrd/Ord should work
+        assert!(Language::ABL < Language::Python);
+        let mut langs = vec![Language::Python, Language::ABL, Language::Rust];
+        langs.sort();
+        assert_eq!(langs[0], Language::ABL);
+    }
+
+    #[test]
+    fn test_language_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(Language::Python);
+        set.insert(Language::Python);
+        assert_eq!(set.len(), 1);
+    }
+
+    // =========================================================================
+    // UserContext Comprehensive Tests
+    // =========================================================================
+
+    #[test]
+    fn test_user_context_default() {
+        let ctx = UserContext::default();
+        assert!(ctx.language_familiarity.is_empty());
+        assert!(ctx.ignore_languages.is_empty());
+        assert!(ctx.depth_preferences.is_empty());
+        assert!(ctx.time_budget_minutes.is_none());
+    }
+
+    #[test]
+    fn test_user_context_new() {
+        let ctx = UserContext::new();
+        assert!(ctx.language_familiarity.is_empty());
+    }
+
+    #[test]
+    fn test_user_context_familiarity_clamping() {
+        let ctx = UserContext::new()
+            .with_familiarity(Language::Python, 1.5) // should clamp to 1.0
+            .with_familiarity(Language::Rust, -0.5); // should clamp to 0.0
+
+        assert_eq!(ctx.get_familiarity(Language::Python), 1.0);
+        assert_eq!(ctx.get_familiarity(Language::Rust), 0.0);
+    }
+
+    #[test]
+    fn test_user_context_ignoring_no_duplicates() {
+        let ctx = UserContext::new()
+            .ignoring(Language::Shell)
+            .ignoring(Language::Shell); // duplicate
+
+        assert_eq!(ctx.ignore_languages.len(), 1);
+    }
+
+    #[test]
+    fn test_user_context_get_familiarity_default() {
+        let ctx = UserContext::new();
+        assert_eq!(ctx.get_familiarity(Language::Unknown), 0.5);
+    }
+
+    #[test]
+    fn test_user_context_should_ignore_false() {
+        let ctx = UserContext::new();
+        assert!(!ctx.should_ignore(Language::Python));
+    }
+
+    #[test]
+    fn test_user_context_builder_chain() {
+        let ctx = UserContext::new()
+            .with_familiarity(Language::Python, 0.8)
+            .with_familiarity(Language::Rust, 0.9)
+            .ignoring(Language::ABL)
+            .ignoring(Language::Go)
+            .with_time_budget(120);
+
+        assert_eq!(ctx.get_familiarity(Language::Python), 0.8);
+        assert_eq!(ctx.get_familiarity(Language::Rust), 0.9);
+        assert!(ctx.should_ignore(Language::ABL));
+        assert!(ctx.should_ignore(Language::Go));
+        assert_eq!(ctx.time_budget_minutes, Some(120));
+    }
+
+    #[test]
+    fn test_user_context_override_familiarity() {
+        let ctx = UserContext::new()
+            .with_familiarity(Language::Python, 0.5)
+            .with_familiarity(Language::Python, 0.9);
+
+        assert_eq!(ctx.get_familiarity(Language::Python), 0.9);
+    }
+
+    #[test]
+    fn test_user_context_clone() {
+        let ctx = UserContext::new()
+            .with_familiarity(Language::Python, 0.8)
+            .ignoring(Language::Shell);
+        let cloned = ctx.clone();
+
+        assert_eq!(cloned.get_familiarity(Language::Python), 0.8);
+        assert!(cloned.should_ignore(Language::Shell));
+    }
+
+    #[test]
+    fn test_user_context_debug() {
+        let ctx = UserContext::new().with_familiarity(Language::Python, 0.5);
+        let debug_str = format!("{:?}", ctx);
+        assert!(debug_str.contains("UserContext"));
+    }
 }
