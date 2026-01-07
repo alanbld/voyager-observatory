@@ -481,4 +481,202 @@ mod tests {
         assert!(!contribs.logs.is_empty());
         assert!(contribs.tags.contains_key("test:1"));
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_default_enabled_function() {
+        // Test default_enabled is true
+        assert!(default_enabled());
+    }
+
+    #[test]
+    fn test_loader_default_trait() {
+        let loader = PluginLoader::default();
+        // Should have search paths set up
+        assert!(!loader.search_paths().is_empty());
+    }
+
+    #[test]
+    fn test_add_path() {
+        let mut loader = PluginLoader::with_paths(vec![]);
+        assert!(loader.search_paths().is_empty());
+
+        let new_path = PathBuf::from("/test/path");
+        loader.add_path(new_path.clone());
+
+        assert_eq!(loader.search_paths().len(), 1);
+        assert_eq!(loader.search_paths()[0], new_path);
+    }
+
+    #[test]
+    fn test_add_path_no_duplicate() {
+        let mut loader = PluginLoader::with_paths(vec![]);
+        let path = PathBuf::from("/test/path");
+
+        loader.add_path(path.clone());
+        loader.add_path(path.clone()); // Add same path again
+
+        // Should not duplicate
+        assert_eq!(loader.search_paths().len(), 1);
+    }
+
+    #[test]
+    fn test_enabled_plugins_filters_correctly() {
+        let temp_dir = TempDir::new().unwrap();
+        let plugins_dir = temp_dir.path().join("plugins");
+
+        // Create manifest with one enabled and one disabled
+        create_test_manifest(&plugins_dir, &[
+            ("enabled-plugin", "enabled.lua", true),
+            ("disabled-plugin", "disabled.lua", false),
+        ]);
+
+        std::fs::write(plugins_dir.join("enabled.lua"), "-- enabled").unwrap();
+
+        let mut loader = PluginLoader::with_paths(vec![plugins_dir]);
+        loader.discover();
+
+        let enabled = loader.enabled_plugins();
+        assert_eq!(enabled.len(), 1);
+        assert_eq!(enabled[0].entry.name, "enabled-plugin");
+    }
+
+    #[test]
+    fn test_plugin_names() {
+        let temp_dir = TempDir::new().unwrap();
+        let plugins_dir = temp_dir.path().join("plugins");
+
+        create_test_manifest(&plugins_dir, &[
+            ("plugin-a", "a.lua", true),
+            ("plugin-b", "b.lua", true),
+            ("plugin-c", "c.lua", false),
+        ]);
+
+        std::fs::write(plugins_dir.join("a.lua"), "-- a").unwrap();
+        std::fs::write(plugins_dir.join("b.lua"), "-- b").unwrap();
+
+        let mut loader = PluginLoader::with_paths(vec![plugins_dir]);
+        loader.discover();
+
+        let names = loader.plugin_names();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"plugin-a"));
+        assert!(names.contains(&"plugin-b"));
+        assert!(!names.contains(&"plugin-c")); // Disabled
+    }
+
+    #[test]
+    fn test_plugins_accessor() {
+        let temp_dir = TempDir::new().unwrap();
+        let plugins_dir = temp_dir.path().join("plugins");
+
+        create_test_manifest(&plugins_dir, &[("test", "test.lua", true)]);
+        std::fs::write(plugins_dir.join("test.lua"), "-- test").unwrap();
+
+        let mut loader = PluginLoader::with_paths(vec![plugins_dir]);
+        loader.discover();
+
+        let all_plugins = loader.plugins();
+        assert_eq!(all_plugins.len(), 1);
+    }
+
+    #[test]
+    fn test_plugin_entry_serde_defaults() {
+        let json = r#"{"name": "test", "file": "test.lua"}"#;
+        let entry: PluginEntry = serde_json::from_str(json).unwrap();
+
+        assert_eq!(entry.name, "test");
+        assert_eq!(entry.file, "test.lua");
+        assert!(entry.enabled); // default true
+        assert_eq!(entry.priority, 0); // default 0
+        assert!(entry.description.is_empty()); // default empty
+        assert!(entry.author.is_empty()); // default empty
+        assert!(entry.version.is_empty()); // default empty
+    }
+
+    #[test]
+    fn test_plugin_manifest_serialization() {
+        let manifest = PluginManifest {
+            vo_api_version: "3.0".to_string(),
+            plugins: vec![PluginEntry {
+                name: "test".to_string(),
+                file: "test.lua".to_string(),
+                enabled: true,
+                priority: 10,
+                description: "A test plugin".to_string(),
+                author: "Test Author".to_string(),
+                version: "1.0.0".to_string(),
+            }],
+        };
+
+        let json = serde_json::to_string(&manifest).unwrap();
+        let parsed: PluginManifest = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.vo_api_version, "3.0");
+        assert_eq!(parsed.plugins.len(), 1);
+        assert_eq!(parsed.plugins[0].name, "test");
+    }
+
+    #[test]
+    fn test_plugin_status_variants() {
+        let loaded = PluginStatus::Loaded;
+        let executed = PluginStatus::Executed;
+        let load_err = PluginStatus::LoadError("error".to_string());
+        let exec_err = PluginStatus::ExecutionError("error".to_string());
+        let disabled = PluginStatus::Disabled;
+
+        // Just verify they can be created and matched
+        assert!(matches!(loaded, PluginStatus::Loaded));
+        assert!(matches!(executed, PluginStatus::Executed));
+        assert!(matches!(load_err, PluginStatus::LoadError(_)));
+        assert!(matches!(exec_err, PluginStatus::ExecutionError(_)));
+        assert!(matches!(disabled, PluginStatus::Disabled));
+    }
+
+    #[test]
+    fn test_loaded_plugin_fields() {
+        let plugin = LoadedPlugin {
+            entry: PluginEntry {
+                name: "test".to_string(),
+                file: "test.lua".to_string(),
+                enabled: true,
+                priority: 0,
+                description: String::new(),
+                author: String::new(),
+                version: String::new(),
+            },
+            path: PathBuf::from("/path/to/test.lua"),
+            source: "-- lua code".to_string(),
+            status: PluginStatus::Loaded,
+        };
+
+        assert_eq!(plugin.entry.name, "test");
+        assert_eq!(plugin.path, PathBuf::from("/path/to/test.lua"));
+        assert_eq!(plugin.source, "-- lua code");
+    }
+
+    #[test]
+    fn test_discover_invalid_json_manifest() {
+        let temp_dir = TempDir::new().unwrap();
+        let plugins_dir = temp_dir.path().join("plugins");
+        std::fs::create_dir_all(&plugins_dir).unwrap();
+
+        // Write invalid JSON
+        std::fs::write(plugins_dir.join(MANIFEST_FILE), "{ invalid json }").unwrap();
+
+        let mut loader = PluginLoader::with_paths(vec![plugins_dir]);
+        let plugins = loader.discover();
+
+        // Should not load any plugins
+        assert!(plugins.is_empty());
+    }
+
+    #[test]
+    fn test_constants() {
+        assert_eq!(CURRENT_API_VERSION, "3.0");
+        assert_eq!(MANIFEST_FILE, "manifest.json");
+    }
 }
