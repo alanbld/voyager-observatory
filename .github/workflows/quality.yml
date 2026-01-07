@@ -8,74 +8,36 @@ on:
 
 jobs:
   test:
-    name: Test Suite (Python ${{ matrix.python-version }})
+    name: Rust Test Suite
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        # Python 3.6 and 3.7 are not available on Ubuntu 24.04
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install coverage
+    - name: Cache cargo
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          rust/target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
 
     - name: Run tests
-      run: |
-        python -m unittest discover -s tests -p 'test_*.py' -v
+      working-directory: rust
+      run: cargo test --release
 
     - name: Check version output
+      working-directory: rust
       run: |
-        ./pm_encoder.py --version
-
-    - name: Test self-serialization
-      run: |
-        ./pm_encoder.py . -o /tmp/test_output.txt
-        head -1 /tmp/test_output.txt | grep -q '++++++++++' || exit 1
-
-  coverage:
-    name: Coverage Analysis
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install coverage
-
-    - name: Run coverage
-      run: |
-        python -m coverage run -m unittest discover -s tests -p 'test_*.py'
-        python -m coverage report -m
-        python -m coverage html
-
-    - name: Check coverage threshold (98%)
-      run: |
-        python -m coverage report --fail-under=98 || echo "Warning: Coverage below 98% threshold"
-
-    - name: Upload coverage artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: coverage-report
-        path: htmlcov/
+        cargo build --release
+        ./target/release/vo --version
 
   lint:
     name: Code Quality Checks
@@ -85,19 +47,18 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
       with:
-        python-version: "3.11"
+        components: clippy, rustfmt
 
-    - name: Python syntax check
-      run: |
-        python -m py_compile pm_encoder.py
-        python -m py_compile tests/test_pm_encoder.py
+    - name: Check formatting
+      working-directory: rust
+      run: cargo fmt --check
 
-    - name: Check for TODOs in critical files
-      run: |
-        ! grep -n "TODO\|FIXME" pm_encoder.py | grep -v "# TODO:" || echo "TODOs found (non-blocking)"
+    - name: Run clippy
+      working-directory: rust
+      run: cargo clippy -- -D warnings
 
   integration:
     name: Integration Tests
@@ -107,26 +68,30 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build release binary
+      working-directory: rust
+      run: cargo build --release
+
+    - name: Test self-serialization
+      working-directory: rust
+      run: |
+        ./target/release/vo . -o /tmp/test_output.txt
+        head -1 /tmp/test_output.txt | grep -q '+++' || exit 1
 
     - name: Test architecture lens
+      working-directory: rust
       run: |
-        ./pm_encoder.py . --lens architecture --truncate 100 -o /tmp/arch.txt
-        grep -q "\.pm_encoder_meta" /tmp/arch.txt || exit 1
+        ./target/release/vo . --lens architecture -o /tmp/arch.txt
+        [ -s /tmp/arch.txt ] || exit 1
 
-    - name: Test structure mode
-      run: |
-        ./pm_encoder.py . --truncate-mode structure -o /tmp/struct.txt
-        grep -q "STRUCTURE MODE" /tmp/struct.txt || exit 1
-
-    - name: Test Rust support
+    - name: Test Rust file analysis
       run: |
         mkdir -p /tmp/rust_test
         echo 'fn main() { println!("test"); }' > /tmp/rust_test/main.rs
-        ./pm_encoder.py /tmp/rust_test --truncate-mode structure -o /tmp/rust_output.txt
+        ./rust/target/release/vo /tmp/rust_test -o /tmp/rust_output.txt
         grep -q "fn main" /tmp/rust_output.txt || exit 1
 
   performance:
@@ -137,14 +102,17 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build release binary
+      working-directory: rust
+      run: cargo build --release
 
     - name: Benchmark self-serialization
+      working-directory: rust
       run: |
-        time timeout 10s ./pm_encoder.py . -o /tmp/benchmark.txt || exit 1
+        time timeout 10s ./target/release/vo . -o /tmp/benchmark.txt || exit 1
         echo "Self-serialization completed within timeout"
 
     - name: Check output size
