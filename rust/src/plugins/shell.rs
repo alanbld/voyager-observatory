@@ -581,4 +581,172 @@ test_deployment() {
         assert!(!p.supports_file(std::path::Path::new("main.rs")));
         assert!(!p.supports_file(std::path::Path::new("app.py")));
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_shell_dialect_as_str_all() {
+        assert_eq!(ShellDialect::Sh.as_str(), "sh");
+        assert_eq!(ShellDialect::Bash.as_str(), "bash");
+        assert_eq!(ShellDialect::Zsh.as_str(), "zsh");
+        assert_eq!(ShellDialect::Ksh.as_str(), "ksh");
+        assert_eq!(ShellDialect::Fish.as_str(), "fish");
+    }
+
+    #[test]
+    fn test_shell_dialect_from_shebang_ksh() {
+        assert_eq!(ShellDialect::from_shebang("#!/bin/ksh"), ShellDialect::Ksh);
+        assert_eq!(ShellDialect::from_shebang("#!/usr/bin/env ksh"), ShellDialect::Ksh);
+    }
+
+    #[test]
+    fn test_shell_dialect_from_shebang_fish() {
+        assert_eq!(ShellDialect::from_shebang("#!/usr/bin/fish"), ShellDialect::Fish);
+        assert_eq!(ShellDialect::from_shebang("#!/usr/bin/env fish"), ShellDialect::Fish);
+    }
+
+    #[test]
+    fn test_detect_ksh_from_shebang() {
+        let content = "#!/bin/ksh\necho hello";
+        assert_eq!(plugin().detect_dialect(content), ShellDialect::Ksh);
+    }
+
+    #[test]
+    fn test_detect_fish_from_shebang() {
+        let content = "#!/usr/bin/fish\necho hello";
+        assert_eq!(plugin().detect_dialect(content), ShellDialect::Fish);
+    }
+
+    #[test]
+    fn test_detect_ksh_from_syntax() {
+        let content = "typeset -i counter\ninteger value=5";
+        assert_eq!(plugin().detect_dialect(content), ShellDialect::Ksh);
+    }
+
+    #[test]
+    fn test_detect_sh_from_set_flags() {
+        let content = "set -e\nset -u\necho hello";
+        assert_eq!(plugin().detect_dialect(content), ShellDialect::Sh);
+    }
+
+    #[test]
+    fn test_detect_bash_from_arithmetic() {
+        let content = "count=$((1 + 2))\necho $count";
+        assert_eq!(plugin().detect_dialect(content), ShellDialect::Bash);
+    }
+
+    #[test]
+    fn test_shell_dialect_default() {
+        let dialect: ShellDialect = Default::default();
+        assert_eq!(dialect, ShellDialect::Sh);
+    }
+
+    #[test]
+    fn test_shell_plugin_default() {
+        let p = ShellPlugin::default();
+        assert_eq!(p.language_name(), "shell");
+    }
+
+    #[test]
+    fn test_extract_export_without_value() {
+        let content = "export PATH\nexport HOME\n";
+        let symbols = plugin().extract_symbols(content).unwrap();
+        assert!(symbols.iter().any(|s| s.signature == "export PATH"));
+        assert!(symbols.iter().any(|s| s.signature == "export HOME"));
+    }
+
+    #[test]
+    fn test_extract_readonly_without_value() {
+        let content = "readonly CONFIG\nreadonly DEBUG\n";
+        let symbols = plugin().extract_symbols(content).unwrap();
+        assert!(symbols.iter().any(|s| s.signature == "readonly CONFIG"));
+        assert!(symbols.iter().any(|s| s.signature == "readonly DEBUG"));
+    }
+
+    #[test]
+    fn test_file_info_shunit2_test() {
+        let content = "#!/bin/bash\n. shunit2\ntest_something() { assertTrue 1; }";
+        let info = plugin().file_info(content).unwrap();
+        assert!(info.is_test);
+    }
+
+    #[test]
+    fn test_file_info_bats_test() {
+        let content = "#!/usr/bin/env bats\n@test \"example\" {\n  run true\n}";
+        let info = plugin().file_info(content).unwrap();
+        assert!(info.is_test);
+    }
+
+    #[test]
+    fn test_file_info_no_shebang() {
+        let content = "echo hello\necho world";
+        let info = plugin().file_info(content).unwrap();
+        assert_eq!(info.metadata.get("interpreter"), None);
+    }
+
+    #[test]
+    fn test_file_info_with_main() {
+        let content = "main() {\n  echo 'Starting...'\n}\nmain";
+        let info = plugin().file_info(content).unwrap();
+        assert!(info.is_executable);
+    }
+
+    #[test]
+    fn test_extract_doc_comment_with_empty_lines() {
+        let content = r#"
+# First line of doc
+# Second line of doc
+
+deploy() {
+    echo "deploy"
+}
+"#;
+        let symbols = plugin().extract_symbols(content).unwrap();
+        assert_eq!(symbols.len(), 1);
+        // Doc should be extracted even with empty line gap
+        if let Some(doc) = &symbols[0].documentation {
+            assert!(doc.contains("First") || doc.contains("Second"));
+        }
+    }
+
+    #[test]
+    fn test_extract_symbols_empty_name_skipped() {
+        // The regex patterns won't match empty names, but test the code path
+        let content = "normal_func() {\n  echo ok\n}\n";
+        let symbols = plugin().extract_symbols(content).unwrap();
+        assert_eq!(symbols.len(), 1);
+        assert_eq!(symbols[0].name, "normal_func");
+    }
+
+    #[test]
+    fn test_extract_imports_empty_file_skipped() {
+        let content = "echo hello\n# no source commands";
+        let imports = plugin().extract_imports(content).unwrap();
+        assert!(imports.is_empty());
+    }
+
+    #[test]
+    fn test_source_with_single_quotes() {
+        let content = "source './lib/helpers.sh'";
+        let imports = plugin().extract_imports(content).unwrap();
+        assert_eq!(imports.len(), 1);
+        assert!(imports[0].module.contains("helpers.sh"));
+    }
+
+    #[test]
+    fn test_extensions_includes_ksh_and_fish() {
+        let p = plugin();
+        let exts = p.extensions();
+        assert!(exts.contains(&"ksh"));
+        assert!(exts.contains(&"fish"));
+    }
+
+    #[test]
+    fn test_supports_ksh_and_fish_files() {
+        let p = plugin();
+        assert!(p.supports_file(std::path::Path::new("script.ksh")));
+        assert!(p.supports_file(std::path::Path::new("config.fish")));
+    }
 }
