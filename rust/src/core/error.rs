@@ -185,4 +185,104 @@ mod tests {
         let err: EncoderError = json_err.into();
         assert!(matches!(err, EncoderError::Json(_)));
     }
+
+    #[test]
+    fn test_utf8_error_conversion() {
+        // Create invalid UTF-8 bytes
+        let invalid_bytes = vec![0xff, 0xfe];
+        let utf8_err = String::from_utf8(invalid_bytes).unwrap_err();
+        let err: EncoderError = utf8_err.into();
+        assert!(matches!(err, EncoderError::Utf8Error(_)));
+        assert!(err.to_string().contains("UTF-8"));
+    }
+
+    #[test]
+    fn test_with_context_source_chain() {
+        let inner = EncoderError::FileNotFound {
+            path: PathBuf::from("inner.txt"),
+        };
+        let outer = inner.with_context("outer context");
+
+        // Check the error chain
+        if let EncoderError::WithContext { context, source } = outer {
+            assert_eq!(context, "outer context");
+            assert!(matches!(*source, EncoderError::FileNotFound { .. }));
+        } else {
+            panic!("Expected WithContext variant");
+        }
+    }
+
+    #[test]
+    fn test_error_debug_format() {
+        let err = EncoderError::BudgetExceeded {
+            used: 1000,
+            budget: 500,
+        };
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("BudgetExceeded"));
+    }
+
+    #[test]
+    fn test_result_type_alias() {
+        fn returns_result() -> Result<i32> {
+            Ok(42)
+        }
+
+        fn returns_error() -> Result<i32> {
+            Err(EncoderError::invalid_config("test"))
+        }
+
+        assert_eq!(returns_result().unwrap(), 42);
+        assert!(returns_error().is_err());
+    }
+
+    #[test]
+    fn test_io_error_display() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "access denied");
+        let err: EncoderError = io_err.into();
+        assert!(err.to_string().contains("IO error"));
+        assert!(err.to_string().contains("access denied"));
+    }
+
+    #[test]
+    fn test_json_error_display() {
+        let json_err: serde_json::Error = serde_json::from_str::<i32>("invalid").unwrap_err();
+        let err: EncoderError = json_err.into();
+        assert!(err.to_string().contains("JSON error"));
+    }
+
+    #[test]
+    fn test_nested_with_context() {
+        let base = EncoderError::invalid_config("base error");
+        let level1 = base.with_context("level 1");
+        let level2 = level1.with_context("level 2");
+
+        assert!(level2.to_string().contains("level 2"));
+    }
+
+    #[test]
+    fn test_result_ext_ok_passthrough() {
+        let result: Result<i32> = Ok(42);
+        let with_ctx = result.context("should not affect Ok");
+        assert_eq!(with_ctx.unwrap(), 42);
+    }
+
+    #[test]
+    fn test_all_error_variants_display() {
+        // Comprehensive test of all error variant displays
+        let errors: Vec<EncoderError> = vec![
+            EncoderError::DirectoryNotFound { path: PathBuf::from("/dir") },
+            EncoderError::FileNotFound { path: PathBuf::from("/file") },
+            EncoderError::InvalidConfig { message: "msg".to_string() },
+            EncoderError::LensNotFound { name: "lens".to_string() },
+            EncoderError::InvalidZoomTarget { target: "target".to_string() },
+            EncoderError::BudgetExceeded { used: 100, budget: 50 },
+            EncoderError::XmlError { message: "xml msg".to_string() },
+        ];
+
+        for err in errors {
+            let display = err.to_string();
+            assert!(!display.is_empty(), "Error display should not be empty");
+        }
+    }
 }
