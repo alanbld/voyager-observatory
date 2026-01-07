@@ -597,4 +597,263 @@ mod tests {
 
         let _ = fs::remove_dir_all(&temp);
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_format_with_commas() {
+        assert_eq!(format_with_commas(0), "0");
+        assert_eq!(format_with_commas(1), "1");
+        assert_eq!(format_with_commas(12), "12");
+        assert_eq!(format_with_commas(123), "123");
+        assert_eq!(format_with_commas(1234), "1,234");
+        assert_eq!(format_with_commas(12345), "12,345");
+        assert_eq!(format_with_commas(123456), "123,456");
+        assert_eq!(format_with_commas(1234567), "1,234,567");
+        assert_eq!(format_with_commas(1000000), "1,000,000");
+    }
+
+    #[test]
+    fn test_detect_project_commands_requirements_txt() {
+        let temp = std::env::temp_dir().join("pm_test_commands_requirements");
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+        fs::write(temp.join("requirements.txt"), "flask==2.0\nrequests").unwrap();
+
+        let commands = detect_project_commands(temp.to_str().unwrap());
+        assert!(commands.contains(&"pip install -r requirements.txt".to_string()));
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_detect_project_commands_empty_directory() {
+        let temp = std::env::temp_dir().join("pm_test_commands_empty");
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+
+        let commands = detect_project_commands(temp.to_str().unwrap());
+        assert!(commands.is_empty());
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_generate_directory_tree_max_depth_zero() {
+        let temp = std::env::temp_dir().join("pm_test_tree_depth_zero");
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+        fs::create_dir_all(temp.join("src")).unwrap();
+        fs::write(temp.join("src/main.rs"), "").unwrap();
+
+        let tree = generate_directory_tree(temp.to_str().unwrap(), &vec![], 0);
+        assert!(tree.is_empty(), "Tree with max_depth=0 should be empty");
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_generate_directory_tree_glob_pattern_ignore() {
+        let temp = std::env::temp_dir().join("pm_test_tree_glob");
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+        fs::write(temp.join("main.py"), "").unwrap();
+        fs::write(temp.join("test.pyc"), "").unwrap();
+        fs::write(temp.join("cache.pyc"), "").unwrap();
+
+        let ignore = vec!["*.pyc".to_string()];
+        let tree = generate_directory_tree(temp.to_str().unwrap(), &ignore, 3);
+
+        let tree_str = tree.join("\n");
+        assert!(tree_str.contains("main.py"), "Should contain main.py");
+        assert!(!tree_str.contains(".pyc"), "Should not contain .pyc files");
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_generate_directory_tree_hidden_files() {
+        let temp = std::env::temp_dir().join("pm_test_tree_hidden");
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+        fs::write(temp.join("visible.txt"), "").unwrap();
+        fs::write(temp.join(".hidden"), "").unwrap();
+        fs::create_dir_all(temp.join(".hidden_dir")).unwrap();
+
+        let tree = generate_directory_tree(temp.to_str().unwrap(), &vec![], 3);
+
+        let tree_str = tree.join("\n");
+        assert!(tree_str.contains("visible.txt"), "Should contain visible.txt");
+        assert!(!tree_str.contains(".hidden"), "Should not contain hidden files");
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_generate_directory_tree_sorting() {
+        let temp = std::env::temp_dir().join("pm_test_tree_sort");
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+        fs::create_dir_all(temp.join("zebra")).unwrap();
+        fs::create_dir_all(temp.join("alpha")).unwrap();
+        fs::write(temp.join("beta.txt"), "").unwrap();
+        fs::write(temp.join("gamma.txt"), "").unwrap();
+
+        let tree = generate_directory_tree(temp.to_str().unwrap(), &vec![], 3);
+
+        // Directories first (alpha, zebra), then files (beta, gamma)
+        let alpha_idx = tree.iter().position(|l| l.contains("alpha/"));
+        let zebra_idx = tree.iter().position(|l| l.contains("zebra/"));
+        let beta_idx = tree.iter().position(|l| l.contains("beta.txt"));
+        let gamma_idx = tree.iter().position(|l| l.contains("gamma.txt"));
+
+        // Dirs should come before files
+        assert!(alpha_idx.unwrap() < beta_idx.unwrap());
+        assert!(zebra_idx.unwrap() < beta_idx.unwrap());
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_generate_directory_tree_nested() {
+        let temp = std::env::temp_dir().join("pm_test_tree_nested");
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(temp.join("a/b/c")).unwrap();
+        fs::write(temp.join("a/b/c/deep.txt"), "").unwrap();
+
+        let tree = generate_directory_tree(temp.to_str().unwrap(), &vec![], 5);
+
+        let tree_str = tree.join("\n");
+        assert!(tree_str.contains("a/"), "Should contain a/");
+        assert!(tree_str.contains("b/"), "Should contain b/");
+        assert!(tree_str.contains("c/"), "Should contain c/");
+        assert!(tree_str.contains("deep.txt"), "Should contain deep.txt");
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_generate_directory_tree_depth_limit() {
+        let temp = std::env::temp_dir().join("pm_test_tree_depth_limit");
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(temp.join("a/b/c/d")).unwrap();
+        fs::write(temp.join("a/b/c/d/deep.txt"), "").unwrap();
+
+        // Depth 2 should not reach d/
+        let tree = generate_directory_tree(temp.to_str().unwrap(), &vec![], 2);
+        let tree_str = tree.join("\n");
+
+        assert!(tree_str.contains("a/"), "Should contain a/");
+        assert!(tree_str.contains("b/"), "Should contain b/");
+        assert!(!tree_str.contains("c/"), "Should not contain c/ at depth 2");
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_generate_meta_header_architecture() {
+        let header = generate_meta_header("architecture", "Architecture and structure");
+
+        assert!(header.contains("lens: \"architecture\""));
+        assert!(header.contains("Focus: Architecture"));
+        assert!(header.contains("Implementation details truncated"));
+        assert!(header.contains("Import/export statements"));
+        assert!(header.contains("pm_encoder version:"));
+        assert!(header.contains(".pm_encoder_meta"));
+    }
+
+    #[test]
+    fn test_generate_meta_header_debug() {
+        let header = generate_meta_header("debug", "Debug lens");
+
+        assert!(header.contains("lens: \"debug\""));
+        assert!(header.contains("Focus: Debug"));
+        // Debug lens should NOT have truncation info
+        assert!(!header.contains("Implementation details truncated"));
+    }
+
+    #[test]
+    fn test_generate_instruction_content() {
+        let content = generate_instruction_content(
+            "test_project",
+            "architecture",
+            &["cargo build".to_string(), "cargo test".to_string()],
+            &["├── src/".to_string(), "│   └── main.rs".to_string()],
+            100,
+            5000,
+        );
+
+        assert!(content.contains("# test_project"));
+        assert!(content.contains("architecture"));
+        assert!(content.contains("cargo build"));
+        assert!(content.contains("cargo test"));
+        assert!(content.contains("src/"));
+        assert!(content.contains("main.rs"));
+        assert!(content.contains("CONTEXT.txt"));
+        assert!(content.contains("Statistics"));
+    }
+
+    #[test]
+    fn test_generate_instruction_content_no_commands() {
+        let content = generate_instruction_content(
+            "empty_project",
+            "debug",
+            &[],
+            &["├── readme.txt".to_string()],
+            10,
+            500,
+        );
+
+        assert!(content.contains("# empty_project"));
+        // Should not have "Commands" section if no commands
+        assert!(!content.contains("## Commands"));
+    }
+
+    #[test]
+    fn test_generate_instruction_content_large_bytes() {
+        let content = generate_instruction_content(
+            "big_project",
+            "minimal",
+            &[],
+            &[],
+            10000,
+            1234567,
+        );
+
+        // Should have comma-formatted bytes
+        assert!(content.contains("1,234,567 bytes"));
+    }
+
+    #[test]
+    fn test_init_prompt_invalid_lens() {
+        let temp = std::env::temp_dir().join("pm_test_invalid_lens");
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+        fs::write(temp.join("test.py"), "x = 1").unwrap();
+
+        let result = init_prompt(temp.to_str().unwrap(), "nonexistent_lens", "claude");
+        assert!(result.is_err());
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_generate_directory_tree_empty_directory() {
+        let temp = std::env::temp_dir().join("pm_test_tree_empty");
+        let _ = fs::remove_dir_all(&temp);
+        fs::create_dir_all(&temp).unwrap();
+
+        let tree = generate_directory_tree(temp.to_str().unwrap(), &vec![], 3);
+        assert!(tree.is_empty(), "Empty directory should produce empty tree");
+
+        let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_generate_directory_tree_nonexistent() {
+        let tree = generate_directory_tree("/nonexistent/path/xyz", &vec![], 3);
+        assert!(tree.is_empty(), "Nonexistent directory should produce empty tree");
+    }
 }
