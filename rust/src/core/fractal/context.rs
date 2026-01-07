@@ -743,4 +743,484 @@ mod tests {
         assert_eq!(deserialized.extraction_time, Duration::from_millis(150));
         assert_eq!(deserialized.cache_hits, 10);
     }
+
+    // =========================================================================
+    // Additional Coverage Tests
+    // =========================================================================
+
+    #[test]
+    fn test_fractal_context_siblings() {
+        let mut root = create_test_file_layer();
+        root.add_child("sym_001");
+        root.add_child("sym_002");
+        root.add_child("sym_003");
+
+        let mut ctx = FractalContext::new("ctx_001", root);
+        ctx.add_layer(create_test_symbol_layer("sym_001", "func_a", "file_001"));
+        ctx.add_layer(create_test_symbol_layer("sym_002", "func_b", "file_001"));
+        ctx.add_layer(create_test_symbol_layer("sym_003", "func_c", "file_001"));
+
+        let siblings = ctx.siblings("sym_001");
+        assert_eq!(siblings.len(), 3); // includes itself
+    }
+
+    #[test]
+    fn test_fractal_context_siblings_no_parent() {
+        let root = create_test_file_layer();
+        let ctx = FractalContext::new("ctx_001", root);
+
+        // Root has no parent, so siblings returns empty
+        let siblings = ctx.siblings("file_001");
+        assert!(siblings.is_empty());
+    }
+
+    #[test]
+    fn test_fractal_context_layer_ids() {
+        let mut root = create_test_file_layer();
+        root.add_child("sym_001");
+
+        let mut ctx = FractalContext::new("ctx_001", root);
+        ctx.add_layer(create_test_symbol_layer("sym_001", "main", "file_001"));
+
+        let ids = ctx.layer_ids();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&"file_001"));
+        assert!(ids.contains(&"sym_001"));
+    }
+
+    #[test]
+    fn test_fractal_context_current() {
+        let mut root = create_test_file_layer();
+        root.add_child("sym_001");
+
+        let mut ctx = FractalContext::new("ctx_001", root);
+        ctx.add_layer(create_test_symbol_layer("sym_001", "main", "file_001"));
+
+        // Current is root initially
+        let current = ctx.current();
+        assert!(current.is_some());
+        assert_eq!(current.unwrap().id, "file_001");
+
+        // Navigate and check current changes
+        ctx.navigate_to("sym_001");
+        let current = ctx.current();
+        assert_eq!(current.unwrap().id, "sym_001");
+    }
+
+    #[test]
+    fn test_fractal_context_get_layer_mut() {
+        let root = create_test_file_layer();
+        let mut ctx = FractalContext::new("ctx_001", root);
+
+        // Get mutable layer and modify
+        if let Some(layer) = ctx.get_layer_mut("file_001") {
+            layer.add_child("new_child");
+        }
+
+        let layer = ctx.get_layer("file_001").unwrap();
+        assert!(layer.child_ids.contains(&"new_child".to_string()));
+    }
+
+    #[test]
+    fn test_fractal_context_get_layer_mut_nonexistent() {
+        let root = create_test_file_layer();
+        let mut ctx = FractalContext::new("ctx_001", root);
+
+        assert!(ctx.get_layer_mut("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_fractal_context_navigate_nonexistent() {
+        let root = create_test_file_layer();
+        let mut ctx = FractalContext::new("ctx_001", root);
+
+        assert!(!ctx.navigate_to("nonexistent"));
+    }
+
+    #[test]
+    fn test_fractal_context_zoom_in_no_children() {
+        let root = create_test_file_layer();
+        let mut ctx = FractalContext::new("ctx_001", root);
+
+        // No children, can't zoom in
+        assert!(!ctx.zoom_in());
+    }
+
+    #[test]
+    fn test_fractal_context_children_nonexistent() {
+        let root = create_test_file_layer();
+        let ctx = FractalContext::new("ctx_001", root);
+
+        let children = ctx.children("nonexistent");
+        assert!(children.is_empty());
+    }
+
+    #[test]
+    fn test_fractal_context_parent_nonexistent() {
+        let root = create_test_file_layer();
+        let ctx = FractalContext::new("ctx_001", root);
+
+        let parent = ctx.parent("nonexistent");
+        assert!(parent.is_none());
+    }
+
+    #[test]
+    fn test_fractal_context_hierarchical_view_nonexistent() {
+        let root = create_test_file_layer();
+        let ctx = FractalContext::new("ctx_001", root);
+
+        let view = ctx.hierarchical_view("nonexistent", 2);
+        assert!(view.is_none());
+    }
+
+    #[test]
+    fn test_fractal_context_hierarchical_view_max_depth() {
+        let mut root = create_test_file_layer();
+        root.add_child("sym_001");
+
+        let mut ctx = FractalContext::new("ctx_001", root);
+        ctx.add_layer(create_test_symbol_layer("sym_001", "main", "file_001"));
+
+        // Max depth 0 should not include children
+        let view = ctx.hierarchical_view("file_001", 0).unwrap();
+        assert!(view.children.is_empty());
+    }
+
+    // =========================================================================
+    // Call Graph Tests
+    // =========================================================================
+
+    #[test]
+    fn test_fractal_context_call_graph_methods() {
+        let root = create_test_file_layer();
+        let mut ctx = FractalContext::new("ctx_001", root);
+
+        // Initially no call graph
+        assert!(!ctx.has_call_graph());
+        assert!(ctx.get_call_graph().is_none());
+        assert!(ctx.get_call_graph_mut().is_none());
+
+        // Set call graph
+        let call_graph = CallGraph::new();
+        ctx.set_call_graph(call_graph);
+
+        assert!(ctx.has_call_graph());
+        assert!(ctx.get_call_graph().is_some());
+        assert!(ctx.get_call_graph_mut().is_some());
+    }
+
+    // =========================================================================
+    // NodeType Tests
+    // =========================================================================
+
+    #[test]
+    fn test_node_type_default() {
+        let node_type = NodeType::default();
+        assert_eq!(node_type, NodeType::Symbol);
+    }
+
+    #[test]
+    fn test_node_type_all_variants() {
+        let variants = vec![
+            NodeType::Symbol,
+            NodeType::File,
+            NodeType::Module,
+            NodeType::Dependency,
+            NodeType::External,
+        ];
+
+        for variant in variants {
+            // Test Clone and Copy
+            let cloned = variant.clone();
+            let copied: NodeType = variant;
+            assert_eq!(cloned, copied);
+        }
+    }
+
+    #[test]
+    fn test_node_type_serialization() {
+        let node_type = NodeType::Module;
+        let json = serde_json::to_string(&node_type).unwrap();
+        let deserialized: NodeType = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, NodeType::Module);
+    }
+
+    // =========================================================================
+    // RelationshipType Tests
+    // =========================================================================
+
+    #[test]
+    fn test_relationship_type_default() {
+        let rel_type = RelationshipType::default();
+        assert_eq!(rel_type, RelationshipType::Calls);
+    }
+
+    #[test]
+    fn test_relationship_type_all_variants() {
+        let variants = vec![
+            RelationshipType::Calls,
+            RelationshipType::CalledBy,
+            RelationshipType::Imports,
+            RelationshipType::DependsOn,
+            RelationshipType::Contains,
+            RelationshipType::SimilarTo,
+            RelationshipType::Implements,
+            RelationshipType::Extends,
+        ];
+
+        for variant in variants {
+            // Test Clone and Copy
+            let cloned = variant.clone();
+            let copied: RelationshipType = variant;
+            assert_eq!(cloned, copied);
+        }
+    }
+
+    #[test]
+    fn test_relationship_type_serialization() {
+        let rel_type = RelationshipType::Implements;
+        let json = serde_json::to_string(&rel_type).unwrap();
+        let deserialized: RelationshipType = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, RelationshipType::Implements);
+    }
+
+    // =========================================================================
+    // GraphNode Tests
+    // =========================================================================
+
+    #[test]
+    fn test_graph_node_with_properties() {
+        let mut properties = HashMap::new();
+        properties.insert("complexity".to_string(), "high".to_string());
+        properties.insert("lines".to_string(), "50".to_string());
+
+        let node = GraphNode {
+            id: "node_1".to_string(),
+            label: "main".to_string(),
+            node_type: NodeType::Symbol,
+            properties,
+        };
+
+        assert_eq!(node.properties.len(), 2);
+        assert_eq!(node.properties.get("complexity"), Some(&"high".to_string()));
+    }
+
+    #[test]
+    fn test_graph_node_clone() {
+        let node = GraphNode {
+            id: "node_1".to_string(),
+            label: "main".to_string(),
+            node_type: NodeType::Symbol,
+            properties: HashMap::new(),
+        };
+
+        let cloned = node.clone();
+        assert_eq!(cloned.id, "node_1");
+        assert_eq!(cloned.label, "main");
+    }
+
+    // =========================================================================
+    // GraphEdge Tests
+    // =========================================================================
+
+    #[test]
+    fn test_graph_edge_with_properties() {
+        let mut properties = HashMap::new();
+        properties.insert("call_count".to_string(), "5".to_string());
+
+        let edge = GraphEdge {
+            source: "a".to_string(),
+            target: "b".to_string(),
+            relationship: RelationshipType::Calls,
+            weight: 0.8,
+            properties,
+        };
+
+        assert_eq!(edge.weight, 0.8);
+        assert_eq!(edge.properties.get("call_count"), Some(&"5".to_string()));
+    }
+
+    #[test]
+    fn test_graph_edge_clone() {
+        let edge = GraphEdge {
+            source: "a".to_string(),
+            target: "b".to_string(),
+            relationship: RelationshipType::Imports,
+            weight: 1.0,
+            properties: HashMap::new(),
+        };
+
+        let cloned = edge.clone();
+        assert_eq!(cloned.source, "a");
+        assert_eq!(cloned.relationship, RelationshipType::Imports);
+    }
+
+    // =========================================================================
+    // SemanticCluster Tests
+    // =========================================================================
+
+    #[test]
+    fn test_semantic_cluster_creation() {
+        let cluster = SemanticCluster {
+            id: "cluster_001".to_string(),
+            name: "Auth Functions".to_string(),
+            element_ids: vec!["login".to_string(), "logout".to_string(), "verify".to_string()],
+            description: Some("Authentication-related functions".to_string()),
+            similarity_threshold: 0.85,
+        };
+
+        assert_eq!(cluster.element_ids.len(), 3);
+        assert!(cluster.description.is_some());
+        assert_eq!(cluster.similarity_threshold, 0.85);
+    }
+
+    #[test]
+    fn test_semantic_cluster_serialization() {
+        let cluster = SemanticCluster {
+            id: "c1".to_string(),
+            name: "Test".to_string(),
+            element_ids: vec!["a".to_string()],
+            description: None,
+            similarity_threshold: 0.5,
+        };
+
+        let json = serde_json::to_string(&cluster).unwrap();
+        let deserialized: SemanticCluster = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.id, "c1");
+    }
+
+    // =========================================================================
+    // ExtractionMetadata Tests
+    // =========================================================================
+
+    #[test]
+    fn test_extraction_metadata_default() {
+        let metadata = ExtractionMetadata::default();
+        assert_eq!(metadata.extraction_time, Duration::from_millis(0));
+        assert!(metadata.source_path.is_none());
+        assert!(metadata.language.is_none());
+        assert!(metadata.confidence_scores.is_empty());
+        assert_eq!(metadata.cache_hits, 0);
+        assert_eq!(metadata.cache_misses, 0);
+        assert!(metadata.extractor_version.is_empty());
+    }
+
+    #[test]
+    fn test_extraction_metadata_clone() {
+        let metadata = ExtractionMetadata {
+            extraction_time: Duration::from_millis(100),
+            source_path: Some(PathBuf::from("test.rs")),
+            language: Some("rust".to_string()),
+            confidence_scores: HashMap::new(),
+            cache_hits: 5,
+            cache_misses: 1,
+            extractor_version: "1.0".to_string(),
+        };
+
+        let cloned = metadata.clone();
+        assert_eq!(cloned.extraction_time, Duration::from_millis(100));
+        assert_eq!(cloned.cache_hits, 5);
+    }
+
+    // =========================================================================
+    // ZoomView Tests
+    // =========================================================================
+
+    #[test]
+    fn test_zoom_view_clone() {
+        let view = ZoomView {
+            level: ZoomLevel::Symbol,
+            focus_id: Some("sym_001".to_string()),
+            visible_range: Some(Range { start_line: 10, start_col: 0, end_line: 50, end_col: 0 }),
+        };
+
+        let cloned = view.clone();
+        assert_eq!(cloned.level, ZoomLevel::Symbol);
+        assert_eq!(cloned.focus_id, Some("sym_001".to_string()));
+    }
+
+    #[test]
+    fn test_zoom_view_serialization() {
+        let view = ZoomView {
+            level: ZoomLevel::File,
+            focus_id: Some("file_001".to_string()),
+            visible_range: None,
+        };
+
+        let json = serde_json::to_string(&view).unwrap();
+        let deserialized: ZoomView = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.level, ZoomLevel::File);
+    }
+
+    // =========================================================================
+    // HierarchicalView Tests
+    // =========================================================================
+
+    #[test]
+    fn test_hierarchical_view_clone() {
+        let view = HierarchicalView {
+            id: "root".to_string(),
+            level: ZoomLevel::Project,
+            name: "MyProject".to_string(),
+            children: vec![
+                HierarchicalView {
+                    id: "child".to_string(),
+                    level: ZoomLevel::File,
+                    name: "main.rs".to_string(),
+                    children: vec![],
+                },
+            ],
+        };
+
+        let cloned = view.clone();
+        assert_eq!(cloned.id, "root");
+        assert_eq!(cloned.children.len(), 1);
+    }
+
+    #[test]
+    fn test_hierarchical_view_serialization() {
+        let view = HierarchicalView {
+            id: "test".to_string(),
+            level: ZoomLevel::Module,
+            name: "module".to_string(),
+            children: vec![],
+        };
+
+        let json = serde_json::to_string(&view).unwrap();
+        let deserialized: HierarchicalView = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.name, "module");
+    }
+
+    // =========================================================================
+    // RelationshipGraph Additional Tests
+    // =========================================================================
+
+    #[test]
+    fn test_relationship_graph_default() {
+        let graph = RelationshipGraph::default();
+        assert!(graph.nodes.is_empty());
+        assert!(graph.edges.is_empty());
+    }
+
+    #[test]
+    fn test_relationship_graph_clone() {
+        let mut graph = RelationshipGraph::default();
+        graph.add_node(GraphNode {
+            id: "n1".to_string(),
+            label: "Node 1".to_string(),
+            node_type: NodeType::Symbol,
+            properties: HashMap::new(),
+        });
+
+        let cloned = graph.clone();
+        assert_eq!(cloned.nodes.len(), 1);
+    }
+
+    #[test]
+    fn test_relationship_graph_edges_empty() {
+        let graph = RelationshipGraph::default();
+        assert!(graph.edges_from("any").is_empty());
+        assert!(graph.edges_to("any").is_empty());
+        assert!(graph.connected_nodes("any").is_empty());
+    }
 }
