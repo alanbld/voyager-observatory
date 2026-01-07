@@ -1054,4 +1054,269 @@ mod tests {
         // Should find the file in the real directory
         assert!(entries.iter().any(|e| e.relative_path.to_string_lossy().contains("real_dir")));
     }
+
+    // ========================================================================
+    // Additional Coverage Tests
+    // ========================================================================
+
+    #[test]
+    fn test_default_walker_default_trait() {
+        let walker = DefaultWalker::default();
+        // Just verify Default trait works
+        assert!(!walker.is_too_large(100, 1000));
+    }
+
+    #[test]
+    fn test_default_walker_not_a_directory() {
+        let tmp = TempDir::new().unwrap();
+        let file_path = tmp.path().join("not_a_dir.txt");
+        fs::write(&file_path, "content").unwrap();
+
+        let walker = DefaultWalker::new();
+        let config = WalkConfig::default();
+        let result = walker.walk(file_path.to_str().unwrap(), &config);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_file_content_binary_like() {
+        // Create content with many replacement characters (binary-like)
+        let bytes: Vec<u8> = vec![0xFF, 0xFE, 0xFF, 0xFE, 0xFF]; // Invalid UTF-8
+        let result = read_file_content(&bytes);
+        // Should return None due to too many replacement chars
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_read_file_content_partial_invalid() {
+        // Valid UTF-8 with a few invalid bytes mixed in
+        // Need enough valid chars so invalid is < 10%
+        let mut bytes = b"Hello World, this is a longer string with enough chars".to_vec();
+        bytes.extend(&[0xFF]); // Invalid byte
+        bytes.extend(b" to make the ratio work correctly");
+        let result = read_file_content(&bytes);
+        // Should use lossy conversion since < 10% replacement (1 invalid in ~90 chars)
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("Hello"));
+    }
+
+    #[test]
+    fn test_smart_walker_accessors() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[package]").unwrap();
+
+        let walker = SmartWalker::new(tmp.path());
+
+        // Test manifest() accessor
+        let manifest = walker.manifest();
+        assert_eq!(manifest.root, tmp.path().canonicalize().unwrap());
+
+        // Test root() accessor
+        let root = walker.root();
+        assert_eq!(root, tmp.path().canonicalize().unwrap());
+    }
+
+    #[test]
+    fn test_smart_walker_with_config() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("test.txt"), "content").unwrap();
+
+        let config = SmartWalkConfig {
+            follow_symlinks: true,
+            include_hidden: true,
+            max_depth: Some(5),
+            ..Default::default()
+        };
+
+        let walker = SmartWalker::with_config(tmp.path(), config);
+        let entries = walker.walk().unwrap();
+
+        assert!(!entries.is_empty());
+    }
+
+    #[test]
+    fn test_smart_walk_config_with_max_depth() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir_all(tmp.path().join("a/b/c/d/e")).unwrap();
+        fs::write(tmp.path().join("a/b/c/d/e/deep.txt"), "deep").unwrap();
+        fs::write(tmp.path().join("a/shallow.txt"), "shallow").unwrap();
+
+        let config = SmartWalkConfig {
+            max_depth: Some(2),
+            ..Default::default()
+        };
+
+        let walker = SmartWalker::with_config(tmp.path(), config);
+        let entries = walker.walk().unwrap();
+
+        let paths: Vec<_> = entries.iter()
+            .map(|e| e.relative_path.to_string_lossy().to_string())
+            .collect();
+
+        // shallow.txt is at depth 2 (a/shallow.txt)
+        assert!(paths.iter().any(|p| p.contains("shallow.txt")));
+        // deep.txt is at depth 6, should be excluded
+        assert!(!paths.iter().any(|p| p.contains("deep.txt")));
+    }
+
+    #[test]
+    fn test_smart_walker_max_file_size() {
+        let tmp = TempDir::new().unwrap();
+
+        // Create a small file
+        fs::write(tmp.path().join("small.txt"), "small").unwrap();
+
+        // Create a "large" file (larger than our limit)
+        fs::write(tmp.path().join("large.txt"), "x".repeat(1000)).unwrap();
+
+        let config = SmartWalkConfig {
+            max_file_size: 100, // Only 100 bytes
+            ..Default::default()
+        };
+
+        let walker = SmartWalker::with_config(tmp.path(), config);
+        let entries = walker.walk().unwrap();
+
+        let paths: Vec<_> = entries.iter()
+            .map(|e| e.relative_path.to_string_lossy().to_string())
+            .collect();
+
+        assert!(paths.iter().any(|p| p.contains("small.txt")));
+        assert!(!paths.iter().any(|p| p.contains("large.txt")));
+    }
+
+    #[test]
+    fn test_walk_entry_fields() {
+        let entry = WalkEntry {
+            path: std::path::PathBuf::from("/abs/path/file.txt"),
+            relative_path: std::path::PathBuf::from("file.txt"),
+            is_file: true,
+        };
+
+        assert!(entry.is_file);
+        assert_eq!(entry.path.to_string_lossy(), "/abs/path/file.txt");
+        assert_eq!(entry.relative_path.to_string_lossy(), "file.txt");
+    }
+
+    #[test]
+    fn test_walk_config_custom() {
+        let config = WalkConfig {
+            ignore_patterns: vec!["custom".to_string()],
+            include_patterns: vec!["*.rs".to_string()],
+            max_file_size: 500_000,
+        };
+
+        assert!(config.ignore_patterns.contains(&"custom".to_string()));
+        assert!(config.include_patterns.contains(&"*.rs".to_string()));
+        assert_eq!(config.max_file_size, 500_000);
+    }
+
+    #[test]
+    fn test_default_walker_include_patterns() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("include.rs"), "rust code").unwrap();
+        fs::write(tmp.path().join("exclude.txt"), "text").unwrap();
+
+        let walker = DefaultWalker::new();
+        let config = WalkConfig {
+            ignore_patterns: vec![],
+            include_patterns: vec!["*.rs".to_string()],
+            max_file_size: 1_048_576,
+        };
+        let entries = walker.walk(tmp.path().to_str().unwrap(), &config).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].path.ends_with("include.rs"));
+    }
+
+    #[test]
+    fn test_default_walker_skips_binary() {
+        let tmp = TempDir::new().unwrap();
+        // Create a binary file with null bytes
+        fs::write(tmp.path().join("binary.bin"), &[0x00, 0x01, 0x02]).unwrap();
+        fs::write(tmp.path().join("text.txt"), "text content").unwrap();
+
+        let walker = DefaultWalker::new();
+        let config = WalkConfig::default();
+        let entries = walker.walk(tmp.path().to_str().unwrap(), &config).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].path.ends_with("text.txt"));
+    }
+
+    #[test]
+    fn test_default_walker_skips_large_files() {
+        let tmp = TempDir::new().unwrap();
+        fs::write(tmp.path().join("small.txt"), "small").unwrap();
+        fs::write(tmp.path().join("large.txt"), "x".repeat(2_000_000)).unwrap();
+
+        let walker = DefaultWalker::new();
+        let config = WalkConfig {
+            max_file_size: 1_000_000,
+            ..Default::default()
+        };
+        let entries = walker.walk(tmp.path().to_str().unwrap(), &config).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].path.ends_with("small.txt"));
+    }
+
+    #[test]
+    fn test_matches_patterns_prefix_match() {
+        // Test prefix match (directory)
+        assert!(DefaultWalker::matches_patterns("hidden/file.txt", &vec!["hidden".to_string()]));
+    }
+
+    #[test]
+    fn test_smart_walker_should_ignore_trait_impl() {
+        let tmp = TempDir::new().unwrap();
+        let walker = SmartWalker::new(tmp.path());
+
+        assert!(walker.should_ignore(".venv/lib/file.py", &vec![]));
+        assert!(walker.should_ignore("node_modules/pkg/index.js", &vec![]));
+        assert!(!walker.should_ignore("src/main.rs", &vec![]));
+    }
+
+    #[test]
+    fn test_hygiene_wildcard_patterns() {
+        // Test .egg-info wildcard
+        assert!(SmartWalker::is_hygiene_excluded(Path::new("mypackage.egg-info/PKG-INFO")));
+        // Test .swp wildcard
+        assert!(SmartWalker::is_hygiene_excluded(Path::new("file.swp")));
+        // Test .swo wildcard
+        assert!(SmartWalker::is_hygiene_excluded(Path::new("file.swo")));
+        // Test .pyc wildcard
+        assert!(SmartWalker::is_hygiene_excluded(Path::new("module.pyc")));
+    }
+
+    #[test]
+    fn test_smart_walk_config_clone() {
+        let config = SmartWalkConfig {
+            follow_symlinks: true,
+            respect_gitignore: false,
+            include_hidden: true,
+            max_depth: Some(10),
+            extra_excludes: vec!["custom".to_string()],
+            max_file_size: 500_000,
+        };
+
+        let cloned = config.clone();
+        assert_eq!(config.follow_symlinks, cloned.follow_symlinks);
+        assert_eq!(config.max_depth, cloned.max_depth);
+        assert_eq!(config.extra_excludes, cloned.extra_excludes);
+    }
+
+    #[test]
+    fn test_walk_entry_clone() {
+        let entry = WalkEntry {
+            path: std::path::PathBuf::from("/path/to/file.txt"),
+            relative_path: std::path::PathBuf::from("file.txt"),
+            is_file: true,
+        };
+
+        let cloned = entry.clone();
+        assert_eq!(entry.path, cloned.path);
+        assert_eq!(entry.relative_path, cloned.relative_path);
+    }
 }
