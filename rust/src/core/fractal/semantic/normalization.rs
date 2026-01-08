@@ -526,4 +526,310 @@ mod tests {
 
         assert_eq!(normalized.len(), 3);
     }
+
+    // =========================================================================
+    // Additional Tests for Comprehensive Coverage
+    // =========================================================================
+
+    #[test]
+    fn test_normalization_strategy_variants() {
+        assert_eq!(NormalizationStrategy::ZScore, NormalizationStrategy::ZScore);
+        assert_ne!(NormalizationStrategy::ZScore, NormalizationStrategy::MinMax);
+        assert_ne!(
+            NormalizationStrategy::LanguageWeighted,
+            NormalizationStrategy::None
+        );
+    }
+
+    #[test]
+    fn test_language_normalization_config_default() {
+        let config = LanguageNormalizationConfig::default_config();
+
+        // All weights should be 1.0
+        for &w in &config.feature_weights {
+            assert!((w - 1.0).abs() < 0.001);
+        }
+
+        // All baselines should be 0.0
+        for &b in &config.baselines {
+            assert!((b - 0.0).abs() < 0.001);
+        }
+
+        // All ranges should be (0.0, 1.0)
+        for &(min, max) in &config.expected_ranges {
+            assert!((min - 0.0).abs() < 0.001);
+            assert!((max - 1.0).abs() < 0.001);
+        }
+
+        // No feature mappings
+        assert!(config.feature_mappings.is_empty());
+    }
+
+    #[test]
+    fn test_language_normalization_config_abl() {
+        let config = LanguageNormalizationConfig::abl();
+
+        // ABL reduces complexity weight
+        assert!(config.feature_weights[0] < 1.0);
+        // ABL increases nesting importance
+        assert!(config.feature_weights[1] > 1.0);
+
+        // ABL has specific feature mappings
+        assert!(config.feature_mappings.contains_key(&50));
+        assert_eq!(config.feature_mappings.get(&50), Some(&20));
+    }
+
+    #[test]
+    fn test_language_normalization_config_python() {
+        let config = LanguageNormalizationConfig::python();
+
+        // Python increases complexity weight
+        assert!(config.feature_weights[0] > 1.0);
+        // Python has async pattern mapping
+        assert!(config.feature_mappings.contains_key(&55));
+    }
+
+    #[test]
+    fn test_language_normalization_config_typescript() {
+        let config = LanguageNormalizationConfig::typescript();
+
+        // TypeScript has type completeness mapping
+        assert!(config.feature_mappings.contains_key(&60));
+        // Lower complexity weight
+        assert!(config.feature_weights[0] < 1.0);
+    }
+
+    #[test]
+    fn test_language_normalization_config_javascript() {
+        let config = LanguageNormalizationConfig::javascript();
+
+        // JavaScript inherits from TypeScript
+        assert!(config.feature_mappings.contains_key(&60));
+        // But no type completeness weight
+        assert!((config.feature_weights[60] - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_language_normalization_config_shell() {
+        let config = LanguageNormalizationConfig::shell();
+
+        // Shell has lower complexity weight
+        assert!(config.feature_weights[0] < 1.0);
+        // Higher baseline complexity
+        assert!(config.baselines[0] > 0.3);
+    }
+
+    #[test]
+    fn test_feature_normalizer_default() {
+        let normalizer = FeatureNormalizer::default();
+
+        // Default should be language-weighted
+        assert_eq!(normalizer.strategy, NormalizationStrategy::LanguageWeighted);
+    }
+
+    #[test]
+    fn test_feature_normalizer_constructors() {
+        let zscore = FeatureNormalizer::zscore();
+        assert_eq!(zscore.strategy, NormalizationStrategy::ZScore);
+
+        let minmax = FeatureNormalizer::minmax();
+        assert_eq!(minmax.strategy, NormalizationStrategy::MinMax);
+
+        let weighted = FeatureNormalizer::language_weighted();
+        assert_eq!(weighted.strategy, NormalizationStrategy::LanguageWeighted);
+
+        let none = FeatureNormalizer::new(NormalizationStrategy::None);
+        assert_eq!(none.strategy, NormalizationStrategy::None);
+    }
+
+    #[test]
+    fn test_normalize_none_strategy() {
+        let normalizer = FeatureNormalizer::new(NormalizationStrategy::None);
+
+        let vector = [0.5f32; 64];
+        let normalized = normalizer.normalize(&vector, Language::Python);
+
+        // None strategy returns unchanged vector
+        for (i, &v) in normalized.iter().enumerate() {
+            assert!(
+                (v - vector[i]).abs() < 0.001,
+                "None strategy should return unchanged vector"
+            );
+        }
+    }
+
+    #[test]
+    fn test_fit_empty_vectors() {
+        let mut normalizer = FeatureNormalizer::zscore();
+
+        normalizer.fit(&[]); // Empty vectors
+
+        // Should not crash, global stats remain None
+        assert!(normalizer.global_means.is_none());
+        assert!(normalizer.global_stds.is_none());
+    }
+
+    #[test]
+    fn test_zscore_without_fit() {
+        let normalizer = FeatureNormalizer::zscore();
+
+        // Without fit, uses default means=0, stds=1
+        let vector = [0.0f32; 64];
+        let normalized = normalizer.normalize(&vector, Language::Python);
+
+        // Should be 0.5 (0 z-score mapped to 0.5)
+        for &v in &normalized {
+            assert!((v - 0.5).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn test_minmax_without_fit() {
+        let normalizer = FeatureNormalizer::minmax();
+
+        // Without fit, uses default mins=0, maxs=1
+        let vector = [0.5f32; 64];
+        let normalized = normalizer.normalize(&vector, Language::Python);
+
+        // Should be 0.5 (midpoint of default range)
+        for &v in &normalized {
+            assert!((v - 0.5).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn test_zscore_clamping() {
+        let mut normalizer = FeatureNormalizer::zscore();
+
+        // Fit with tight distribution
+        let vectors = vec![[0.5f32; 64]];
+        normalizer.fit(&vectors);
+
+        // Outlier should be clamped
+        let outlier = [100.0f32; 64];
+        let normalized = normalizer.normalize(&outlier, Language::Python);
+
+        // Values should be clamped to valid range
+        for &v in &normalized {
+            assert!(v >= 0.0 && v <= 1.0);
+        }
+    }
+
+    #[test]
+    fn test_minmax_constant_range() {
+        let mut normalizer = FeatureNormalizer::minmax();
+
+        // All identical values (zero range)
+        let vectors = vec![[5.0f32; 64], [5.0f32; 64]];
+        normalizer.fit(&vectors);
+
+        // Should handle zero range gracefully - code sets maxs = mins + 1.0
+        let normalized = normalizer.normalize(&[5.0f32; 64], Language::Python);
+
+        // With artificial range of 1.0, (5.0 - 5.0) / 1.0 = 0.0
+        for &v in &normalized {
+            assert!((v - 0.0).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn test_alignment_score_zero_vector() {
+        let normalizer = FeatureNormalizer::default();
+
+        let zero = [0.0f32; 64];
+        let normal = [1.0f32; 64];
+
+        // Zero vector alignment should return 0.5 (default)
+        let score = normalizer.alignment_score(&zero, &normal);
+        assert!((score - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_alignment_score_orthogonal() {
+        let normalizer = FeatureNormalizer::default();
+
+        // Create two orthogonal-ish vectors
+        let mut a = [0.0f32; 64];
+        let mut b = [0.0f32; 64];
+
+        // Non-overlapping non-zero positions
+        for i in 0..32 {
+            a[i] = 1.0;
+        }
+        for i in 32..64 {
+            b[i] = 1.0;
+        }
+
+        let score = normalizer.alignment_score(&a, &b);
+        // Orthogonal vectors have cosine similarity 0, mapped to 0.5
+        assert!((score - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_language_configs_preloaded() {
+        let normalizer = FeatureNormalizer::new(NormalizationStrategy::LanguageWeighted);
+
+        // Should have pre-populated configs
+        assert!(normalizer.language_configs.contains_key(&Language::ABL));
+        assert!(normalizer.language_configs.contains_key(&Language::Python));
+        assert!(normalizer
+            .language_configs
+            .contains_key(&Language::TypeScript));
+        assert!(normalizer
+            .language_configs
+            .contains_key(&Language::JavaScript));
+        assert!(normalizer.language_configs.contains_key(&Language::Shell));
+    }
+
+    #[test]
+    fn test_language_weighted_unknown_language() {
+        let normalizer = FeatureNormalizer::language_weighted();
+
+        // Unknown language should use default config
+        let vector = [0.5f32; 64];
+        let normalized = normalizer.normalize(&vector, Language::Rust);
+
+        // Should produce valid normalized output
+        for &v in &normalized {
+            assert!(v >= 0.0 && v <= 1.0);
+        }
+    }
+
+    #[test]
+    fn test_feature_mapping_application() {
+        let normalizer = FeatureNormalizer::language_weighted();
+
+        // Create vector with distinct value at ABL-specific index
+        let mut vector = [0.0f32; 64];
+        vector[50] = 1.0; // ABL database operations index
+
+        let normalized = normalizer.normalize(&vector, Language::ABL);
+
+        // Value should be mapped to universal index 20
+        // The original position should influence position 20
+        assert!(normalized[20] > 0.0);
+    }
+
+    #[test]
+    fn test_normalize_batch_empty() {
+        let normalizer = FeatureNormalizer::language_weighted();
+
+        let vectors_by_language: HashMap<Language, Vec<[f32; 64]>> = HashMap::new();
+        let normalized = normalizer.normalize_batch(&vectors_by_language);
+
+        assert!(normalized.is_empty());
+    }
+
+    #[test]
+    fn test_for_language_fallback() {
+        // Languages not explicitly configured should get default
+        let config = LanguageNormalizationConfig::for_language(Language::Rust);
+        let default = LanguageNormalizationConfig::default_config();
+
+        // Should match default config
+        assert!(config.feature_mappings.is_empty());
+        for (i, &w) in config.feature_weights.iter().enumerate() {
+            assert!((w - default.feature_weights[i]).abs() < 0.001);
+        }
+    }
 }
