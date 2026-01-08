@@ -308,4 +308,346 @@ fn utility() {}
         assert_eq!(restored.node_count(), 2);
         assert_eq!(restored.roots, graph.roots);
     }
+
+    // =========================================================================
+    // Additional Unit Tests for Comprehensive Coverage
+    // =========================================================================
+
+    #[test]
+    fn test_call_node_new() {
+        let node = CallNode::new("my_func", "my_func", CallableKind::Function);
+
+        assert_eq!(node.name, "my_func");
+        assert_eq!(node.id, "my_func");
+        assert_eq!(node.kind, CallableKind::Function);
+        assert!(node.file_path.is_none());
+        assert!(node.line.is_none());
+        assert!(!node.is_public);
+    }
+
+    #[test]
+    fn test_call_node_with_location() {
+        let node = CallNode::new("func", "func", CallableKind::Function)
+            .with_location("src/lib.rs", 42);
+
+        assert_eq!(node.file_path, Some("src/lib.rs".to_string()));
+        assert_eq!(node.line, Some(42));
+    }
+
+    #[test]
+    fn test_call_node_with_visibility() {
+        let node = CallNode::new("pub_func", "pub_func", CallableKind::Function)
+            .with_visibility(true);
+
+        assert!(node.is_public);
+    }
+
+    #[test]
+    fn test_callable_kind_variants() {
+        assert_eq!(CallableKind::Function, CallableKind::Function);
+        assert_ne!(CallableKind::Function, CallableKind::Method);
+        assert_ne!(CallableKind::Method, CallableKind::Constructor);
+        assert_ne!(CallableKind::Closure, CallableKind::Macro);
+    }
+
+    #[test]
+    fn test_call_kind_variants() {
+        assert_eq!(CallKind::Direct, CallKind::Direct);
+        assert_ne!(CallKind::Direct, CallKind::Dynamic);
+        assert_ne!(CallKind::Static, CallKind::Callback);
+    }
+
+    #[test]
+    fn test_call_graph_with_name() {
+        let graph = CallGraph::with_name("my_project");
+
+        assert_eq!(graph.metadata.name, Some("my_project".to_string()));
+        assert_eq!(graph.node_count(), 0);
+        assert!(graph.roots.is_empty());
+    }
+
+    #[test]
+    fn test_call_graph_empty() {
+        let graph = CallGraph::with_name("empty");
+
+        assert!(!graph.has_cycles());
+        assert_eq!(graph.calculate_max_depth(), 0);
+        assert!(graph.leaf_nodes().is_empty());
+    }
+
+    #[test]
+    fn test_call_graph_add_single_node() {
+        let mut graph = CallGraph::with_name("single");
+        graph.add_node(CallNode::new("solo", "solo", CallableKind::Function));
+
+        assert_eq!(graph.node_count(), 1);
+    }
+
+    #[test]
+    fn test_call_graph_add_root() {
+        let mut graph = CallGraph::with_name("test");
+        graph.add_node(CallNode::new("main", "main", CallableKind::Function));
+        graph.add_root("main");
+
+        assert!(graph.roots.contains(&"main".to_string()));
+    }
+
+    #[test]
+    fn test_call_graph_topological_order() {
+        let extractor = CallExtractor::new();
+
+        let code = r#"
+fn a() { b(); }
+fn b() { c(); }
+fn c() {}
+"#;
+
+        let ext = extractor.extract_from_file(code, "test.rs");
+        let graph = extractor.build_graph(vec![ext]);
+
+        // Get topological order - verify it executes without panic
+        let topo = graph.topological_order();
+
+        // Flatten and check - topological_order returns Vec<Vec<&CallNode>>
+        let flat: Vec<_> = topo.into_iter().flatten().collect();
+        assert_eq!(flat.len(), 3);
+
+        // Verify all functions are present
+        let names: Vec<_> = flat.iter().map(|n| n.name.as_str()).collect();
+        assert!(names.contains(&"a"));
+        assert!(names.contains(&"b"));
+        assert!(names.contains(&"c"));
+    }
+
+    #[test]
+    fn test_call_graph_shortest_path_nonexistent() {
+        let mut graph = CallGraph::with_name("test");
+        graph.add_node(CallNode::new("a", "a", CallableKind::Function));
+        graph.add_node(CallNode::new("b", "b", CallableKind::Function));
+        // No edge between a and b
+
+        let path = graph.shortest_path("a", "b");
+        assert!(path.is_none());
+    }
+
+    #[test]
+    fn test_call_graph_calls_from_empty() {
+        let mut graph = CallGraph::with_name("test");
+        graph.add_node(CallNode::new("solo", "solo", CallableKind::Function));
+
+        let calls = graph.calls_from("solo");
+        assert!(calls.is_empty());
+    }
+
+    #[test]
+    fn test_call_extractor_empty_file() {
+        let extractor = CallExtractor::new();
+
+        let ext = extractor.extract_from_file("", "empty.rs");
+
+        assert!(ext.extractions.is_empty());
+    }
+
+    #[test]
+    fn test_call_extractor_python() {
+        let extractor = CallExtractor::new();
+
+        let python_code = r#"
+def main():
+    helper()
+
+def helper():
+    pass
+"#;
+
+        let ext = extractor.extract_from_file(python_code, "test.py");
+        let graph = extractor.build_graph(vec![ext]);
+
+        assert_eq!(graph.node_count(), 2);
+        assert!(graph.metadata.languages.contains("python"));
+    }
+
+    #[test]
+    fn test_call_extractor_javascript() {
+        let extractor = CallExtractor::new();
+
+        let js_code = r#"
+function main() {
+    helper();
+}
+
+function helper() {}
+"#;
+
+        let ext = extractor.extract_from_file(js_code, "test.js");
+        let graph = extractor.build_graph(vec![ext]);
+
+        assert_eq!(graph.node_count(), 2);
+        assert!(graph.metadata.languages.contains("javascript"));
+    }
+
+    #[test]
+    fn test_call_edge_default() {
+        let edge = CallEdge::default();
+
+        assert_eq!(edge.kind, CallKind::Direct);
+        assert_eq!(edge.weight, 1);
+    }
+
+    #[test]
+    fn test_call_graph_metadata_update() {
+        let mut graph = CallGraph::with_name("test");
+        graph.add_node(
+            CallNode::new("func", "func", CallableKind::Function)
+                .with_location("test.rs", 1)
+        );
+        graph.add_root("func");
+        graph.update_metadata();
+
+        assert!(graph.metadata.languages.contains("rust"));
+    }
+
+    #[test]
+    fn test_call_graph_reachable_from_nonexistent() {
+        let graph = CallGraph::with_name("test");
+
+        let reachable = graph.reachable_from("nonexistent");
+        assert!(reachable.is_empty());
+    }
+
+    #[test]
+    fn test_call_extractor_go() {
+        let extractor = CallExtractor::new();
+
+        let go_code = r#"
+package main
+
+func main() {
+    helper()
+}
+
+func helper() {
+}
+"#;
+
+        let ext = extractor.extract_from_file(go_code, "main.go");
+        let graph = extractor.build_graph(vec![ext]);
+
+        assert!(graph.node_count() >= 2);
+    }
+
+    #[test]
+    fn test_call_graph_most_called_empty() {
+        let graph = CallGraph::with_name("empty");
+
+        let most = graph.most_called(5);
+        assert!(most.is_empty());
+    }
+
+    #[test]
+    fn test_call_graph_strongly_connected_no_cycles() {
+        let extractor = CallExtractor::new();
+
+        let code = r#"
+fn a() { b(); }
+fn b() { c(); }
+fn c() {}
+"#;
+
+        let ext = extractor.extract_from_file(code, "test.rs");
+        let graph = extractor.build_graph(vec![ext]);
+
+        let sccs = graph.strongly_connected_components();
+        // Each node is its own SCC (no cycles)
+        for scc in &sccs {
+            assert_eq!(scc.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_call_extractor_new() {
+        let extractor = CallExtractor::new();
+        // Just verify it creates without panic
+        assert!(true);
+
+        // Extract from trivial code
+        let ext = extractor.extract_from_file("fn test() {}", "test.rs");
+        assert!(!ext.extractions.is_empty());
+    }
+
+    #[test]
+    fn test_callable_kind_all_variants() {
+        // Verify all variants exist
+        let _function = CallableKind::Function;
+        let _method = CallableKind::Method;
+        let _constructor = CallableKind::Constructor;
+        let _closure = CallableKind::Closure;
+        let _macro = CallableKind::Macro;
+        let _shell = CallableKind::ShellFunction;
+        let _external = CallableKind::External;
+        let _unknown = CallableKind::Unknown;
+    }
+
+    #[test]
+    fn test_call_kind_all_variants() {
+        // Verify all variants exist
+        let _direct = CallKind::Direct;
+        let _method = CallKind::Method;
+        let _static = CallKind::Static;
+        let _constructor = CallKind::Constructor;
+        let _async = CallKind::Async;
+        let _callback = CallKind::Callback;
+        let _dynamic = CallKind::Dynamic;
+        let _external = CallKind::External;
+        let _macro = CallKind::Macro;
+        let _shell = CallKind::Shell;
+    }
+
+    #[test]
+    fn test_call_edge_with_location() {
+        let edge = CallEdge::new(CallKind::Direct)
+            .with_location(42, Some(10));
+
+        assert_eq!(edge.line, Some(42));
+        assert_eq!(edge.column, Some(10));
+    }
+
+    #[test]
+    fn test_call_edge_conditional() {
+        let edge = CallEdge::new(CallKind::Direct).conditional();
+
+        assert!(edge.is_conditional);
+    }
+
+    #[test]
+    fn test_call_edge_in_loop() {
+        let edge = CallEdge::new(CallKind::Direct).in_loop();
+
+        assert!(edge.is_in_loop);
+    }
+
+    #[test]
+    fn test_call_node_with_module() {
+        let node = CallNode::new("func", "func", CallableKind::Function)
+            .with_module("my::module::path");
+
+        assert_eq!(node.module_path, Some("my::module::path".to_string()));
+    }
+
+    #[test]
+    fn test_call_node_with_signature() {
+        let node = CallNode::new("func", "func", CallableKind::Function)
+            .with_signature(3, Some("i32".to_string()));
+
+        assert_eq!(node.param_count, 3);
+        assert_eq!(node.return_type, Some("i32".to_string()));
+    }
+
+    #[test]
+    fn test_call_graph_default() {
+        let graph = CallGraph::default();
+
+        assert_eq!(graph.node_count(), 0);
+        assert!(graph.roots.is_empty());
+    }
 }
