@@ -557,6 +557,222 @@ mod tests {
     use crate::core::fractal::{ConceptType, Visibility};
     use std::collections::HashMap;
 
+    // === MatchConfidence tests ===
+
+    #[test]
+    fn test_match_confidence_variants() {
+        let _high = MatchConfidence::High;
+        let _medium = MatchConfidence::Medium;
+        let _low = MatchConfidence::Low;
+    }
+
+    #[test]
+    fn test_match_confidence_equality() {
+        assert_eq!(MatchConfidence::High, MatchConfidence::High);
+        assert_ne!(MatchConfidence::High, MatchConfidence::Low);
+    }
+
+    #[test]
+    fn test_match_confidence_from_similarity_high() {
+        assert_eq!(MatchConfidence::from_similarity(0.95), MatchConfidence::High);
+        assert_eq!(MatchConfidence::from_similarity(0.86), MatchConfidence::High);
+    }
+
+    #[test]
+    fn test_match_confidence_from_similarity_medium() {
+        assert_eq!(MatchConfidence::from_similarity(0.85), MatchConfidence::Medium);
+        assert_eq!(MatchConfidence::from_similarity(0.75), MatchConfidence::Medium);
+        assert_eq!(MatchConfidence::from_similarity(0.71), MatchConfidence::Medium);
+    }
+
+    #[test]
+    fn test_match_confidence_from_similarity_low() {
+        assert_eq!(MatchConfidence::from_similarity(0.70), MatchConfidence::Low);
+        assert_eq!(MatchConfidence::from_similarity(0.5), MatchConfidence::Low);
+        assert_eq!(MatchConfidence::from_similarity(0.0), MatchConfidence::Low);
+    }
+
+    // === RelationshipType tests ===
+
+    #[test]
+    fn test_relationship_type_variants() {
+        let _equiv = RelationshipType::Equivalent;
+        let _calls = RelationshipType::Calls;
+        let _depends = RelationshipType::DependsOn;
+        let _extends = RelationshipType::Extends;
+        let _shared = RelationshipType::SharedContract;
+    }
+
+    #[test]
+    fn test_relationship_type_equality() {
+        assert_eq!(RelationshipType::Calls, RelationshipType::Calls);
+        assert_ne!(RelationshipType::Calls, RelationshipType::DependsOn);
+    }
+
+    // === CrossLanguageEquivalent tests ===
+
+    #[test]
+    fn test_cross_language_equivalent_creation() {
+        let equiv = CrossLanguageEquivalent {
+            concept_a_id: ConceptId::new(Language::Python, "func_a", "a.py"),
+            concept_b_id: ConceptId::new(Language::TypeScript, "funcA", "a.ts"),
+            similarity: 0.9,
+            evidence: vec!["Name match".to_string(), "Type match".to_string()],
+            confidence: MatchConfidence::High,
+        };
+
+        assert!((equiv.similarity - 0.9).abs() < 0.001);
+        assert_eq!(equiv.evidence.len(), 2);
+        assert_eq!(equiv.confidence, MatchConfidence::High);
+    }
+
+    // === CrossLanguageRelationship tests ===
+
+    #[test]
+    fn test_cross_language_relationship_creation() {
+        let rel = CrossLanguageRelationship {
+            source_id: ConceptId::new(Language::Python, "client", "client.py"),
+            target_id: ConceptId::new(Language::TypeScript, "server", "server.ts"),
+            relationship_type: RelationshipType::Calls,
+            strength: 0.8,
+            description: "Client calls server API".to_string(),
+        };
+
+        assert_eq!(rel.relationship_type, RelationshipType::Calls);
+        assert!((rel.strength - 0.8).abs() < 0.001);
+        assert!(rel.description.contains("API"));
+    }
+
+    // === EquivalenceClass tests ===
+
+    #[test]
+    fn test_equivalence_class_new() {
+        let class = EquivalenceClass::new("calculate_total".to_string());
+        assert_eq!(class.canonical_name, "calculate_total");
+        assert!(class.members.is_empty());
+        assert!(class.languages.is_empty());
+        assert!((class.cohesion - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_equivalence_class_add_member() {
+        let mut class = EquivalenceClass::new("test".to_string());
+        class.add_member(
+            ConceptId::new(Language::Python, "test", "test.py"),
+            Language::Python,
+        );
+        class.add_member(
+            ConceptId::new(Language::TypeScript, "test", "test.ts"),
+            Language::TypeScript,
+        );
+
+        assert_eq!(class.members.len(), 2);
+        assert_eq!(class.languages.len(), 2);
+        assert!(class.languages.contains(&Language::Python));
+        assert!(class.languages.contains(&Language::TypeScript));
+    }
+
+    #[test]
+    fn test_equivalence_class_is_multi_language() {
+        let mut class = EquivalenceClass::new("test".to_string());
+        assert!(!class.is_multi_language());
+
+        class.add_member(
+            ConceptId::new(Language::Python, "test", "test.py"),
+            Language::Python,
+        );
+        assert!(!class.is_multi_language());
+
+        class.add_member(
+            ConceptId::new(Language::TypeScript, "test", "test.ts"),
+            Language::TypeScript,
+        );
+        assert!(class.is_multi_language());
+    }
+
+    #[test]
+    fn test_equivalence_class_same_language_multiple_members() {
+        let mut class = EquivalenceClass::new("test".to_string());
+        class.add_member(
+            ConceptId::new(Language::Python, "test1", "a.py"),
+            Language::Python,
+        );
+        class.add_member(
+            ConceptId::new(Language::Python, "test2", "b.py"),
+            Language::Python,
+        );
+
+        assert_eq!(class.members.len(), 2);
+        assert_eq!(class.languages.len(), 1); // HashSet dedupes
+        assert!(!class.is_multi_language());
+    }
+
+    // === CrossLanguageAligner tests ===
+
+    #[test]
+    fn test_cross_language_aligner_new() {
+        let aligner = CrossLanguageAligner::new();
+        assert!((aligner.similarity_threshold - 0.65).abs() < 0.001);
+        assert!((aligner.embedding_weight - 0.5).abs() < 0.001);
+        assert!((aligner.name_weight - 0.3).abs() < 0.001);
+        assert!((aligner.type_weight - 0.2).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cross_language_aligner_default() {
+        let aligner = CrossLanguageAligner::default();
+        assert!((aligner.similarity_threshold - 0.65).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_cross_language_aligner_strict() {
+        let aligner = CrossLanguageAligner::strict();
+        assert!((aligner.similarity_threshold - 0.8).abs() < 0.001);
+        // Strict has higher threshold
+        assert!(aligner.similarity_threshold > CrossLanguageAligner::default().similarity_threshold);
+    }
+
+    #[test]
+    fn test_cross_language_aligner_lenient() {
+        let aligner = CrossLanguageAligner::lenient();
+        assert!((aligner.similarity_threshold - 0.5).abs() < 0.001);
+        // Lenient has lower threshold
+        assert!(aligner.similarity_threshold < CrossLanguageAligner::default().similarity_threshold);
+    }
+
+    #[test]
+    fn test_cross_language_aligner_weights_sum() {
+        let aligner = CrossLanguageAligner::default();
+        let sum = aligner.embedding_weight + aligner.name_weight + aligner.type_weight;
+        assert!((sum - 1.0).abs() < 0.001, "Weights should sum to 1.0");
+    }
+
+    #[test]
+    fn test_levenshtein_empty_strings() {
+        assert_eq!(levenshtein_distance("", ""), 0);
+    }
+
+    #[test]
+    fn test_levenshtein_single_char() {
+        assert_eq!(levenshtein_distance("a", "b"), 1);
+        assert_eq!(levenshtein_distance("a", "a"), 0);
+    }
+
+    #[test]
+    fn test_levenshtein_insertion() {
+        assert_eq!(levenshtein_distance("test", "tests"), 1);
+    }
+
+    #[test]
+    fn test_levenshtein_deletion() {
+        assert_eq!(levenshtein_distance("tests", "test"), 1);
+    }
+
+    #[test]
+    fn test_levenshtein_substitution() {
+        assert_eq!(levenshtein_distance("test", "tent"), 1);
+    }
+
     fn create_test_concept(
         name: &str,
         language: Language,
