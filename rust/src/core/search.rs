@@ -16,7 +16,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use std::path::Path;
 
-use super::walker::{SmartWalker, SmartWalkConfig};
+use super::walker::{SmartWalkConfig, SmartWalker};
 
 /// A resolved symbol location in the codebase
 #[derive(Debug, Clone)]
@@ -161,7 +161,12 @@ impl SymbolResolver {
     }
 
     /// Find all matches for a symbol (for disambiguation)
-    pub fn find_all(&self, name: &str, symbol_type: SymbolType, root: &Path) -> Vec<SymbolLocation> {
+    pub fn find_all(
+        &self,
+        name: &str,
+        symbol_type: SymbolType,
+        root: &Path,
+    ) -> Vec<SymbolLocation> {
         let mut results = Vec::new();
 
         // Use SmartWalker to respect hygiene exclusions (.venv, node_modules, etc.)
@@ -177,7 +182,9 @@ impl SymbolResolver {
         };
 
         for entry in entries {
-            if let Some(locations) = self.find_in_file(&entry.path, &entry.content, name, symbol_type) {
+            if let Some(locations) =
+                self.find_in_file(&entry.path, &entry.content, name, symbol_type)
+            {
                 results.extend(locations);
             }
         }
@@ -186,7 +193,12 @@ impl SymbolResolver {
     }
 
     /// Find a single symbol (returns first match or error)
-    pub fn find_symbol(&self, name: &str, symbol_type: SymbolType, root: &Path) -> Result<SymbolLocation, String> {
+    pub fn find_symbol(
+        &self,
+        name: &str,
+        symbol_type: SymbolType,
+        root: &Path,
+    ) -> Result<SymbolLocation, String> {
         // Use SmartWalker to respect hygiene exclusions (.venv, node_modules, etc.)
         let config = SmartWalkConfig {
             max_file_size: 1_048_576,
@@ -194,11 +206,14 @@ impl SymbolResolver {
         };
 
         let walker = SmartWalker::with_config(root, config);
-        let entries = walker.walk_as_file_entries()
+        let entries = walker
+            .walk_as_file_entries()
             .map_err(|e| format!("Failed to walk directory: {}", e))?;
 
         for entry in entries {
-            if let Some(locations) = self.find_in_file(&entry.path, &entry.content, name, symbol_type) {
+            if let Some(locations) =
+                self.find_in_file(&entry.path, &entry.content, name, symbol_type)
+            {
                 if let Some(loc) = locations.into_iter().next() {
                     return Ok(loc);
                 }
@@ -212,7 +227,13 @@ impl SymbolResolver {
     }
 
     /// Find symbols in a single file
-    fn find_in_file(&self, path: &str, content: &str, name: &str, symbol_type: SymbolType) -> Option<Vec<SymbolLocation>> {
+    fn find_in_file(
+        &self,
+        path: &str,
+        content: &str,
+        name: &str,
+        symbol_type: SymbolType,
+    ) -> Option<Vec<SymbolLocation>> {
         let lines: Vec<&str> = content.lines().collect();
         let mut results = Vec::new();
 
@@ -221,7 +242,9 @@ impl SymbolResolver {
         for (i, line) in lines.iter().enumerate() {
             let line_num = i + 1;
 
-            if let Some(loc) = self.match_symbol(path, line, line_num, name, symbol_type, ext, &lines) {
+            if let Some(loc) =
+                self.match_symbol(path, line, line_num, name, symbol_type, ext, &lines)
+            {
                 results.push(loc);
             }
         }
@@ -269,9 +292,7 @@ impl SymbolResolver {
         for pattern in patterns {
             if let Some(caps) = pattern.captures(line) {
                 // Get the captured name (group 1, or group 2 for some patterns)
-                let captured_name = caps.get(1)
-                    .or_else(|| caps.get(2))
-                    .map(|m| m.as_str())?;
+                let captured_name = caps.get(1).or_else(|| caps.get(2)).map(|m| m.as_str())?;
 
                 if captured_name == name {
                     // Find the end of the symbol (simple heuristic: find closing brace at same indent)
@@ -332,7 +353,10 @@ impl SymbolResolver {
                         continue;
                     }
                     let indent = line.len() - line.trim_start().len();
-                    if indent <= start_indent && !trimmed.starts_with('#') && !trimmed.starts_with('@') {
+                    if indent <= start_indent
+                        && !trimmed.starts_with('#')
+                        && !trimmed.starts_with('@')
+                    {
                         return i; // 1-indexed (previous line is end)
                     }
                 }
@@ -374,19 +398,93 @@ lazy_static! {
 
 /// Keywords to ignore (not function calls)
 const KEYWORDS: &[&str] = &[
-    "if", "else", "while", "for", "match", "loop", "return", "break", "continue",
-    "let", "const", "mut", "ref", "fn", "pub", "use", "mod", "impl", "trait",
-    "struct", "enum", "type", "where", "async", "await", "move", "dyn", "box",
+    "if",
+    "else",
+    "while",
+    "for",
+    "match",
+    "loop",
+    "return",
+    "break",
+    "continue",
+    "let",
+    "const",
+    "mut",
+    "ref",
+    "fn",
+    "pub",
+    "use",
+    "mod",
+    "impl",
+    "trait",
+    "struct",
+    "enum",
+    "type",
+    "where",
+    "async",
+    "await",
+    "move",
+    "dyn",
+    "box",
     // Python
-    "def", "class", "import", "from", "as", "with", "try", "except", "finally",
-    "raise", "yield", "lambda", "pass", "assert", "global", "nonlocal", "del",
+    "def",
+    "class",
+    "import",
+    "from",
+    "as",
+    "with",
+    "try",
+    "except",
+    "finally",
+    "raise",
+    "yield",
+    "lambda",
+    "pass",
+    "assert",
+    "global",
+    "nonlocal",
+    "del",
     // JavaScript/TypeScript
-    "function", "var", "new", "delete", "typeof", "instanceof", "void",
-    "throw", "catch", "switch", "case", "default", "do", "in", "of",
+    "function",
+    "var",
+    "new",
+    "delete",
+    "typeof",
+    "instanceof",
+    "void",
+    "throw",
+    "catch",
+    "switch",
+    "case",
+    "default",
+    "do",
+    "in",
+    "of",
     // Common stdlib functions to ignore
-    "print", "println", "printf", "format", "write", "writeln",
-    "len", "str", "int", "float", "bool", "list", "dict", "set", "tuple",
-    "Some", "None", "Ok", "Err", "Vec", "Box", "Arc", "Rc", "String",
+    "print",
+    "println",
+    "printf",
+    "format",
+    "write",
+    "writeln",
+    "len",
+    "str",
+    "int",
+    "float",
+    "bool",
+    "list",
+    "dict",
+    "set",
+    "tuple",
+    "Some",
+    "None",
+    "Ok",
+    "Err",
+    "Vec",
+    "Box",
+    "Arc",
+    "Rc",
+    "String",
 ];
 
 /// A potential function call found in source code
@@ -507,7 +605,8 @@ impl CallGraphAnalyzer {
     ) -> Vec<(FunctionCall, Option<SymbolLocation>)> {
         let calls = self.extract_calls(source);
 
-        calls.into_iter()
+        calls
+            .into_iter()
             .map(|call| {
                 // Try to resolve the function in the codebase
                 let location = resolver.find_function(&call.name, root).ok();
@@ -535,8 +634,7 @@ impl CallGraphAnalyzer {
 
     fn is_builtin(&self, name: &str) -> bool {
         // Check for common type constructors and builtins
-        name.chars().next().is_some_and(|c| c.is_uppercase())
-            || KEYWORDS.contains(&name)
+        name.chars().next().is_some_and(|c| c.is_uppercase()) || KEYWORDS.contains(&name)
     }
 }
 
@@ -867,7 +965,11 @@ mod tests {
             ("function hello() {", "hello", &*JS_FUNCTION),
             ("export async function fetch() {", "fetch", &*JS_FUNCTION),
             ("const handler = () => {", "handler", &*JS_CONST_FN),
-            ("export const process = async () => {", "process", &*JS_CONST_FN),
+            (
+                "export const process = async () => {",
+                "process",
+                &*JS_CONST_FN,
+            ),
         ];
 
         for (line, expected, pattern) in test_cases {
@@ -1202,21 +1304,24 @@ mod tests {
         fs::write(
             root.join("src/lib.py"),
             "def target_function():\n    pass\n",
-        ).unwrap();
+        )
+        .unwrap();
 
         // Create the same function in .venv/ (should be ignored)
         fs::create_dir_all(root.join(".venv/lib/python3.12/site-packages")).unwrap();
         fs::write(
             root.join(".venv/lib/python3.12/site-packages/lib.py"),
             "def target_function():\n    pass\n",
-        ).unwrap();
+        )
+        .unwrap();
 
         // Also create in node_modules/ (should be ignored)
         fs::create_dir_all(root.join("node_modules/some-package")).unwrap();
         fs::write(
             root.join("node_modules/some-package/index.js"),
             "function target_function() {}\n",
-        ).unwrap();
+        )
+        .unwrap();
 
         let resolver = SymbolResolver::new();
         let result = resolver.find_function("target_function", root);
@@ -1256,14 +1361,16 @@ mod tests {
         fs::write(
             root.join("src/lib.py"),
             "def helper():\n    pass\n\ndef caller():\n    helper()\n",
-        ).unwrap();
+        )
+        .unwrap();
 
         // Create a usage in .venv/ (should be ignored)
         fs::create_dir_all(root.join(".venv/lib")).unwrap();
         fs::write(
             root.join(".venv/lib/module.py"),
             "from lib import helper\nhelper()\n",
-        ).unwrap();
+        )
+        .unwrap();
 
         let finder = UsageFinder::new();
         let usages = finder.find_usages("helper", root, Some("src/lib.py"), Some(1));
@@ -1327,15 +1434,13 @@ mod tests {
 
     #[test]
     fn test_symbol_resolver_with_ignore() {
-        let resolver = SymbolResolver::new()
-            .with_ignore(vec!["*.test".to_string()]);
+        let resolver = SymbolResolver::new().with_ignore(vec!["*.test".to_string()]);
         assert_eq!(resolver.ignore_patterns, vec!["*.test".to_string()]);
     }
 
     #[test]
     fn test_symbol_resolver_with_include() {
-        let resolver = SymbolResolver::new()
-            .with_include(vec!["src/**".to_string()]);
+        let resolver = SymbolResolver::new().with_include(vec!["src/**".to_string()]);
         assert_eq!(resolver.include_patterns, vec!["src/**".to_string()]);
     }
 
@@ -1347,8 +1452,8 @@ mod tests {
 
     #[test]
     fn test_find_symbol_not_found() {
-        use tempfile::TempDir;
         use std::fs;
+        use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
         let root = temp_dir.path();
@@ -1366,15 +1471,19 @@ mod tests {
 
     #[test]
     fn test_find_class_tries_struct_first() {
-        use tempfile::TempDir;
         use std::fs;
+        use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
         let root = temp_dir.path();
 
         // Create a Rust struct
         fs::create_dir_all(root.join("src")).unwrap();
-        fs::write(root.join("src/lib.rs"), "pub struct Config {\n    field: i32,\n}\n").unwrap();
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub struct Config {\n    field: i32,\n}\n",
+        )
+        .unwrap();
 
         let resolver = SymbolResolver::new();
         let result = resolver.find_class("Config", root);
@@ -1387,8 +1496,8 @@ mod tests {
 
     #[test]
     fn test_find_all_multiple_matches() {
-        use tempfile::TempDir;
         use std::fs;
+        use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
         let root = temp_dir.path();
@@ -1407,11 +1516,7 @@ mod tests {
     #[test]
     fn test_find_block_end_unknown_extension() {
         let resolver = SymbolResolver::new();
-        let lines = vec![
-            "something {",
-            "  content",
-            "}",
-        ];
+        let lines = vec!["something {", "  content", "}"];
 
         // Unknown extension should return start + 30 (capped at lines.len)
         let end = resolver.find_block_end(&lines, 0, "xyz");
@@ -1430,11 +1535,7 @@ mod tests {
     #[test]
     fn test_find_block_end_no_closing_brace() {
         let resolver = SymbolResolver::new();
-        let lines = vec![
-            "fn test() {",
-            "    let x = 1;",
-            "    // no closing brace",
-        ];
+        let lines = vec!["fn test() {", "    let x = 1;", "    // no closing brace"];
 
         let end = resolver.find_block_end(&lines, 0, "rs");
         // Should return start + 50 capped at lines.len = 3
@@ -1500,8 +1601,8 @@ mod tests {
 
     #[test]
     fn test_find_usages_skips_definition_line() {
-        use tempfile::TempDir;
         use std::fs;
+        use tempfile::TempDir;
 
         let temp_dir = TempDir::new().unwrap();
         let root = temp_dir.path();
@@ -1510,7 +1611,8 @@ mod tests {
         fs::write(
             root.join("src/lib.rs"),
             "fn target() {\n    println!(\"hi\");\n}\n\nfn caller() {\n    target();\n}\n",
-        ).unwrap();
+        )
+        .unwrap();
 
         let finder = UsageFinder::new();
         let usages = finder.find_usages("target", root, Some("src/lib.rs"), Some(1));
@@ -1518,7 +1620,10 @@ mod tests {
         // Should find usage in caller(), but not the definition
         assert!(!usages.is_empty());
         for u in &usages {
-            assert!(!u.snippet.contains("fn target"), "Should skip definition line");
+            assert!(
+                !u.snippet.contains("fn target"),
+                "Should skip definition line"
+            );
         }
     }
 
@@ -1539,10 +1644,7 @@ mod tests {
 
     #[test]
     fn test_rust_enum_pattern() {
-        let test_cases = vec![
-            ("enum Status {", "Status"),
-            ("pub enum Result {", "Result"),
-        ];
+        let test_cases = vec![("enum Status {", "Status"), ("pub enum Result {", "Result")];
 
         for (line, expected) in test_cases {
             let caps = RUST_ENUM.captures(line);

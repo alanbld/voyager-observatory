@@ -14,8 +14,8 @@
 //! ```
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -149,9 +149,7 @@ impl ObserversJournal {
     pub fn load_from_file(path: &Path) -> Self {
         if path.exists() {
             match fs::read_to_string(path) {
-                Ok(contents) => {
-                    serde_json::from_str(&contents).unwrap_or_else(|_| Self::new())
-                }
+                Ok(contents) => serde_json::from_str(&contents).unwrap_or_else(|_| Self::new()),
                 Err(_) => Self::new(),
             }
         } else {
@@ -257,11 +255,14 @@ impl ObserversJournal {
 
     /// Record a file/pattern as ignored.
     pub fn record_ignored(&mut self, pattern: &str) {
-        let entry = self.faded_nebulae.entry(pattern.to_string()).or_insert(FadedNebula {
-            pattern: pattern.to_string(),
-            ignore_count: 0,
-            last_ignored: current_timestamp(),
-        });
+        let entry = self
+            .faded_nebulae
+            .entry(pattern.to_string())
+            .or_insert(FadedNebula {
+                pattern: pattern.to_string(),
+                ignore_count: 0,
+                last_ignored: current_timestamp(),
+            });
         entry.ignore_count += 1;
         entry.last_ignored = current_timestamp();
         self.updated_at = current_timestamp();
@@ -287,9 +288,15 @@ impl ObserversJournal {
         output.push_str("═══════════════════════════════════════════════════════════\n\n");
 
         // Stats
-        output.push_str(&format!("🌌 Total Explorations: {}\n", self.total_explorations));
+        output.push_str(&format!(
+            "🌌 Total Explorations: {}\n",
+            self.total_explorations
+        ));
         output.push_str(&format!("⭐ Marked Stars: {}\n", self.bright_stars.len()));
-        output.push_str(&format!("🌫️  Faded Nebulae: {}\n\n", self.faded_nebulae.len()));
+        output.push_str(&format!(
+            "🌫️  Faded Nebulae: {}\n\n",
+            self.faded_nebulae.len()
+        ));
 
         // Bright Stars
         if !self.bright_stars.is_empty() {
@@ -335,7 +342,11 @@ impl ObserversJournal {
             for entry in self.recent_explorations(5).iter().rev() {
                 output.push_str(&format!(
                     "  {} {} ({} files analyzed)\n",
-                    entry.explored_at.split('T').next().unwrap_or(&entry.explored_at),
+                    entry
+                        .explored_at
+                        .split('T')
+                        .next()
+                        .unwrap_or(&entry.explored_at),
                     entry.intent,
                     entry.files_analyzed
                 ));
@@ -348,7 +359,11 @@ impl ObserversJournal {
         }
 
         // Faded Nebulae
-        let faded: Vec<_> = self.faded_nebulae.values().filter(|n| n.ignore_count >= 5).collect();
+        let faded: Vec<_> = self
+            .faded_nebulae
+            .values()
+            .filter(|n| n.ignore_count >= 5)
+            .collect();
         if !faded.is_empty() {
             output.push_str("🌫️  FADED NEBULAE (Consistently Ignored)\n");
             output.push_str("───────────────────────────────────────────────────────────\n");
@@ -356,16 +371,27 @@ impl ObserversJournal {
             for nebula in faded.iter().take(5) {
                 output.push_str(&format!(
                     "  {} (ignored {} times)\n",
-                    nebula.pattern,
-                    nebula.ignore_count
+                    nebula.pattern, nebula.ignore_count
                 ));
             }
             output.push('\n');
         }
 
         output.push_str("───────────────────────────────────────────────────────────\n");
-        output.push_str(&format!("Journal created: {}\n", self.created_at.split('T').next().unwrap_or(&self.created_at)));
-        output.push_str(&format!("Last updated: {}\n", self.updated_at.split('T').next().unwrap_or(&self.updated_at)));
+        output.push_str(&format!(
+            "Journal created: {}\n",
+            self.created_at
+                .split('T')
+                .next()
+                .unwrap_or(&self.created_at)
+        ));
+        output.push_str(&format!(
+            "Last updated: {}\n",
+            self.updated_at
+                .split('T')
+                .next()
+                .unwrap_or(&self.updated_at)
+        ));
 
         output
     }
@@ -391,8 +417,8 @@ fn current_timestamp() -> String {
         .unwrap_or_default();
 
     let secs = duration.as_secs();
-    let datetime = chrono::DateTime::from_timestamp(secs as i64, 0)
-        .unwrap_or_else(|| chrono::Utc::now());
+    let datetime =
+        chrono::DateTime::from_timestamp(secs as i64, 0).unwrap_or_else(|| chrono::Utc::now());
 
     datetime.format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
@@ -643,7 +669,7 @@ mod tests {
     fn test_display_star_brightness_icons() {
         let mut journal = ObserversJournal::new();
         journal.mark_star("super_bright.rs", 0.95); // 🌟
-        journal.mark_star("bright.rs", 0.85);       // ⭐
+        journal.mark_star("bright.rs", 0.85); // ⭐
         journal.mark_star_with_note("dim.rs", 0.7, "Not so important"); // ✨
 
         let output = journal.display();

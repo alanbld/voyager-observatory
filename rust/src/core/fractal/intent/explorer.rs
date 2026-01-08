@@ -18,22 +18,17 @@
 //! }
 //! ```
 
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use crate::core::fractal::{
-    ContextLayer, LayerContent, Visibility,
-    SymbolVectorizer, FeatureVector,
+    ContextLayer, FeatureVector, LayerContent, SymbolVectorizer, Visibility,
 };
 
 use super::{
-    IntentComposition,
-    ExplorationIntent,
-    IntentResult,
-    ReadingDecision,
-    StopReadingEngine,
+    ExplorationIntent, IntentComposition, IntentResult, ReadingDecision, StopReadingEngine,
 };
 
 // =============================================================================
@@ -136,8 +131,10 @@ impl ExplorationResult {
         }
 
         // Footer
-        output.push_str(&format!("\nEstimated reading time: {} minutes\n",
-            self.intent_result.estimated_minutes));
+        output.push_str(&format!(
+            "\nEstimated reading time: {} minutes\n",
+            self.intent_result.estimated_minutes
+        ));
 
         output
     }
@@ -148,12 +145,18 @@ impl ExplorationResult {
 
         output.push_str(&format!(
             "<exploration intent=\"{}\">\n",
-            self.intent_result.intent.name().to_lowercase().replace(' ', "-")
+            self.intent_result
+                .intent
+                .name()
+                .to_lowercase()
+                .replace(' ', "-")
         ));
 
         // Summary
-        output.push_str(&format!("  <summary>\n    {}\n  </summary>\n",
-            self.intent_result.summary));
+        output.push_str(&format!(
+            "  <summary>\n    {}\n  </summary>\n",
+            self.intent_result.summary
+        ));
 
         // Insights
         if !self.intent_result.key_insights.is_empty() {
@@ -176,8 +179,10 @@ impl ExplorationResult {
             output.push_str(&format!("      <reason>{}</reason>\n", step.reason));
             output.push_str(&format!("      <concept>{}</concept>\n", step.concept_type));
             if step.estimated_minutes > 0 {
-                output.push_str(&format!("      <time_minutes>{}</time_minutes>\n",
-                    step.estimated_minutes));
+                output.push_str(&format!(
+                    "      <time_minutes>{}</time_minutes>\n",
+                    step.estimated_minutes
+                ));
             }
             output.push_str("    </step>\n");
         }
@@ -185,12 +190,18 @@ impl ExplorationResult {
 
         // Metadata
         output.push_str("  <metadata>\n");
-        output.push_str(&format!("    <files_analyzed>{}</files_analyzed>\n",
-            self.files_analyzed));
-        output.push_str(&format!("    <symbols_extracted>{}</symbols_extracted>\n",
-            self.symbols_extracted));
-        output.push_str(&format!("    <estimated_minutes>{}</estimated_minutes>\n",
-            self.intent_result.estimated_minutes));
+        output.push_str(&format!(
+            "    <files_analyzed>{}</files_analyzed>\n",
+            self.files_analyzed
+        ));
+        output.push_str(&format!(
+            "    <symbols_extracted>{}</symbols_extracted>\n",
+            self.symbols_extracted
+        ));
+        output.push_str(&format!(
+            "    <estimated_minutes>{}</estimated_minutes>\n",
+            self.intent_result.estimated_minutes
+        ));
         output.push_str("  </metadata>\n");
 
         output.push_str("</exploration>\n");
@@ -283,7 +294,8 @@ impl IntentExplorer {
 
         // Step 2: Vectorize layers
         let vectorizer = SymbolVectorizer::new();
-        let vectors: Vec<FeatureVector> = layers.iter()
+        let vectors: Vec<FeatureVector> = layers
+            .iter()
             .map(|l| vectorizer.vectorize_layer(l))
             .collect();
 
@@ -302,7 +314,8 @@ impl IntentExplorer {
 
     /// Explore with a named intent (parses string to ExplorationIntent)
     pub fn explore_by_name(&self, intent_name: &str) -> Result<ExplorationResult, String> {
-        let intent: ExplorationIntent = intent_name.parse()
+        let intent: ExplorationIntent = intent_name
+            .parse()
             .map_err(|e| format!("Invalid intent: {}", e))?;
         self.explore(intent)
     }
@@ -316,7 +329,8 @@ impl IntentExplorer {
         let (layers, _) = self.build_context()?;
 
         // Find the symbol
-        let layer = layers.iter()
+        let layer = layers
+            .iter()
             .find(|l| l.name() == symbol_name)
             .ok_or_else(|| format!("Symbol '{}' not found", symbol_name))?;
 
@@ -332,7 +346,9 @@ impl IntentExplorer {
         let vectors = vec![vectorizer.vectorize_layer(layer)];
         let result = composition.execute(&[layer.clone()], &vectors);
 
-        let relevance = result.exploration_path.first()
+        let relevance = result
+            .exploration_path
+            .first()
             .map(|s| s.relevance_score)
             .unwrap_or(0.5);
 
@@ -412,10 +428,7 @@ impl IntentExplorer {
         for pattern in &self.config.ignore_patterns {
             // Simple pattern matching without glob crate
             // Remove wildcards to get the core pattern
-            let core_pattern = pattern
-                .trim_matches('*')
-                .trim_matches('/')
-                .trim();
+            let core_pattern = pattern.trim_matches('*').trim_matches('/').trim();
 
             if !core_pattern.is_empty() && path_str.contains(core_pattern) {
                 return true;
@@ -427,15 +440,32 @@ impl IntentExplorer {
 
     /// Check if file is a source file
     fn is_source_file(&self, path: &Path) -> bool {
-        let ext = path.extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
-        matches!(ext,
-            "rs" | "py" | "js" | "ts" | "tsx" | "jsx" |
-            "go" | "java" | "c" | "cpp" | "h" | "hpp" |
-            "rb" | "php" | "swift" | "kt" | "scala" |
-            "cs" | "fs" | "vb" | "lua" | "pl" | "pm"
+        matches!(
+            ext,
+            "rs" | "py"
+                | "js"
+                | "ts"
+                | "tsx"
+                | "jsx"
+                | "go"
+                | "java"
+                | "c"
+                | "cpp"
+                | "h"
+                | "hpp"
+                | "rb"
+                | "php"
+                | "swift"
+                | "kt"
+                | "scala"
+                | "cs"
+                | "fs"
+                | "vb"
+                | "lua"
+                | "pl"
+                | "pm"
         )
     }
 
@@ -443,11 +473,11 @@ impl IntentExplorer {
     fn is_test_file(&self, path: &Path) -> bool {
         let path_str = path.to_string_lossy().to_lowercase();
 
-        path_str.contains("test") ||
-        path_str.contains("spec") ||
-        path_str.contains("_test") ||
-        path_str.contains(".test.") ||
-        path_str.contains("/tests/")
+        path_str.contains("test")
+            || path_str.contains("spec")
+            || path_str.contains("_test")
+            || path_str.contains(".test.")
+            || path_str.contains("/tests/")
     }
 
     /// Extract symbols from a file
@@ -563,7 +593,8 @@ fn internal_helper() {
     // Internal helper
 }
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         fs::write(
             temp_dir.join("src/lib.rs"),
@@ -578,7 +609,8 @@ pub fn validate_input(input: &str) -> Result<(), String> {
     Ok(())
 }
 "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         temp_dir
     }
@@ -591,7 +623,10 @@ pub fn validate_input(input: &str) -> Result<(), String> {
         let result = explorer.explore(ExplorationIntent::BusinessLogic).unwrap();
 
         // The intent should match
-        assert_eq!(result.intent_result.intent, ExplorationIntent::BusinessLogic);
+        assert_eq!(
+            result.intent_result.intent,
+            ExplorationIntent::BusinessLogic
+        );
 
         // Should have analyzed something (files or symbols)
         // Note: symbol extraction depends on regex patterns working correctly
@@ -612,7 +647,10 @@ pub fn validate_input(input: &str) -> Result<(), String> {
         assert_eq!(result.intent_result.intent, ExplorationIntent::Debugging);
 
         // Should have valid summary
-        assert!(!result.intent_result.summary.is_empty(), "Should have a summary");
+        assert!(
+            !result.intent_result.summary.is_empty(),
+            "Should have a summary"
+        );
 
         let _ = fs::remove_dir_all(&project);
     }
@@ -623,7 +661,10 @@ pub fn validate_input(input: &str) -> Result<(), String> {
         let explorer = IntentExplorer::new(&project);
 
         let result = explorer.explore_by_name("business-logic").unwrap();
-        assert_eq!(result.intent_result.intent, ExplorationIntent::BusinessLogic);
+        assert_eq!(
+            result.intent_result.intent,
+            ExplorationIntent::BusinessLogic
+        );
 
         let result = explorer.explore_by_name("debugging").unwrap();
         assert_eq!(result.intent_result.intent, ExplorationIntent::Debugging);

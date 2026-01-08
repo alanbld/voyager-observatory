@@ -18,140 +18,190 @@
 //! - `ast_bridge`: Bridge to voyager-ast structural optics
 //! - `metrics`: AST-based code metrics collection (Phase 3 foundation)
 
-pub mod models;
-pub mod error;
-pub mod walker;
-pub mod manifest;
-pub mod serialization;
-pub mod engine;
-pub mod zoom;
-pub mod store;
-pub mod search;
-pub mod skeleton;
-pub mod fractal;
-pub mod orchestrator;
-pub mod presenter;
+pub mod ast_bridge;
 pub mod celestial;
-pub mod syntax;
+pub mod census;
+pub mod engine;
+pub mod error;
+pub mod fractal;
+pub mod manifest;
+pub mod metrics;
+pub mod models;
+pub mod orchestrator;
 pub mod plugin;
 pub mod plugins;
-pub mod ast_bridge;
-pub mod metrics;
+pub mod presenter;
 pub mod regex_engine;
-pub mod census;
-pub mod temporal;
+pub mod search;
+pub mod serialization;
+pub mod skeleton;
 pub mod spectrograph;
+pub mod store;
+pub mod syntax;
+pub mod temporal;
+pub mod walker;
+pub mod zoom;
 
 // Re-export commonly used types
-pub use models::{FileEntry, EncoderConfig, ProcessedFile, OutputFormat, Config, SkeletonMode, CompressionLevel};
+pub use engine::{BudgetStats, ContextEngine, FileTier};
 pub use error::{EncoderError, Result};
-pub use walker::{FileWalker, DefaultWalker, SmartWalker, SmartWalkConfig, WalkEntry};
 pub use manifest::{ProjectManifest, ProjectType};
-pub use engine::{ContextEngine, FileTier, BudgetStats};
-pub use zoom::{
-    ZoomAction, ZoomTarget, ZoomConfig, ZoomDepth,
-    // Fractal Protocol v2
-    ZoomDirection, ZoomHistory, ZoomHistoryEntry,
-    ZoomSession, ZoomSessionStore,
+pub use models::{
+    CompressionLevel, Config, EncoderConfig, FileEntry, OutputFormat, ProcessedFile, SkeletonMode,
+};
+pub use search::{
+    CallGraphAnalyzer,
+    FunctionCall,
+    RelatedContext,
+    SymbolLocation,
+    SymbolResolver,
+    SymbolType,
+    UsageFinder,
+    // Phase 2: Reverse call graph
+    UsageLocation,
+    ZoomSuggestion,
 };
 pub use store::{ContextStore, FileUtility, DEFAULT_ALPHA};
-pub use search::{
-    SymbolResolver, SymbolLocation, SymbolType,
-    CallGraphAnalyzer, FunctionCall, ZoomSuggestion,
-    // Phase 2: Reverse call graph
-    UsageLocation, UsageFinder, RelatedContext,
+pub use walker::{DefaultWalker, FileWalker, SmartWalkConfig, SmartWalker, WalkEntry};
+pub use zoom::{
+    ZoomAction,
+    ZoomConfig,
+    ZoomDepth,
+    // Fractal Protocol v2
+    ZoomDirection,
+    ZoomHistory,
+    ZoomHistoryEntry,
+    ZoomSession,
+    ZoomSessionStore,
+    ZoomTarget,
 };
 
 // Phase 2 Week 2: Intent-Driven Exploration
 pub use fractal::{
-    IntentExplorer, ExplorerConfig, ExplorationResult,
-    ExplorationIntent, IntentComposition, IntentResult,
-    ExplorationStep, ReadingDecision, StopReadingEngine,
-    ConceptType,
+    ConceptType, ExplorationIntent, ExplorationResult, ExplorationStep, ExplorerConfig,
+    IntentComposition, IntentExplorer, IntentResult, ReadingDecision, StopReadingEngine,
 };
 
 // Phase 2 Week 3: Fractal Telescope UX
 pub use orchestrator::{
-    SmartOrchestrator, AutoFocus, InputType,
-    SmartDefaults, SemanticDepth, DetailLevel,
-    AnalysisStrategy, FallbackSystem,
+    AnalysisStrategy,
+    AutoFocus,
+    DetailLevel,
+    ExplorationEntry,
+    FadedNebula,
+    FallbackSystem,
+    InputType,
+    MarkedStar,
     // Observer's Journal
-    ObserversJournal, MarkedStar, ExplorationEntry, FadedNebula,
+    ObserversJournal,
+    SemanticDepth,
+    SmartDefaults,
+    SmartOrchestrator,
 };
 pub use presenter::{
-    IntelligentPresenter, EmojiFormatter, Theme,
-    SemanticTransparency,
     // Drift Info (v1.1.0)
     DriftInfo,
+    EmojiFormatter,
+    IntelligentPresenter,
+    SemanticTransparency,
+    Theme,
 };
 
 // Phase 3: Spectral Synthesis (Celestial Navigation)
 pub use celestial::{
-    NebulaNamer, NebulaName, NamingStrategy,
-    ConstellationMapper, Nebula, CelestialMap, Star, FileInfo,
-    NavigationCompass, NavigationSuggestion, ExplorationHint, SuggestionAction,
+    CelestialMap, ConstellationMapper, ExplorationHint, FileInfo, NamingStrategy,
+    NavigationCompass, NavigationSuggestion, Nebula, NebulaName, NebulaNamer, Star,
+    SuggestionAction,
 };
 
 // Phase 1A: Core Syntax Infrastructure (Tree-sitter)
 pub use syntax::{
-    SyntaxRegistry, SyntaxProvider, TreeSitterAdapter,
-    NormalizedAst, Symbol, SymbolKind, SymbolVisibility,
-    Import, ImportKind, Location, Span, Language as SyntaxLanguage,
-    SyntaxError, ProviderStats,
+    Import, ImportKind, Language as SyntaxLanguage, Location, NormalizedAst, ProviderStats, Span,
+    Symbol, SymbolKind, SymbolVisibility, SyntaxError, SyntaxProvider, SyntaxRegistry,
+    TreeSitterAdapter,
 };
 
 // voyager-ast integration (Structural Optics)
-pub use ast_bridge::{
-    AstBridge, Star as AstStar, StarKind, FileSummary, StarSummary,
-};
+pub use ast_bridge::{AstBridge, FileSummary, Star as AstStar, StarKind, StarSummary};
 
 // Phase 0 Hardening: Centralized Regex Engine
 pub use regex_engine::{
-    RegexEngine, CompiledRegex, RegexError, MatchRange, MatchResult,
-    PatternSet, compile, is_match, find_all, replace_all, global_engine,
+    compile, find_all, global_engine, is_match, replace_all, CompiledRegex, MatchRange,
+    MatchResult, PatternSet, RegexEngine, RegexError,
 };
 
 // Phase 1C: Celestial Census (Code Health Metrics)
 pub use census::{
-    CelestialCensus, CensusMetrics, StarMetrics, NebulaeMetrics, DarkMatterMetrics,
-    DerivedMetrics, HealthRating, GalaxyCensus, ConstellationCensus,
-    StarCountMetric, NebulaeCountMetric, DarkMatterMetric,
-    StellarDensityMetric, NebulaRatioMetric, HealthScoreMetric,
     build_census_registry,
+    CelestialCensus,
+    CensusMetrics,
+    ConstellationCensus,
+    DarkMatterMetric,
+    DarkMatterMetrics,
+    DerivedMetrics,
+    GalaxyCensus,
+    HealthRating,
+    HealthScoreMetric,
+    NebulaRatioMetric,
+    NebulaeCountMetric,
+    NebulaeMetrics,
     // Universal Spectrograph fallback
     PatternFallbackAnalyzer,
+    StarCountMetric,
+    StarMetrics,
+    StellarDensityMetric,
 };
 
 // Universal Spectrograph (80+ Language Patterns)
-pub use spectrograph::{
-    StellarLibrary, SpectralSignature, Hemisphere, STELLAR_LIBRARY,
-};
+pub use spectrograph::{Hemisphere, SpectralSignature, StellarLibrary, STELLAR_LIBRARY};
 
 // Phase 2: Temporal (Chronos Engine)
 pub use temporal::{
-    ChronosEngine, ChronosMetrics, ChronosState, StellarAge, VolcanicChurn,
-    Observer, ObserverImpact, TemporalCensus, ConstellationChurn, FileChurn,
-    TectonicShift, AncientStar, Supernova, AgeClassification, ChurnClassification,
-    is_temporal_available, temporal_state_description,
-    GeologicalAnalyzer, GeologicalSummary, GeologicalActivity,
-    // Stellar Drift (v1.1.0)
-    StellarDriftAnalyzer, StellarDriftReport, ConstellationEvolution, NewStar,
-    // Shallow Chronos (v1.1.0)
-    DEFAULT_COMMIT_DEPTH, FULL_COMMIT_DEPTH,
+    is_temporal_available,
+    temporal_state_description,
+    AgeClassification,
+    AncientStar,
+    CachedGalaxyStats,
+    CachedObservation,
     // Chronos Warp (v1.2.0)
-    ChronosCache, ChronosCacheManager, CachedObservation, CachedGalaxyStats, WarpStatus,
+    ChronosCache,
+    ChronosCacheManager,
+    ChronosEngine,
+    ChronosMetrics,
+    ChronosState,
+    ChurnClassification,
+    ConstellationChurn,
+    ConstellationEvolution,
+    FileChurn,
+    GeologicalActivity,
+    GeologicalAnalyzer,
+    GeologicalSummary,
+    NewStar,
+    Observer,
+    ObserverImpact,
+    StellarAge,
+    // Stellar Drift (v1.1.0)
+    StellarDriftAnalyzer,
+    StellarDriftReport,
+    Supernova,
+    TectonicShift,
+    TemporalCensus,
+    VolcanicChurn,
+    WarpStatus,
+    // Shallow Chronos (v1.1.0)
+    DEFAULT_COMMIT_DEPTH,
+    FULL_COMMIT_DEPTH,
 };
 
 // Phase 3: Plugin Ecosystem (Iron Sandbox)
 pub use plugins::{
-    PluginEngine, EngineState, PluginLoader, PluginManifest, PluginEntry,
-    LoadedPlugin, PluginStatus, PluginError, PluginResult,
-    is_plugins_available, plugins_feature_description,
-    MEMORY_LIMIT, TIMEOUT_MS, CURRENT_API_VERSION,
+    is_plugins_available, plugins_feature_description, EngineState, LoadedPlugin, PluginEngine,
+    PluginEntry, PluginError, PluginLoader, PluginManifest, PluginResult, PluginStatus,
+    CURRENT_API_VERSION, MEMORY_LIMIT, TIMEOUT_MS,
 };
 
 #[cfg(feature = "plugins")]
 pub use plugins::{
-    IronSandbox, create_vo_table, create_vo_table_simple,
-    PluginContributions, SharedContributions, MetricValue, LogEntry,
+    create_vo_table, create_vo_table_simple, IronSandbox, LogEntry, MetricValue,
+    PluginContributions, SharedContributions,
 };

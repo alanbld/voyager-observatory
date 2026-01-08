@@ -90,13 +90,15 @@ impl ZoomTarget {
             ZoomTarget::Function(name) => format!("function={}", name),
             ZoomTarget::Class(name) => format!("class={}", name),
             ZoomTarget::Module(name) => format!("module={}", name),
-            ZoomTarget::File { path, start_line, end_line } => {
-                match (start_line, end_line) {
-                    (Some(s), Some(e)) => format!("file={}:{}-{}", path, s, e),
-                    (Some(s), None) => format!("file={}:{}", path, s),
-                    _ => format!("file={}", path),
-                }
-            }
+            ZoomTarget::File {
+                path,
+                start_line,
+                end_line,
+            } => match (start_line, end_line) {
+                (Some(s), Some(e)) => format!("file={}:{}-{}", path, s, e),
+                (Some(s), None) => format!("file={}:{}", path, s),
+                _ => format!("file={}", path),
+            },
         };
 
         match budget {
@@ -112,13 +114,15 @@ impl fmt::Display for ZoomTarget {
             ZoomTarget::Function(name) => write!(f, "function:{}", name),
             ZoomTarget::Class(name) => write!(f, "class:{}", name),
             ZoomTarget::Module(name) => write!(f, "module:{}", name),
-            ZoomTarget::File { path, start_line, end_line } => {
-                match (start_line, end_line) {
-                    (Some(s), Some(e)) => write!(f, "file:{}[{}-{}]", path, s, e),
-                    (Some(s), None) => write!(f, "file:{}[{}]", path, s),
-                    _ => write!(f, "file:{}", path),
-                }
-            }
+            ZoomTarget::File {
+                path,
+                start_line,
+                end_line,
+            } => match (start_line, end_line) {
+                (Some(s), Some(e)) => write!(f, "file:{}[{}-{}]", path, s, e),
+                (Some(s), None) => write!(f, "file:{}[{}]", path, s),
+                _ => write!(f, "file:{}", path),
+            },
         }
     }
 }
@@ -268,7 +272,9 @@ pub struct ZoomHistoryEntry {
     pub timestamp: u64,
 }
 
-fn default_max_history() -> usize { 50 }
+fn default_max_history() -> usize {
+    50
+}
 
 /// Zoom history for tracking and undoing actions
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -487,7 +493,8 @@ impl ZoomSession {
 
     /// Get zoom depth for a target
     pub fn get_depth(&self, target: &ZoomTarget) -> Option<ZoomDepth> {
-        self.active_zooms.iter()
+        self.active_zooms
+            .iter()
             .find(|(t, _)| t == target)
             .map(|(_, d)| *d)
     }
@@ -498,7 +505,9 @@ impl ZoomSession {
     }
 }
 
-fn default_version() -> String { "1.0".to_string() }
+fn default_version() -> String {
+    "1.0".to_string()
+}
 
 /// Session store for managing multiple sessions with persistence
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -555,8 +564,8 @@ impl ZoomSessionStore {
             return Ok(store);
         }
 
-        let content = std::fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read sessions: {}", e))?;
+        let content =
+            std::fs::read_to_string(path).map_err(|e| format!("Failed to read sessions: {}", e))?;
 
         let mut store: Self = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse sessions: {}", e))?;
@@ -567,7 +576,9 @@ impl ZoomSessionStore {
 
     /// Save sessions to JSON file
     pub fn save(&self) -> std::result::Result<(), String> {
-        let path = self.store_path.as_ref()
+        let path = self
+            .store_path
+            .as_ref()
             .ok_or_else(|| "No store path configured".to_string())?;
 
         // Ensure directory exists
@@ -579,8 +590,7 @@ impl ZoomSessionStore {
         let content = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize: {}", e))?;
 
-        std::fs::write(path, content)
-            .map_err(|e| format!("Failed to write: {}", e))
+        std::fs::write(path, content).map_err(|e| format!("Failed to write: {}", e))
     }
 
     /// Enable auto-save on Drop
@@ -628,7 +638,9 @@ impl ZoomSessionStore {
 
     /// Get active session
     pub fn active(&self) -> Option<&ZoomSession> {
-        self.active_session.as_ref().and_then(|n| self.sessions.get(n))
+        self.active_session
+            .as_ref()
+            .and_then(|n| self.sessions.get(n))
     }
 
     /// Get mutable active session
@@ -657,7 +669,8 @@ impl ZoomSessionStore {
 
     /// List all sessions with metadata: (name, is_active, last_accessed)
     pub fn list_sessions_with_meta(&self) -> Vec<(&str, bool, &str)> {
-        self.sessions.iter()
+        self.sessions
+            .iter()
             .map(|(name, session)| {
                 let is_active = self.active_session.as_ref() == Some(name);
                 (name.as_str(), is_active, session.last_accessed.as_str())
@@ -817,14 +830,14 @@ mod tests {
     fn test_zoom_session_add_zoom() {
         let mut session = ZoomSession::new("test");
 
-        session.add_zoom(
-            ZoomTarget::Function("main".to_string()),
-            ZoomDepth::Full,
-        );
+        session.add_zoom(ZoomTarget::Function("main".to_string()), ZoomDepth::Full);
 
         assert_eq!(session.zoom_count(), 1);
         assert!(session.is_zoomed(&ZoomTarget::Function("main".to_string())));
-        assert_eq!(session.get_depth(&ZoomTarget::Function("main".to_string())), Some(ZoomDepth::Full));
+        assert_eq!(
+            session.get_depth(&ZoomTarget::Function("main".to_string())),
+            Some(ZoomDepth::Full)
+        );
     }
 
     #[test]
@@ -947,7 +960,12 @@ mod tests {
     #[test]
     fn test_zoom_target_parse_file_with_range() {
         let target = ZoomTarget::parse("file=src/main.rs:10-50").unwrap();
-        if let ZoomTarget::File { path, start_line, end_line } = target {
+        if let ZoomTarget::File {
+            path,
+            start_line,
+            end_line,
+        } = target
+        {
             assert_eq!(path, "src/main.rs");
             assert_eq!(start_line, Some(10));
             assert_eq!(end_line, Some(50));
@@ -1011,10 +1029,10 @@ mod tests {
         {
             let mut store = ZoomSessionStore::load(&path).unwrap();
             store.create_session_with_desc("investigation", "Bug hunt");
-            store.active_mut().unwrap().add_zoom(
-                ZoomTarget::Function("process".to_string()),
-                ZoomDepth::Full,
-            );
+            store
+                .active_mut()
+                .unwrap()
+                .add_zoom(ZoomTarget::Function("process".to_string()), ZoomDepth::Full);
             store.save().unwrap();
         }
 
@@ -1076,7 +1094,8 @@ mod tests {
         let name = ZoomSessionStore::with_persistence(&path, |store| {
             store.create_session("atomic");
             store.active().unwrap().name.clone()
-        }).unwrap();
+        })
+        .unwrap();
 
         assert_eq!(name, "atomic");
 
@@ -1136,8 +1155,12 @@ mod tests {
         {
             let mut store = ZoomSessionStore::load(&path).unwrap();
             let session = store.create_session_with_desc("meta-test", "Testing metadata");
-            session.metadata.insert("project".to_string(), "pm_encoder".to_string());
-            session.metadata.insert("branch".to_string(), "main".to_string());
+            session
+                .metadata
+                .insert("project".to_string(), "pm_encoder".to_string());
+            session
+                .metadata
+                .insert("branch".to_string(), "main".to_string());
             store.save().unwrap();
         }
 
@@ -1145,7 +1168,10 @@ mod tests {
         {
             let store = ZoomSessionStore::load(&path).unwrap();
             let session = store.get_session("meta-test").unwrap();
-            assert_eq!(session.metadata.get("project"), Some(&"pm_encoder".to_string()));
+            assert_eq!(
+                session.metadata.get("project"),
+                Some(&"pm_encoder".to_string())
+            );
             assert_eq!(session.metadata.get("branch"), Some(&"main".to_string()));
         }
 
@@ -1195,7 +1221,12 @@ mod tests {
     #[test]
     fn test_zoom_target_parse_file_single_line() {
         let target = ZoomTarget::parse("file=src/lib.rs:42").unwrap();
-        if let ZoomTarget::File { path, start_line, end_line } = target {
+        if let ZoomTarget::File {
+            path,
+            start_line,
+            end_line,
+        } = target
+        {
             assert_eq!(path, "src/lib.rs");
             assert_eq!(start_line, Some(42));
             assert_eq!(end_line, None);
@@ -1207,7 +1238,12 @@ mod tests {
     #[test]
     fn test_zoom_target_parse_file_no_range() {
         let target = ZoomTarget::parse("file=README.md").unwrap();
-        if let ZoomTarget::File { path, start_line, end_line } = target {
+        if let ZoomTarget::File {
+            path,
+            start_line,
+            end_line,
+        } = target
+        {
             assert_eq!(path, "README.md");
             assert_eq!(start_line, None);
             assert_eq!(end_line, None);
@@ -1253,9 +1289,18 @@ mod tests {
 
     #[test]
     fn test_zoom_target_display_all_variants() {
-        assert_eq!(format!("{}", ZoomTarget::Function("foo".to_string())), "function:foo");
-        assert_eq!(format!("{}", ZoomTarget::Class("Bar".to_string())), "class:Bar");
-        assert_eq!(format!("{}", ZoomTarget::Module("baz".to_string())), "module:baz");
+        assert_eq!(
+            format!("{}", ZoomTarget::Function("foo".to_string())),
+            "function:foo"
+        );
+        assert_eq!(
+            format!("{}", ZoomTarget::Class("Bar".to_string())),
+            "class:Bar"
+        );
+        assert_eq!(
+            format!("{}", ZoomTarget::Module("baz".to_string())),
+            "module:baz"
+        );
 
         let file_no_range = ZoomTarget::File {
             path: "test.rs".to_string(),
@@ -1421,7 +1466,10 @@ mod tests {
     fn test_zoom_session_store_default_path() {
         let root = std::path::Path::new("/project");
         let path = ZoomSessionStore::default_path(root);
-        assert_eq!(path, std::path::PathBuf::from("/project/.pm_encoder/sessions.json"));
+        assert_eq!(
+            path,
+            std::path::PathBuf::from("/project/.pm_encoder/sessions.json")
+        );
     }
 
     #[test]
@@ -1436,10 +1484,7 @@ mod tests {
     #[test]
     fn test_zoom_target_module_to_command() {
         let target = ZoomTarget::Module("utils".to_string());
-        assert_eq!(
-            target.to_command(None),
-            "pm_encoder --zoom module=utils"
-        );
+        assert_eq!(target.to_command(None), "pm_encoder --zoom module=utils");
     }
 
     #[test]

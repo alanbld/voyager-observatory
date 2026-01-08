@@ -59,7 +59,12 @@ impl AdaptiveAllocator {
         let mut remaining_budget = budget.saturating_sub(current);
 
         // Priority order for upgrading: Core > Config > Tests > Other
-        let upgrade_order = [FileTier::Core, FileTier::Config, FileTier::Tests, FileTier::Other];
+        let upgrade_order = [
+            FileTier::Core,
+            FileTier::Config,
+            FileTier::Tests,
+            FileTier::Other,
+        ];
 
         for tier in upgrade_order {
             for file in allocations.iter_mut() {
@@ -77,7 +82,12 @@ impl AdaptiveAllocator {
     /// Downgrade pass: Drop files starting with lowest priority
     fn downgrade_pass(budget: usize, allocations: &mut [FileAllocation]) {
         // Priority order for dropping: Other > Tests > Config > Core
-        let drop_order = [FileTier::Other, FileTier::Tests, FileTier::Config, FileTier::Core];
+        let drop_order = [
+            FileTier::Other,
+            FileTier::Tests,
+            FileTier::Config,
+            FileTier::Core,
+        ];
 
         for tier in drop_order {
             // Find indices of files in this tier that can be dropped

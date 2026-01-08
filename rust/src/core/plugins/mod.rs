@@ -32,28 +32,29 @@
 //! voyager-observatory = { features = ["plugins"] }
 //! ```
 
-pub mod error;
-pub mod sandbox;
-pub mod loader;
 pub mod engine;
+pub mod error;
+pub mod loader;
+pub mod sandbox;
 
 #[cfg(feature = "plugins")]
 pub mod bridges;
 
 // Re-exports
+pub use engine::{EngineState, PluginEngine};
 pub use error::{PluginError, PluginResult};
+pub use loader::{
+    LoadedPlugin, PluginEntry, PluginLoader, PluginManifest, PluginStatus, CURRENT_API_VERSION,
+};
 pub use sandbox::{MEMORY_LIMIT, TIMEOUT_MS};
-pub use loader::{PluginLoader, PluginManifest, PluginEntry, LoadedPlugin, PluginStatus, CURRENT_API_VERSION};
-pub use engine::{PluginEngine, EngineState};
 
 #[cfg(feature = "plugins")]
 pub use sandbox::IronSandbox;
 
 #[cfg(feature = "plugins")]
 pub use bridges::vo_table::{
-    create_vo_table, create_vo_table_simple,
-    PluginContributions, SharedContributions,
-    MetricValue, LogEntry, API_VERSION,
+    create_vo_table, create_vo_table_simple, LogEntry, MetricValue, PluginContributions,
+    SharedContributions, API_VERSION,
 };
 
 /// Check if plugin feature is available at runtime

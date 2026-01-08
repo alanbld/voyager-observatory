@@ -32,9 +32,7 @@ pub mod call_graph;
 pub mod extractor;
 
 // Re-export commonly used types
-pub use call_graph::{
-    CallEdge, CallGraph, CallGraphMetadata, CallKind, CallNode, CallableKind,
-};
+pub use call_graph::{CallEdge, CallGraph, CallGraphMetadata, CallKind, CallNode, CallableKind};
 
 pub use extractor::{CallExtractor, ExtractedCalls, FileCallExtraction};
 
@@ -288,8 +286,7 @@ fn utility() {}
                 .with_visibility(true),
         );
         graph.add_node(
-            CallNode::new("helper", "helper", CallableKind::Function)
-                .with_location("lib.rs", 10),
+            CallNode::new("helper", "helper", CallableKind::Function).with_location("lib.rs", 10),
         );
         graph.add_call("main", "helper");
         graph.add_root("main");

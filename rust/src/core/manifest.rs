@@ -310,11 +310,7 @@ mod tests {
     #[test]
     fn test_accessor_methods() {
         let tmp = TempDir::new().unwrap();
-        fs::write(
-            tmp.path().join("Cargo.toml"),
-            "[workspace]\nmembers = []",
-        )
-        .unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[workspace]\nmembers = []").unwrap();
 
         let manifest = ProjectManifest::detect(tmp.path());
 
@@ -332,7 +328,11 @@ mod tests {
     fn test_rust_non_workspace() {
         let tmp = TempDir::new().unwrap();
         // Cargo.toml without [workspace]
-        fs::write(tmp.path().join("Cargo.toml"), "[package]\nname = \"single\"").unwrap();
+        fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[package]\nname = \"single\"",
+        )
+        .unwrap();
 
         let manifest = ProjectManifest::detect(tmp.path());
 
@@ -476,8 +476,12 @@ mod tests {
     #[test]
     fn test_markers_constant() {
         // Verify the MARKERS constant is accessible and correct
-        assert!(ProjectManifest::MARKERS.iter().any(|(m, _)| *m == "Cargo.toml"));
-        assert!(ProjectManifest::MARKERS.iter().any(|(m, _)| *m == "package.json"));
+        assert!(ProjectManifest::MARKERS
+            .iter()
+            .any(|(m, _)| *m == "Cargo.toml"));
+        assert!(ProjectManifest::MARKERS
+            .iter()
+            .any(|(m, _)| *m == "package.json"));
         assert!(ProjectManifest::MARKERS.iter().any(|(m, _)| *m == "go.mod"));
         assert!(ProjectManifest::MARKERS.iter().any(|(m, _)| *m == ".git"));
     }
@@ -486,14 +490,12 @@ mod tests {
     fn test_workspace_detection_mixed() {
         let tmp = TempDir::new().unwrap();
         // Mixed project with both Rust workspace and Node workspace
-        fs::write(
-            tmp.path().join("Cargo.toml"),
-            "[workspace]\nmembers = []",
-        ).unwrap();
+        fs::write(tmp.path().join("Cargo.toml"), "[workspace]\nmembers = []").unwrap();
         fs::write(
             tmp.path().join("package.json"),
             r#"{"workspaces": ["packages/*"]}"#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let manifest = ProjectManifest::detect(tmp.path());
 

@@ -5,7 +5,7 @@
 //! - `PlanetariumModel` for project-wide indexing
 //! - `MicroscopeModel` for symbol zoom
 
-use crate::error::{AstError, Result};
+use crate::error::Result;
 use crate::ir::{Block, Declaration, File, LanguageId};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -105,9 +105,9 @@ impl PlanetariumModel {
 
     /// Get all declarations across all files
     pub fn all_declarations(&self) -> impl Iterator<Item = (&str, &Declaration)> {
-        self.files.iter().flat_map(|(path, file)| {
-            file.declarations.iter().map(move |d| (path.as_str(), d))
-        })
+        self.files
+            .iter()
+            .flat_map(|(path, file)| file.declarations.iter().map(move |d| (path.as_str(), d)))
     }
 
     /// Find declarations by name
@@ -515,11 +515,14 @@ mod tests {
             by_language: BTreeMap::new(),
         };
 
-        stats.by_language.insert("rust".to_string(), LanguageStats {
-            files: 50,
-            declarations: 250,
-            imports: 100,
-        });
+        stats.by_language.insert(
+            "rust".to_string(),
+            LanguageStats {
+                files: 50,
+                declarations: 250,
+                imports: 100,
+            },
+        );
 
         assert_eq!(stats.files_processed, 100);
         assert_eq!(stats.by_language.len(), 1);

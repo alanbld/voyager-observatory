@@ -36,14 +36,12 @@
 //! println!("Dark Matter: {}", metrics.dark_matter);
 //! ```
 
-use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
-use voyager_ast::ir::{
-    CommentKind, Declaration, DeclarationKind, File, Span,
-};
+use std::collections::BTreeMap;
+use voyager_ast::ir::{CommentKind, Declaration, DeclarationKind, File, Span};
 
 use super::metrics::{MetricCollector, MetricRegistry, MetricResult};
-use super::spectrograph::{STELLAR_LIBRARY, Hemisphere};
+use super::spectrograph::{Hemisphere, STELLAR_LIBRARY};
 
 // =============================================================================
 // Census Result Types
@@ -328,11 +326,7 @@ impl CelestialCensus {
 
         // Count unknown regions
         metrics.unknown_regions = file.unknown_regions.len();
-        metrics.unknown_bytes = file
-            .unknown_regions
-            .iter()
-            .map(|r| r.span.len())
-            .sum();
+        metrics.unknown_bytes = file.unknown_regions.iter().map(|r| r.span.len()).sum();
 
         // Analyze nesting depth in declarations (start at depth 1 for top-level)
         for decl in &file.declarations {
@@ -529,13 +523,15 @@ impl MetricCollector for DarkMatterMetric {
         } else {
             format!(
                 "{} dark matter regions ({} unknown, {} volcanic depth > 4)",
-                score,
-                metrics.dark_matter.unknown_regions,
-                metrics.dark_matter.volcanic_regions
+                score, metrics.dark_matter.unknown_regions, metrics.dark_matter.volcanic_regions
             )
         };
 
-        MetricResult::new(score as f64, if score == 0 { 1.0 } else { 0.7 }, explanation)
+        MetricResult::new(
+            score as f64,
+            if score == 0 { 1.0 } else { 0.7 },
+            explanation,
+        )
     }
 }
 
@@ -627,7 +623,12 @@ impl MetricCollector for HealthScoreMetric {
 
         MetricResult::confident(
             score,
-            format!("{} - {} ({:.0}/100)", rating.indicator(), rating.description(), score),
+            format!(
+                "{} - {} ({:.0}/100)",
+                rating.indicator(),
+                rating.description(),
+                score
+            ),
         )
     }
 }
@@ -871,10 +872,22 @@ impl PatternFallbackAnalyzer {
                 metrics.stars.count += 1;
                 // Try to classify the star based on capture groups
                 // For most patterns, group 1 is the name
-                if cap.get(0).map(|m| m.as_str().contains("class")).unwrap_or(false)
-                    || cap.get(0).map(|m| m.as_str().contains("struct")).unwrap_or(false)
-                    || cap.get(0).map(|m| m.as_str().contains("type")).unwrap_or(false)
-                    || cap.get(0).map(|m| m.as_str().contains("interface")).unwrap_or(false)
+                if cap
+                    .get(0)
+                    .map(|m| m.as_str().contains("class"))
+                    .unwrap_or(false)
+                    || cap
+                        .get(0)
+                        .map(|m| m.as_str().contains("struct"))
+                        .unwrap_or(false)
+                    || cap
+                        .get(0)
+                        .map(|m| m.as_str().contains("type"))
+                        .unwrap_or(false)
+                    || cap
+                        .get(0)
+                        .map(|m| m.as_str().contains("interface"))
+                        .unwrap_or(false)
                 {
                     metrics.stars.types += 1;
                 } else {
@@ -916,13 +929,12 @@ impl PatternFallbackAnalyzer {
         let source = std::fs::read_to_string(path).ok()?;
 
         // Find the language name from extension
-        let language = STELLAR_LIBRARY.languages()
-            .into_iter()
-            .find(|lang| {
-                STELLAR_LIBRARY.get(lang)
-                    .map(|s| s.extensions.contains(&ext))
-                    .unwrap_or(false)
-            })?;
+        let language = STELLAR_LIBRARY.languages().into_iter().find(|lang| {
+            STELLAR_LIBRARY
+                .get(lang)
+                .map(|s| s.extensions.contains(&ext))
+                .unwrap_or(false)
+        })?;
 
         Some(self.analyze_source(language, &source))
     }
@@ -948,13 +960,12 @@ impl PatternFallbackAnalyzer {
         let _ = STELLAR_LIBRARY.get_by_extension(ext)?;
 
         // Find language name by extension
-        let language = STELLAR_LIBRARY.languages()
-            .into_iter()
-            .find(|lang| {
-                STELLAR_LIBRARY.get(lang)
-                    .map(|s| s.extensions.contains(&ext))
-                    .unwrap_or(false)
-            })?;
+        let language = STELLAR_LIBRARY.languages().into_iter().find(|lang| {
+            STELLAR_LIBRARY
+                .get(lang)
+                .map(|s| s.extensions.contains(&ext))
+                .unwrap_or(false)
+        })?;
 
         Some(self.analyze_source(language, source))
     }
@@ -1170,9 +1181,15 @@ end;
 
         let metrics = analyzer.analyze_source("simula", source);
         // Should find: class Point, procedure Draw
-        assert!(metrics.stars.count >= 2, "Should find at least 2 stars in Simula code");
+        assert!(
+            metrics.stars.count >= 2,
+            "Should find at least 2 stars in Simula code"
+        );
         assert_eq!(metrics.stars.types, 1, "Should find 1 class");
-        assert!(metrics.stars.functions >= 1, "Should find at least 1 procedure");
+        assert!(
+            metrics.stars.functions >= 1,
+            "Should find at least 1 procedure"
+        );
     }
 
     #[test]
@@ -1234,7 +1251,10 @@ proc main {} {
 
         let metrics = analyzer.analyze_source("cobol", source);
         // Should find procedure division, section
-        assert!(metrics.stars.count >= 1, "Should find at least 1 COBOL section");
+        assert!(
+            metrics.stars.count >= 1,
+            "Should find at least 1 COBOL section"
+        );
     }
 
     #[test]
@@ -1243,7 +1263,10 @@ proc main {} {
 
         assert_eq!(analyzer.get_hemisphere("rust"), Some(Hemisphere::Logic));
         assert_eq!(analyzer.get_hemisphere("html"), Some(Hemisphere::Interface));
-        assert_eq!(analyzer.get_hemisphere("bash"), Some(Hemisphere::Automation));
+        assert_eq!(
+            analyzer.get_hemisphere("bash"),
+            Some(Hemisphere::Automation)
+        );
         assert_eq!(analyzer.get_hemisphere("sql"), Some(Hemisphere::Data));
         assert_eq!(analyzer.get_hemisphere("simula"), Some(Hemisphere::Logic));
     }
@@ -1295,6 +1318,9 @@ def hello():
 
         let metrics = analyzer.analyze_source("python", source);
         // Should count some comments
-        assert!(metrics.nebulae.comment_lines >= 1, "Should count Python comments");
+        assert!(
+            metrics.nebulae.comment_lines >= 1,
+            "Should count Python comments"
+        );
     }
 }

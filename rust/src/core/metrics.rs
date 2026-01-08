@@ -56,7 +56,12 @@ pub trait MetricCollector: Send + Sync {
 
     /// Format for human consumption (Observatory language)
     fn format_human(&self, result: &MetricResult) -> String {
-        format!("{}: {:.2} ({})", self.name(), result.value, result.explanation)
+        format!(
+            "{}: {:.2} ({})",
+            self.name(),
+            result.value,
+            result.explanation
+        )
     }
 
     /// Optional: Format for machine consumption
@@ -136,10 +141,7 @@ impl MetricCollector for DeclarationCountMetric {
 
     fn analyze(&self, file: &File) -> MetricResult {
         let count = file.declarations.len();
-        MetricResult::confident(
-            count as f64,
-            format!("{} declarations found", count),
-        )
+        MetricResult::confident(count as f64, format!("{} declarations found", count))
     }
 }
 
@@ -176,7 +178,11 @@ impl MetricCollector for ParameterComplexityMetric {
         let avg = total_params as f64 / functions.len() as f64;
 
         let explanation = if avg <= 3.0 {
-            format!("Healthy: {:.1} avg params across {} functions", avg, functions.len())
+            format!(
+                "Healthy: {:.1} avg params across {} functions",
+                avg,
+                functions.len()
+            )
         } else if avg <= 5.0 {
             format!("Moderate: {:.1} avg params - consider simplifying", avg)
         } else {
@@ -203,12 +209,7 @@ impl MetricCollector for DocCoverageMetric {
         let public_decls: Vec<_> = file
             .declarations
             .iter()
-            .filter(|d| {
-                matches!(
-                    d.visibility,
-                    voyager_ast::ir::Visibility::Public
-                )
-            })
+            .filter(|d| matches!(d.visibility, voyager_ast::ir::Visibility::Public))
             .collect();
 
         if public_decls.is_empty() {
@@ -236,15 +237,25 @@ impl MetricCollector for DocCoverageMetric {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voyager_ast::ir::{Declaration, DeclarationKind, LanguageId, Span, Visibility, Parameter, Comment, CommentKind};
+    use voyager_ast::ir::{
+        Comment, CommentKind, Declaration, DeclarationKind, LanguageId, Parameter, Span, Visibility,
+    };
 
     fn make_test_file() -> File {
         File {
             path: "test.rs".to_string(),
             language: LanguageId::Rust,
             declarations: vec![
-                Declaration::new("foo".to_string(), DeclarationKind::Function, Span::default()),
-                Declaration::new("bar".to_string(), DeclarationKind::Function, Span::default()),
+                Declaration::new(
+                    "foo".to_string(),
+                    DeclarationKind::Function,
+                    Span::default(),
+                ),
+                Declaration::new(
+                    "bar".to_string(),
+                    DeclarationKind::Function,
+                    Span::default(),
+                ),
             ],
             imports: vec![],
             comments: vec![],
@@ -255,22 +266,26 @@ mod tests {
     }
 
     fn make_file_with_params(param_counts: &[usize]) -> File {
-        let declarations = param_counts.iter().enumerate().map(|(i, &count)| {
-            let mut decl = Declaration::new(
-                format!("func_{}", i),
-                DeclarationKind::Function,
-                Span::default(),
-            );
-            for j in 0..count {
-                decl.parameters.push(Parameter {
-                    name: format!("param_{}", j),
-                    type_annotation: None,
-                    default_value: None,
-                    span: Span::default(),
-                });
-            }
-            decl
-        }).collect();
+        let declarations = param_counts
+            .iter()
+            .enumerate()
+            .map(|(i, &count)| {
+                let mut decl = Declaration::new(
+                    format!("func_{}", i),
+                    DeclarationKind::Function,
+                    Span::default(),
+                );
+                for j in 0..count {
+                    decl.parameters.push(Parameter {
+                        name: format!("param_{}", j),
+                        type_annotation: None,
+                        default_value: None,
+                        span: Span::default(),
+                    });
+                }
+                decl
+            })
+            .collect();
 
         File {
             path: "test.rs".to_string(),
@@ -430,9 +445,11 @@ mod tests {
         let file = File {
             path: "test.rs".to_string(),
             language: LanguageId::Rust,
-            declarations: vec![
-                Declaration::new("MyStruct".to_string(), DeclarationKind::Struct, Span::default()),
-            ],
+            declarations: vec![Declaration::new(
+                "MyStruct".to_string(),
+                DeclarationKind::Struct,
+                Span::default(),
+            )],
             imports: vec![],
             comments: vec![],
             unknown_regions: vec![],

@@ -180,58 +180,48 @@ impl PythonPlugin {
         Self {
             // Function: def name(args) -> ReturnType:
             function_pattern: Regex::new(
-                r"(?m)^[ \t]*def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^\s:]+))?\s*:"
-            ).unwrap(),
+                r"(?m)^[ \t]*def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^\s:]+))?\s*:",
+            )
+            .unwrap(),
 
             // Async function: async def name(args) -> ReturnType:
             async_function_pattern: Regex::new(
-                r"(?m)^[ \t]*async\s+def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^\s:]+))?\s*:"
-            ).unwrap(),
+                r"(?m)^[ \t]*async\s+def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^\s:]+))?\s*:",
+            )
+            .unwrap(),
 
             // Class: class Name(Base1, Base2):
-            class_pattern: Regex::new(
-                r"(?m)^[ \t]*class\s+(\w+)(?:\s*\(([^)]*)\))?\s*:"
-            ).unwrap(),
+            class_pattern: Regex::new(r"(?m)^[ \t]*class\s+(\w+)(?:\s*\(([^)]*)\))?\s*:").unwrap(),
 
             // Method (indented def): def name(self, ...):
             method_pattern: Regex::new(
-                r"(?m)^[ \t]+def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^\s:]+))?\s*:"
-            ).unwrap(),
+                r"(?m)^[ \t]+def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^\s:]+))?\s*:",
+            )
+            .unwrap(),
 
             // Decorator: @name or @name(...) or @name.attr(...)
-            decorator_pattern: Regex::new(
-                r"(?m)^[ \t]*@([\w.]+)(?:\s*\([^)]*\))?"
-            ).unwrap(),
+            decorator_pattern: Regex::new(r"(?m)^[ \t]*@([\w.]+)(?:\s*\([^)]*\))?").unwrap(),
 
             // Simple import: import x, y, z
-            import_pattern: Regex::new(
-                r"(?m)^[ \t]*import\s+([\w., ]+)"
-            ).unwrap(),
+            import_pattern: Regex::new(r"(?m)^[ \t]*import\s+([\w., ]+)").unwrap(),
 
             // From import: from x import y, z
             from_import_pattern: Regex::new(
-                r"(?m)^[ \t]*from\s+([\w.]+)\s+import\s+(.+?)(?:\s*#|$)"
-            ).unwrap(),
+                r"(?m)^[ \t]*from\s+([\w.]+)\s+import\s+(.+?)(?:\s*#|$)",
+            )
+            .unwrap(),
 
             // Type hint in parameter: name: Type or name: Type = default
-            type_hint_pattern: Regex::new(
-                r"(\w+)\s*:\s*([\w\[\], |]+)(?:\s*=\s*[^,)]+)?"
-            ).unwrap(),
+            type_hint_pattern: Regex::new(r"(\w+)\s*:\s*([\w\[\], |]+)(?:\s*=\s*[^,)]+)?").unwrap(),
 
             // Docstring: """...""" or '''...'''
-            docstring_pattern: Regex::new(
-                r#"(?s)^[ \t]*(""".*?"""|'''.*?''')"#
-            ).unwrap(),
+            docstring_pattern: Regex::new(r#"(?s)^[ \t]*(""".*?"""|'''.*?''')"#).unwrap(),
 
             // Context manager: with x as y:
-            context_manager_pattern: Regex::new(
-                r"(?m)^[ \t]*(?:async\s+)?with\s+.+:"
-            ).unwrap(),
+            context_manager_pattern: Regex::new(r"(?m)^[ \t]*(?:async\s+)?with\s+.+:").unwrap(),
 
             // Try/except block
-            try_except_pattern: Regex::new(
-                r"(?m)^[ \t]*try\s*:"
-            ).unwrap(),
+            try_except_pattern: Regex::new(r"(?m)^[ \t]*try\s*:").unwrap(),
         }
     }
 
@@ -272,7 +262,11 @@ impl PythonPlugin {
         let trimmed = after_def.trim_start();
 
         if trimmed.starts_with(r#"""""#) || trimmed.starts_with("'''") {
-            let quote_style = if trimmed.starts_with(r#"""""#) { r#"""""# } else { "'''" };
+            let quote_style = if trimmed.starts_with(r#"""""#) {
+                r#"""""#
+            } else {
+                "'''"
+            };
             let start = trimmed.find(quote_style)? + 3;
             let remaining_after_open = &trimmed[start..];
 
@@ -346,7 +340,8 @@ impl PythonPlugin {
         // Look at next 20 lines for async patterns
         let end_line = (start_line + 20).min(lines.len());
         for line in &lines[start_line..end_line] {
-            if line.contains("await ") || line.contains("async for") || line.contains("async with") {
+            if line.contains("await ") || line.contains("async for") || line.contains("async with")
+            {
                 return true;
             }
         }
@@ -359,7 +354,8 @@ impl PythonPlugin {
         let call_pattern = Regex::new(r"(\w+)\s*\(").unwrap();
 
         // Simple heuristic: look at the function body (next 50 lines or until less indentation)
-        let base_indent = lines.get(start_line)
+        let base_indent = lines
+            .get(start_line)
             .map(|l| l.len() - l.trim_start().len())
             .unwrap_or(0);
 
@@ -379,7 +375,30 @@ impl PythonPlugin {
                 if let Some(name) = cap.get(1) {
                     let call_name = name.as_str();
                     // Skip common built-ins and keywords
-                    if !["if", "for", "while", "with", "except", "print", "len", "str", "int", "float", "list", "dict", "set", "tuple", "range", "type", "isinstance", "hasattr", "getattr", "setattr"].contains(&call_name) {
+                    if ![
+                        "if",
+                        "for",
+                        "while",
+                        "with",
+                        "except",
+                        "print",
+                        "len",
+                        "str",
+                        "int",
+                        "float",
+                        "list",
+                        "dict",
+                        "set",
+                        "tuple",
+                        "range",
+                        "type",
+                        "isinstance",
+                        "hasattr",
+                        "getattr",
+                        "setattr",
+                    ]
+                    .contains(&call_name)
+                    {
                         if !calls.contains(&call_name.to_string()) {
                             calls.push(call_name.to_string());
                         }
@@ -392,7 +411,12 @@ impl PythonPlugin {
     }
 
     /// Infer concept type from Python-specific patterns
-    fn infer_python_concept(&self, symbol: &ExtractedSymbol, decorators: &[String], content_context: &str) -> ConceptType {
+    fn infer_python_concept(
+        &self,
+        symbol: &ExtractedSymbol,
+        decorators: &[String],
+        content_context: &str,
+    ) -> ConceptType {
         // 1. Check decorators first (highest priority)
         for dec in decorators {
             let category = DecoratorCategory::from_decorator(dec);
@@ -405,42 +429,68 @@ impl PythonPlugin {
         let name_lower = symbol.name.to_lowercase();
 
         // Testing patterns
-        if name_lower.starts_with("test_") || name_lower.starts_with("test") && symbol.kind == SymbolKind::Function {
+        if name_lower.starts_with("test_")
+            || name_lower.starts_with("test") && symbol.kind == SymbolKind::Function
+        {
             return ConceptType::Testing;
         }
 
         // Validation patterns
-        if name_lower.contains("validate") || name_lower.contains("check_") || name_lower.starts_with("is_") {
+        if name_lower.contains("validate")
+            || name_lower.contains("check_")
+            || name_lower.starts_with("is_")
+        {
             return ConceptType::Validation;
         }
 
         // Calculation patterns
-        if name_lower.contains("calculate") || name_lower.contains("compute") || name_lower.contains("_total") || name_lower.contains("_sum") {
+        if name_lower.contains("calculate")
+            || name_lower.contains("compute")
+            || name_lower.contains("_total")
+            || name_lower.contains("_sum")
+        {
             return ConceptType::Calculation;
         }
 
         // Error handling patterns
-        if name_lower.contains("error") || name_lower.contains("exception") || name_lower.contains("handle_") {
+        if name_lower.contains("error")
+            || name_lower.contains("exception")
+            || name_lower.contains("handle_")
+        {
             return ConceptType::ErrorHandling;
         }
 
         // Logging patterns
-        if name_lower.contains("log") || name_lower.contains("debug") || name_lower.contains("trace") {
+        if name_lower.contains("log")
+            || name_lower.contains("debug")
+            || name_lower.contains("trace")
+        {
             return ConceptType::Logging;
         }
 
         // Configuration patterns
-        if name_lower.contains("config") || name_lower.contains("settings") || name_lower.contains("setup") {
+        if name_lower.contains("config")
+            || name_lower.contains("settings")
+            || name_lower.contains("setup")
+        {
             return ConceptType::Configuration;
         }
 
         // Transform/process patterns
-        if name_lower.contains("transform") || name_lower.contains("convert") || name_lower.contains("process") || name_lower.contains("parse") {
+        if name_lower.contains("transform")
+            || name_lower.contains("convert")
+            || name_lower.contains("process")
+            || name_lower.contains("parse")
+        {
             return ConceptType::Transformation;
         }
 
         // Decision patterns
-        if name_lower.contains("decide") || name_lower.contains("choose") || name_lower.contains("select") || name_lower.starts_with("should_") {
+        if name_lower.contains("decide")
+            || name_lower.contains("choose")
+            || name_lower.contains("select")
+            || name_lower.starts_with("should_")
+        {
             return ConceptType::Decision;
         }
 
@@ -461,7 +511,10 @@ impl PythonPlugin {
                 if ret_lower.contains("bool") {
                     return ConceptType::Validation;
                 }
-                if ret_lower.contains("int") || ret_lower.contains("float") || ret_lower.contains("decimal") {
+                if ret_lower.contains("int")
+                    || ret_lower.contains("float")
+                    || ret_lower.contains("decimal")
+                {
                     return ConceptType::Calculation;
                 }
             }
@@ -566,7 +619,8 @@ impl LanguagePlugin for PythonPlugin {
             };
 
             // Build signature with decorators
-            let decorator_str = decorators.iter()
+            let decorator_str = decorators
+                .iter()
                 .map(|d| format!("@{}", d))
                 .collect::<Vec<_>>()
                 .join(" ");
@@ -621,7 +675,10 @@ impl LanguagePlugin for PythonPlugin {
             }
 
             // Skip if already extracted as regular function (shouldn't happen but be safe)
-            if symbols.iter().any(|s| s.name == name && s.range.start_line == start_line + 1) {
+            if symbols
+                .iter()
+                .any(|s| s.name == name && s.range.start_line == start_line + 1)
+            {
                 continue;
             }
 
@@ -638,7 +695,8 @@ impl LanguagePlugin for PythonPlugin {
             };
 
             // Build async signature
-            let decorator_str = decorators.iter()
+            let decorator_str = decorators
+                .iter()
                 .map(|d| format!("@{}", d))
                 .collect::<Vec<_>>()
                 .join(" ");
@@ -769,7 +827,8 @@ impl LanguagePlugin for PythonPlugin {
         let mut metadata = HashMap::new();
 
         // Count async functions
-        let async_count = symbols.iter()
+        let async_count = symbols
+            .iter()
             .filter(|s| s.signature.starts_with("async "))
             .count();
         if async_count > 0 {
@@ -777,7 +836,8 @@ impl LanguagePlugin for PythonPlugin {
         }
 
         // Count classes
-        let class_count = symbols.iter()
+        let class_count = symbols
+            .iter()
             .filter(|s| s.kind == SymbolKind::Class)
             .count();
         if class_count > 0 {
@@ -786,7 +846,9 @@ impl LanguagePlugin for PythonPlugin {
 
         // Detect type hint usage
         let has_type_hints = symbols.iter().any(|s| s.return_type.is_some())
-            || symbols.iter().any(|s| s.parameters.iter().any(|p| p.type_hint.is_some()));
+            || symbols
+                .iter()
+                .any(|s| s.parameters.iter().any(|p| p.type_hint.is_some()));
         if has_type_hints {
             metadata.insert("type_hints".to_string(), "true".to_string());
         }
@@ -817,7 +879,8 @@ impl LanguagePlugin for PythonPlugin {
 
     fn infer_concept_type(&self, symbol: &ExtractedSymbol, content: &str) -> ConceptType {
         // Extract decorators from signature
-        let decorators: Vec<String> = symbol.signature
+        let decorators: Vec<String> = symbol
+            .signature
             .split('@')
             .skip(1)
             .map(|s| s.split_whitespace().next().unwrap_or("").to_string())
@@ -861,7 +924,10 @@ impl LanguagePlugin for PythonPlugin {
 
         // Validation functions get boost for security review
         if intent_lower.contains("security") {
-            if symbol.name.contains("validate") || symbol.name.contains("sanitize") || symbol.name.contains("escape") {
+            if symbol.name.contains("validate")
+                || symbol.name.contains("sanitize")
+                || symbol.name.contains("escape")
+            {
                 boost += 0.2;
             }
         }
@@ -873,7 +939,8 @@ impl LanguagePlugin for PythonPlugin {
             let end = (start + 30).min(lines.len());
             let context: String = lines[start..end].join("\n");
 
-            if context.contains("try:") || context.contains("except ") || context.contains("raise ") {
+            if context.contains("try:") || context.contains("except ") || context.contains("raise ")
+            {
                 boost += 0.15;
             }
         }
@@ -893,7 +960,11 @@ impl LanguagePlugin for PythonPlugin {
 
         // Index 56: Type hint completeness (0.0 - 1.0)
         let has_return_type = symbol.return_type.is_some();
-        let typed_params = symbol.parameters.iter().filter(|p| p.type_hint.is_some()).count();
+        let typed_params = symbol
+            .parameters
+            .iter()
+            .filter(|p| p.type_hint.is_some())
+            .count();
         let total_params = symbol.parameters.len().max(1);
         let type_completeness = if has_return_type {
             0.5 + (0.5 * typed_params as f32 / total_params as f32)
@@ -914,7 +985,7 @@ impl LanguagePlugin for PythonPlugin {
         // Index 58: Documentation quality (0.0 - 1.0)
         let doc_score = if let Some(ref doc) = symbol.documentation {
             let doc_len = doc.len();
-            (doc_len as f32 / 200.0).min(1.0)  // Cap at 200 chars
+            (doc_len as f32 / 200.0).min(1.0) // Cap at 200 chars
         } else {
             0.0
         };
@@ -1071,8 +1142,12 @@ class Calculator:
         return a + b
 "#;
         let symbols = plugin().extract_symbols(content).unwrap();
-        assert!(symbols.iter().any(|s| s.name == "Calculator" && s.kind == SymbolKind::Class));
-        assert!(symbols.iter().any(|s| s.name == "add" && s.kind == SymbolKind::Method));
+        assert!(symbols
+            .iter()
+            .any(|s| s.name == "Calculator" && s.kind == SymbolKind::Class));
+        assert!(symbols
+            .iter()
+            .any(|s| s.name == "add" && s.kind == SymbolKind::Method));
     }
 
     #[test]
@@ -1159,7 +1234,9 @@ from typing import List, Dict, Optional
 from pathlib import Path
 "#;
         let imports = plugin().extract_imports(content).unwrap();
-        assert!(imports.iter().any(|i| i.module == "typing" && i.items.contains(&"List".to_string())));
+        assert!(imports
+            .iter()
+            .any(|i| i.module == "typing" && i.items.contains(&"List".to_string())));
         assert!(imports.iter().any(|i| i.module == "pathlib"));
     }
 
@@ -1433,13 +1510,20 @@ if __name__ == "__main__":
         assert_eq!(find_user.visibility, Visibility::Private);
 
         // Verify async function
-        let fetch = symbols.iter().find(|s| s.name == "fetch_user_data").unwrap();
+        let fetch = symbols
+            .iter()
+            .find(|s| s.name == "fetch_user_data")
+            .unwrap();
         assert!(fetch.signature.starts_with("async "));
 
         // Verify imports
         assert!(imports.iter().any(|i| i.module == "os"));
-        assert!(imports.iter().any(|i| i.module == "typing" && i.items.contains(&"Optional".to_string())));
-        assert!(imports.iter().any(|i| i.module == "dataclasses" && i.items.contains(&"dataclass".to_string())));
+        assert!(imports
+            .iter()
+            .any(|i| i.module == "typing" && i.items.contains(&"Optional".to_string())));
+        assert!(imports
+            .iter()
+            .any(|i| i.module == "dataclasses" && i.items.contains(&"dataclass".to_string())));
 
         // Verify file info
         assert!(info.is_executable);
@@ -1452,11 +1536,17 @@ if __name__ == "__main__":
         let concept = p.infer_concept_type(validate, content);
         assert_eq!(concept, ConceptType::Validation);
 
-        let calculate = symbols.iter().find(|s| s.name == "calculate_permissions").unwrap();
+        let calculate = symbols
+            .iter()
+            .find(|s| s.name == "calculate_permissions")
+            .unwrap();
         let concept = p.infer_concept_type(calculate, content);
         assert_eq!(concept, ConceptType::Calculation);
 
-        let process = symbols.iter().find(|s| s.name == "process_user_import").unwrap();
+        let process = symbols
+            .iter()
+            .find(|s| s.name == "process_user_import")
+            .unwrap();
         let concept = p.infer_concept_type(process, content);
         assert_eq!(concept, ConceptType::Transformation);
     }

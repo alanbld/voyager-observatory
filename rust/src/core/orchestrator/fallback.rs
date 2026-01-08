@@ -132,10 +132,7 @@ impl FallbackSystem {
                     match current_strategy.fallback() {
                         Some(next) => {
                             if self.log_fallbacks {
-                                eprintln!(
-                                    "[FALLBACK] Trying: {}",
-                                    next.description()
-                                );
+                                eprintln!("[FALLBACK] Trying: {}", next.description());
                             }
                             current_strategy = next;
                         }
@@ -169,10 +166,7 @@ impl FallbackSystem {
 #[derive(Debug)]
 pub enum FallbackError {
     /// Maximum retry attempts reached
-    MaxAttemptsReached {
-        attempts: usize,
-        last_error: String,
-    },
+    MaxAttemptsReached { attempts: usize, last_error: String },
     /// No more fallback strategies available
     NoMoreFallbacks {
         last_strategy: AnalysisStrategy,
@@ -183,10 +177,20 @@ pub enum FallbackError {
 impl std::fmt::Display for FallbackError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MaxAttemptsReached { attempts, last_error } => {
-                write!(f, "Analysis failed after {} attempts: {}", attempts, last_error)
+            Self::MaxAttemptsReached {
+                attempts,
+                last_error,
+            } => {
+                write!(
+                    f,
+                    "Analysis failed after {} attempts: {}",
+                    attempts, last_error
+                )
             }
-            Self::NoMoreFallbacks { last_strategy, last_error } => {
+            Self::NoMoreFallbacks {
+                last_strategy,
+                last_error,
+            } => {
                 write!(
                     f,
                     "All analysis strategies exhausted. Last tried: {}. Error: {}",
@@ -231,23 +235,50 @@ mod tests {
 
     #[test]
     fn test_analysis_strategy_timeout() {
-        assert_eq!(AnalysisStrategy::SemanticDeep.timeout(), Duration::from_secs(30));
-        assert_eq!(AnalysisStrategy::SemanticQuick.timeout(), Duration::from_millis(500));
-        assert_eq!(AnalysisStrategy::Heuristic.timeout(), Duration::from_millis(100));
-        assert_eq!(AnalysisStrategy::Minimal.timeout(), Duration::from_millis(10));
+        assert_eq!(
+            AnalysisStrategy::SemanticDeep.timeout(),
+            Duration::from_secs(30)
+        );
+        assert_eq!(
+            AnalysisStrategy::SemanticQuick.timeout(),
+            Duration::from_millis(500)
+        );
+        assert_eq!(
+            AnalysisStrategy::Heuristic.timeout(),
+            Duration::from_millis(100)
+        );
+        assert_eq!(
+            AnalysisStrategy::Minimal.timeout(),
+            Duration::from_millis(10)
+        );
     }
 
     #[test]
     fn test_analysis_strategy_description() {
-        assert_eq!(AnalysisStrategy::SemanticDeep.description(), "Deep semantic analysis");
-        assert_eq!(AnalysisStrategy::SemanticQuick.description(), "Quick semantic analysis");
-        assert_eq!(AnalysisStrategy::Heuristic.description(), "Pattern-based analysis");
-        assert_eq!(AnalysisStrategy::Minimal.description(), "Structural analysis");
+        assert_eq!(
+            AnalysisStrategy::SemanticDeep.description(),
+            "Deep semantic analysis"
+        );
+        assert_eq!(
+            AnalysisStrategy::SemanticQuick.description(),
+            "Quick semantic analysis"
+        );
+        assert_eq!(
+            AnalysisStrategy::Heuristic.description(),
+            "Pattern-based analysis"
+        );
+        assert_eq!(
+            AnalysisStrategy::Minimal.description(),
+            "Structural analysis"
+        );
     }
 
     #[test]
     fn test_analysis_strategy_equality() {
-        assert_eq!(AnalysisStrategy::SemanticDeep, AnalysisStrategy::SemanticDeep);
+        assert_eq!(
+            AnalysisStrategy::SemanticDeep,
+            AnalysisStrategy::SemanticDeep
+        );
         assert_ne!(AnalysisStrategy::SemanticDeep, AnalysisStrategy::Minimal);
     }
 
@@ -266,29 +297,31 @@ mod tests {
     fn test_fallback_system_new() {
         let fallback = FallbackSystem::new();
         // Test that it doesn't panic and can be used
-        assert!(fallback.execute_with_fallback(
-            AnalysisStrategy::Minimal,
-            |_| -> Result<(), &str> { Ok(()) },
-        ).is_ok());
+        assert!(fallback
+            .execute_with_fallback(AnalysisStrategy::Minimal, |_| -> Result<(), &str> {
+                Ok(())
+            },)
+            .is_ok());
     }
 
     #[test]
     fn test_fallback_system_default() {
         let fallback = FallbackSystem::default();
-        assert!(fallback.execute_with_fallback(
-            AnalysisStrategy::Minimal,
-            |_| -> Result<(), &str> { Ok(()) },
-        ).is_ok());
+        assert!(fallback
+            .execute_with_fallback(AnalysisStrategy::Minimal, |_| -> Result<(), &str> {
+                Ok(())
+            },)
+            .is_ok());
     }
 
     #[test]
     fn test_fallback_system_with_logging() {
         let fallback = FallbackSystem::new().with_logging();
         // Just verify it can be created and used
-        let result = fallback.execute_with_fallback(
-            AnalysisStrategy::Minimal,
-            |_| -> Result<i32, &str> { Ok(42) },
-        );
+        let result = fallback
+            .execute_with_fallback(AnalysisStrategy::Minimal, |_| -> Result<i32, &str> {
+                Ok(42)
+            });
         assert!(result.is_ok());
     }
 
@@ -457,14 +490,17 @@ mod tests {
     fn test_fallback_with_logging_max_attempts() {
         let fallback = FallbackSystem::new().with_logging();
 
-        let result = fallback.execute_with_fallback(
-            AnalysisStrategy::SemanticDeep,
-            |_| -> Result<i32, &str> { Err("always fails with logging") },
-        );
+        let result = fallback
+            .execute_with_fallback(AnalysisStrategy::SemanticDeep, |_| -> Result<i32, &str> {
+                Err("always fails with logging")
+            });
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            FallbackError::MaxAttemptsReached { attempts, last_error } => {
+            FallbackError::MaxAttemptsReached {
+                attempts,
+                last_error,
+            } => {
                 assert_eq!(attempts, 3);
                 assert!(last_error.contains("always fails"));
             }
@@ -476,10 +512,10 @@ mod tests {
     fn test_fallback_with_logging_no_more_fallbacks() {
         let fallback = FallbackSystem::new().with_logging();
 
-        let result = fallback.execute_with_fallback(
-            AnalysisStrategy::Minimal,
-            |_| -> Result<i32, &str> { Err("fails with log") },
-        );
+        let result = fallback
+            .execute_with_fallback(AnalysisStrategy::Minimal, |_| -> Result<i32, &str> {
+                Err("fails with log")
+            });
 
         assert!(result.is_err());
     }

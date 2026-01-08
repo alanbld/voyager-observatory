@@ -5,14 +5,14 @@
 //! - Two Hemispheres (Logic vs Interface)
 //! - Composition metrics (Stars, Nebulae, Dark Matter)
 
-use pm_encoder::core::{
-    CelestialCensus, CensusMetrics, GalaxyCensus, HealthRating,
-    StarCountMetric, NebulaeCountMetric, DarkMatterMetric,
-};
 use pm_encoder::core::metrics::MetricCollector;
+use pm_encoder::core::{
+    CelestialCensus, CensusMetrics, DarkMatterMetric, GalaxyCensus, HealthRating,
+    NebulaeCountMetric, StarCountMetric,
+};
 use voyager_ast::ir::{
-    File, Declaration, DeclarationKind, Span, LanguageId, Visibility,
-    Comment, CommentKind, UnknownNode,
+    Comment, CommentKind, Declaration, DeclarationKind, File, LanguageId, Span, UnknownNode,
+    Visibility,
 };
 
 // =============================================================================
@@ -80,15 +80,35 @@ fn create_file_with_deep_nesting() -> File {
     file.span = Span::new(0, 1000, 1, 50);
 
     // Create deeply nested structure (> 4 levels)
-    let mut outer = Declaration::new("level1".to_string(), DeclarationKind::Function, Span::new(0, 900, 1, 45));
+    let mut outer = Declaration::new(
+        "level1".to_string(),
+        DeclarationKind::Function,
+        Span::new(0, 900, 1, 45),
+    );
 
-    let mut level2 = Declaration::new("level2".to_string(), DeclarationKind::Method, Span::new(10, 800, 2, 40));
+    let mut level2 = Declaration::new(
+        "level2".to_string(),
+        DeclarationKind::Method,
+        Span::new(10, 800, 2, 40),
+    );
 
-    let mut level3 = Declaration::new("level3".to_string(), DeclarationKind::Method, Span::new(20, 700, 3, 35));
+    let mut level3 = Declaration::new(
+        "level3".to_string(),
+        DeclarationKind::Method,
+        Span::new(20, 700, 3, 35),
+    );
 
-    let mut level4 = Declaration::new("level4".to_string(), DeclarationKind::Method, Span::new(30, 600, 4, 30));
+    let mut level4 = Declaration::new(
+        "level4".to_string(),
+        DeclarationKind::Method,
+        Span::new(30, 600, 4, 30),
+    );
 
-    let level5 = Declaration::new("level5".to_string(), DeclarationKind::Method, Span::new(40, 500, 5, 25));
+    let level5 = Declaration::new(
+        "level5".to_string(),
+        DeclarationKind::Method,
+        Span::new(40, 500, 5, 25),
+    );
 
     level4.children.push(level5);
     level3.children.push(level4);
@@ -110,16 +130,22 @@ fn test_dark_matter_detection_with_syntax_errors() {
     let metrics = census.analyze(&file);
 
     // Should detect 2 unknown regions
-    assert_eq!(metrics.dark_matter.unknown_regions, 2,
-        "Should detect 2 dark matter regions (unknown/unparsed code)");
+    assert_eq!(
+        metrics.dark_matter.unknown_regions, 2,
+        "Should detect 2 dark matter regions (unknown/unparsed code)"
+    );
 
     // Should count total bytes in unknown regions
-    assert!(metrics.dark_matter.unknown_bytes > 0,
-        "Should count bytes in dark matter regions");
+    assert!(
+        metrics.dark_matter.unknown_bytes > 0,
+        "Should count bytes in dark matter regions"
+    );
 
     // Dark matter ratio should be > 0
-    assert!(metrics.derived.dark_matter_ratio > 0.0,
-        "Dark matter ratio should be positive");
+    assert!(
+        metrics.derived.dark_matter_ratio > 0.0,
+        "Dark matter ratio should be positive"
+    );
 }
 
 #[test]
@@ -129,12 +155,16 @@ fn test_dark_matter_volcanic_regions() {
     let metrics = census.analyze(&file);
 
     // Should detect volcanic regions (nesting > 4)
-    assert!(metrics.dark_matter.volcanic_regions > 0,
-        "Should detect volcanic regions from deep nesting");
+    assert!(
+        metrics.dark_matter.volcanic_regions > 0,
+        "Should detect volcanic regions from deep nesting"
+    );
 
     // Max nesting should be at least 5
-    assert!(metrics.dark_matter.max_nesting_depth >= 4,
-        "Max nesting depth should be at least 4");
+    assert!(
+        metrics.dark_matter.max_nesting_depth >= 4,
+        "Max nesting depth should be at least 4"
+    );
 }
 
 #[test]
@@ -144,12 +174,18 @@ fn test_clean_file_no_dark_matter() {
     let metrics = census.analyze(&file);
 
     // Clean file should have no dark matter
-    assert_eq!(metrics.dark_matter.unknown_regions, 0,
-        "Clean file should have no unknown regions");
-    assert_eq!(metrics.dark_matter.unknown_bytes, 0,
-        "Clean file should have 0 unknown bytes");
-    assert_eq!(metrics.dark_matter.volcanic_regions, 0,
-        "Clean file should have no volcanic regions");
+    assert_eq!(
+        metrics.dark_matter.unknown_regions, 0,
+        "Clean file should have no unknown regions"
+    );
+    assert_eq!(
+        metrics.dark_matter.unknown_bytes, 0,
+        "Clean file should have 0 unknown bytes"
+    );
+    assert_eq!(
+        metrics.dark_matter.volcanic_regions, 0,
+        "Clean file should have no volcanic regions"
+    );
 }
 
 // =============================================================================
@@ -163,11 +199,20 @@ fn test_two_hemispheres_logic_detection() {
 
     // Logic hemisphere: Functions and methods
     file.declarations.push(Declaration::new(
-        "compute".to_string(), DeclarationKind::Function, Span::new(0, 50, 1, 3)));
+        "compute".to_string(),
+        DeclarationKind::Function,
+        Span::new(0, 50, 1, 3),
+    ));
     file.declarations.push(Declaration::new(
-        "process".to_string(), DeclarationKind::Function, Span::new(50, 100, 4, 6)));
+        "process".to_string(),
+        DeclarationKind::Function,
+        Span::new(50, 100, 4, 6),
+    ));
     file.declarations.push(Declaration::new(
-        "transform".to_string(), DeclarationKind::Method, Span::new(100, 150, 7, 9)));
+        "transform".to_string(),
+        DeclarationKind::Method,
+        Span::new(100, 150, 7, 9),
+    ));
 
     let census = CelestialCensus::new();
     let metrics = census.analyze(&file);
@@ -185,17 +230,29 @@ fn test_two_hemispheres_interface_detection() {
 
     // Interface hemisphere: Types, traits, interfaces
     file.declarations.push(Declaration::new(
-        "Config".to_string(), DeclarationKind::Struct, Span::new(0, 50, 1, 3)));
+        "Config".to_string(),
+        DeclarationKind::Struct,
+        Span::new(0, 50, 1, 3),
+    ));
     file.declarations.push(Declaration::new(
-        "Processor".to_string(), DeclarationKind::Trait, Span::new(50, 100, 4, 6)));
+        "Processor".to_string(),
+        DeclarationKind::Trait,
+        Span::new(50, 100, 4, 6),
+    ));
     file.declarations.push(Declaration::new(
-        "Status".to_string(), DeclarationKind::Enum, Span::new(100, 150, 7, 9)));
+        "Status".to_string(),
+        DeclarationKind::Enum,
+        Span::new(100, 150, 7, 9),
+    ));
 
     let census = CelestialCensus::new();
     let metrics = census.analyze(&file);
 
     // Should count types (interface units)
-    assert_eq!(metrics.stars.types, 3, "Should count 3 types (interface units)");
+    assert_eq!(
+        metrics.stars.types, 3,
+        "Should count 3 types (interface units)"
+    );
     // Functions should be 0
     assert_eq!(metrics.stars.functions, 0, "Should count 0 functions");
 }
@@ -266,8 +323,10 @@ fn test_stellar_density_calculation() {
     let metrics = census.analyze(&file);
 
     // 3 stars in 10 lines = 300 stars per 1000 LOC
-    assert!(metrics.derived.stellar_density > 200.0,
-        "Stellar density should be high for dense code");
+    assert!(
+        metrics.derived.stellar_density > 200.0,
+        "Stellar density should be high for dense code"
+    );
 }
 
 #[test]
@@ -297,8 +356,11 @@ fn test_nebula_ratio_calculation() {
     let metrics = census.analyze(&file);
 
     // 2 out of 3 documented = ~66.7%
-    assert!(metrics.derived.nebula_ratio >= 0.6 && metrics.derived.nebula_ratio <= 0.7,
-        "Nebula ratio should be around 66%: actual={}", metrics.derived.nebula_ratio);
+    assert!(
+        metrics.derived.nebula_ratio >= 0.6 && metrics.derived.nebula_ratio <= 0.7,
+        "Nebula ratio should be around 66%: actual={}",
+        metrics.derived.nebula_ratio
+    );
 }
 
 // =============================================================================
@@ -313,8 +375,10 @@ fn test_health_rating_clean_code() {
     let rating = census.rate_health(&metrics);
 
     // Clean code should be Healthy or Stable
-    assert!(rating == HealthRating::Healthy || rating == HealthRating::Stable,
-        "Clean code should be rated Healthy or Stable");
+    assert!(
+        rating == HealthRating::Healthy || rating == HealthRating::Stable,
+        "Clean code should be rated Healthy or Stable"
+    );
 }
 
 #[test]
@@ -325,8 +389,10 @@ fn test_health_rating_high_dark_matter() {
     let rating = census.rate_health(&metrics);
 
     // Code with dark matter should be flagged
-    assert!(rating == HealthRating::HighDarkMatter || rating == HealthRating::Critical,
-        "Code with dark matter should be rated HighDarkMatter or Critical");
+    assert!(
+        rating == HealthRating::HighDarkMatter || rating == HealthRating::Critical,
+        "Code with dark matter should be rated HighDarkMatter or Critical"
+    );
 }
 
 // =============================================================================
@@ -354,10 +420,17 @@ fn test_galaxy_census_aggregation() {
     assert_eq!(galaxy.total_files, 2, "Should have 2 files");
 
     // Should have 2 constellations (src and tests)
-    assert_eq!(galaxy.constellations.len(), 2, "Should have 2 constellations");
+    assert_eq!(
+        galaxy.constellations.len(),
+        2,
+        "Should have 2 constellations"
+    );
 
     // Totals should be aggregated
-    assert_eq!(galaxy.totals.stars.count, 4, "Total stars should be 4 (2+2)");
+    assert_eq!(
+        galaxy.totals.stars.count, 4,
+        "Total stars should be 4 (2+2)"
+    );
 }
 
 // =============================================================================
@@ -376,7 +449,10 @@ fn test_census_deterministic_output() {
     // Results should be identical
     assert_eq!(metrics1.stars.count, metrics2.stars.count);
     assert_eq!(metrics1.nebulae.doc_lines, metrics2.nebulae.doc_lines);
-    assert_eq!(metrics1.dark_matter.unknown_regions, metrics2.dark_matter.unknown_regions);
+    assert_eq!(
+        metrics1.dark_matter.unknown_regions,
+        metrics2.dark_matter.unknown_regions
+    );
     assert!((metrics1.derived.health_score - metrics2.derived.health_score).abs() < 0.001);
 }
 
@@ -411,7 +487,10 @@ fn test_galaxy_census_deterministic_ordering() {
     // Constellation ordering should be identical (BTreeMap)
     let keys1: Vec<_> = galaxy1.constellations.keys().collect();
     let keys2: Vec<_> = galaxy2.constellations.keys().collect();
-    assert_eq!(keys1, keys2, "Constellation ordering should be deterministic");
+    assert_eq!(
+        keys1, keys2,
+        "Constellation ordering should be deterministic"
+    );
 }
 
 // =============================================================================
@@ -432,6 +511,9 @@ fn test_census_performance() {
     let elapsed = start.elapsed();
 
     // 1000 analyses should complete in < 100ms (0.1ms per file)
-    assert!(elapsed.as_millis() < 100,
-        "Census should be fast: {}ms for 1000 files", elapsed.as_millis());
+    assert!(
+        elapsed.as_millis() < 100,
+        "Census should be fast: {}ms for 1000 files",
+        elapsed.as_millis()
+    );
 }

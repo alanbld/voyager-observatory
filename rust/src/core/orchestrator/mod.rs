@@ -20,8 +20,8 @@ pub mod smart_defaults;
 
 pub use auto_focus::{AutoFocus, InputType};
 pub use fallback::{AnalysisStrategy, FallbackSystem};
-pub use journal::{ObserversJournal, MarkedStar, ExplorationEntry, FadedNebula};
-pub use smart_defaults::{SmartDefaults, SemanticDepth, DetailLevel};
+pub use journal::{ExplorationEntry, FadedNebula, MarkedStar, ObserversJournal};
+pub use smart_defaults::{DetailLevel, SemanticDepth, SmartDefaults};
 
 use std::path::Path;
 use std::time::Duration;
@@ -127,15 +127,13 @@ mod tests {
 
     #[test]
     fn test_orchestrator_with_timeout() {
-        let orchestrator = SmartOrchestrator::new()
-            .with_timeout(Duration::from_secs(1));
+        let orchestrator = SmartOrchestrator::new().with_timeout(Duration::from_secs(1));
         assert_eq!(orchestrator.semantic_timeout(), Duration::from_secs(1));
     }
 
     #[test]
     fn test_orchestrator_with_custom_timeout() {
-        let orchestrator = SmartOrchestrator::new()
-            .with_timeout(Duration::from_millis(250));
+        let orchestrator = SmartOrchestrator::new().with_timeout(Duration::from_millis(250));
         assert_eq!(orchestrator.semantic_timeout(), Duration::from_millis(250));
     }
 
@@ -172,10 +170,10 @@ mod tests {
         let orchestrator = SmartOrchestrator::new();
         let fallback = orchestrator.fallback();
         // Verify we can use the fallback system
-        let result = fallback.execute_with_fallback(
-            AnalysisStrategy::Minimal,
-            |_| -> Result<i32, &str> { Ok(42) },
-        );
+        let result = fallback
+            .execute_with_fallback(AnalysisStrategy::Minimal, |_| -> Result<i32, &str> {
+                Ok(42)
+            });
         assert!(result.is_ok());
     }
 

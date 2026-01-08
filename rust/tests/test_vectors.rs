@@ -3,11 +3,11 @@
 //! These tests load JSON test vectors that define expected behavior
 //! (validated by Python engine) and verify Rust produces identical output.
 
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use regex::Regex;
 
 /// Check if a file appears in a plusminus header (with or without metadata)
 /// Matches: ++++++++++ filename ++++++++++ or ++++++++++ filename [metadata] ++++++++++
@@ -15,7 +15,10 @@ fn file_in_plusminus_header(output: &str, filename: &str) -> bool {
     // Escape special regex characters in filename
     let escaped = regex::escape(filename);
     // Match header with optional metadata suffix before closing ++++++++++
-    let pattern = format!(r"\+\+\+\+\+\+\+\+\+\+ {} (\[.*?\] )?\+\+\+\+\+\+\+\+\+\+", escaped);
+    let pattern = format!(
+        r"\+\+\+\+\+\+\+\+\+\+ {} (\[.*?\] )?\+\+\+\+\+\+\+\+\+\+",
+        escaped
+    );
     let re = Regex::new(&pattern).unwrap();
     re.is_match(output)
 }
@@ -23,7 +26,10 @@ fn file_in_plusminus_header(output: &str, filename: &str) -> bool {
 /// Find position of file in plusminus header (for order checking)
 fn file_header_position(output: &str, filename: &str) -> Option<usize> {
     let escaped = regex::escape(filename);
-    let pattern = format!(r"\+\+\+\+\+\+\+\+\+\+ {} (\[.*?\] )?\+\+\+\+\+\+\+\+\+\+", escaped);
+    let pattern = format!(
+        r"\+\+\+\+\+\+\+\+\+\+ {} (\[.*?\] )?\+\+\+\+\+\+\+\+\+\+",
+        escaped
+    );
     let re = Regex::new(&pattern).unwrap();
     re.find(output).map(|m| m.start())
 }
@@ -118,8 +124,8 @@ fn test_config_01_file_loading() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included (with or without metadata)
     for file in &vector.expected.files_included {
@@ -277,8 +283,8 @@ fn test_config_03_ignore_patterns() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included (with or without metadata)
     for file in &vector.expected.files_included {
@@ -322,8 +328,8 @@ fn test_config_04_include_patterns() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included (with or without metadata)
     for file in &vector.expected.files_included {
@@ -367,8 +373,8 @@ fn test_config_05_pattern_precedence() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included (with or without metadata)
     for file in &vector.expected.files_included {
@@ -425,11 +431,14 @@ fn test_serial_01_basic_sorting() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Verify files appear in correct order (using flexible header matching)
-    let file_positions: Vec<_> = vector.expected.files_included.iter()
+    let file_positions: Vec<_> = vector
+        .expected
+        .files_included
+        .iter()
         .map(|file| {
             file_header_position(&output, file)
                 .expect(&format!("File {} not found in output", file))
@@ -461,8 +470,8 @@ fn test_serial_02_empty_directory() {
     fs::create_dir_all(&temp_dir).expect("Failed to create temp dir");
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Output should be empty
     assert_eq!(output, "", "Empty directory should produce empty output");
@@ -488,8 +497,8 @@ fn test_serial_03_single_file() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected content strings are present (with flexible header matching)
     for content_str in &vector.expected.output_contains {
@@ -524,8 +533,8 @@ fn test_serial_04_nested_structure() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Verify all files are included (with flexible metadata matching)
     for file in &vector.expected.files_included {
@@ -537,7 +546,10 @@ fn test_serial_04_nested_structure() {
     }
 
     // Verify sort order
-    let file_positions: Vec<_> = vector.expected.files_included.iter()
+    let file_positions: Vec<_> = vector
+        .expected
+        .files_included
+        .iter()
         .map(|file| {
             file_header_position(&output, file)
                 .expect(&format!("File {} not found in output", file))
@@ -573,8 +585,8 @@ fn test_serial_05_newline_handling() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Verify all files are included
     for file in &vector.expected.files_included {
@@ -622,8 +634,8 @@ fn test_analyzer_01_python_class() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included
     for file in &vector.expected.files_included {
@@ -667,8 +679,8 @@ fn test_analyzer_02_python_function() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included
     for file in &vector.expected.files_included {
@@ -712,8 +724,8 @@ fn test_analyzer_03_python_imports() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included
     for file in &vector.expected.files_included {
@@ -757,8 +769,8 @@ fn test_analyzer_04_javascript_function() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included
     for file in &vector.expected.files_included {
@@ -802,8 +814,8 @@ fn test_analyzer_05_javascript_imports() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included
     for file in &vector.expected.files_included {
@@ -847,8 +859,8 @@ fn test_analyzer_06_rust_struct() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included
     for file in &vector.expected.files_included {
@@ -892,8 +904,8 @@ fn test_analyzer_07_rust_function() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included
     for file in &vector.expected.files_included {
@@ -937,8 +949,8 @@ fn test_analyzer_08_shell_functions() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included
     for file in &vector.expected.files_included {
@@ -982,8 +994,8 @@ fn test_analyzer_09_mixed_project() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included
     for file in &vector.expected.files_included {
@@ -1027,8 +1039,8 @@ fn test_analyzer_10_structure_preservation() {
     }
 
     // Run serialization
-    let output = pm_encoder::serialize_project(temp_dir.to_str().unwrap())
-        .expect("Serialization failed");
+    let output =
+        pm_encoder::serialize_project(temp_dir.to_str().unwrap()).expect("Serialization failed");
 
     // Check that expected files are included
     for file in &vector.expected.files_included {
@@ -1158,7 +1170,10 @@ fn test_cli_01_help() {
 
     // Check that at least one description is present
     if !vector.expected.stdout_contains_any.is_empty() {
-        let has_any = vector.expected.stdout_contains_any.iter()
+        let has_any = vector
+            .expected
+            .stdout_contains_any
+            .iter()
             .any(|desc| stdout.to_lowercase().contains(&desc.to_lowercase()));
         assert!(
             has_any,
@@ -1215,13 +1230,15 @@ fn test_cli_03_invalid_arg() {
 
     // Check that error message contains expected terms
     if !vector.expected.stderr_contains_any.is_empty() {
-        let has_any = vector.expected.stderr_contains_any.iter()
+        let has_any = vector
+            .expected
+            .stderr_contains_any
+            .iter()
             .any(|term| stderr.to_lowercase().contains(&term.to_lowercase()));
         assert!(
             has_any,
             "Error output '{}' should contain at least one of: {:?}",
-            stderr,
-            vector.expected.stderr_contains_any
+            stderr, vector.expected.stderr_contains_any
         );
     }
 }
@@ -1244,7 +1261,10 @@ fn test_cli_04_missing_dir() {
 
     // Check that error message indicates the problem
     if !vector.expected.stderr_contains_any.is_empty() {
-        let has_any = vector.expected.stderr_contains_any.iter()
+        let has_any = vector
+            .expected
+            .stderr_contains_any
+            .iter()
             .any(|term| stderr.to_lowercase().contains(&term.to_lowercase()));
         assert!(
             has_any,
@@ -1264,7 +1284,11 @@ fn test_vector_loading_works() {
     // This test passes once we create the first vector
     // For now, just verify the infrastructure exists
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let vectors_dir = manifest_dir.parent().unwrap().join("test_vectors").join("rust_parity");
+    let vectors_dir = manifest_dir
+        .parent()
+        .unwrap()
+        .join("test_vectors")
+        .join("rust_parity");
     assert!(vectors_dir.exists(), "Test vectors directory should exist");
 }
 
@@ -1272,7 +1296,7 @@ fn test_vector_loading_works() {
 // Budget Tests (v1.7.0 Intelligence Layer) - The Twins Protocol
 // ============================================================================
 
-use pm_encoder::{LensManager, apply_token_budget, parse_token_budget};
+use pm_encoder::{apply_token_budget, parse_token_budget, LensManager};
 use std::path::Path;
 
 /// Budget test vector structure
@@ -1337,7 +1361,9 @@ fn test_budget_01_drop() {
     assert_eq!(vector.category, "budgeting");
 
     // Create files from vector input
-    let files: Vec<(String, String)> = vector.input.files
+    let files: Vec<(String, String)> = vector
+        .input
+        .files
         .iter()
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
@@ -1360,31 +1386,28 @@ fn test_budget_01_drop() {
     );
 
     // Verify budget
-    assert_eq!(
-        report.budget, vector.expected.budget,
-        "Budget mismatch"
-    );
+    assert_eq!(report.budget, vector.expected.budget, "Budget mismatch");
 
     // Verify counts (allowing some flexibility for token estimation differences)
     assert_eq!(
         report.selected_count, vector.expected.selected_count,
         "Selected count mismatch: expected {}, got {}",
-        vector.expected.selected_count,
-        report.selected_count
+        vector.expected.selected_count, report.selected_count
     );
 
     assert_eq!(
         report.dropped_count, vector.expected.dropped_count,
         "Dropped count mismatch: expected {}, got {}",
-        vector.expected.dropped_count,
-        report.dropped_count
+        vector.expected.dropped_count, report.dropped_count
     );
 
     // Verify selected files contain expected files (order may differ due to path sorting)
     let selected_paths: Vec<&str> = selected.iter().map(|(p, _)| p.as_str()).collect();
     for expected_file in &vector.expected.files_selected {
         assert!(
-            selected_paths.iter().any(|p| p.contains(expected_file) || expected_file.contains(p)),
+            selected_paths
+                .iter()
+                .any(|p| p.contains(expected_file) || expected_file.contains(p)),
             "Expected file '{}' not in selected: {:?}",
             expected_file,
             selected_paths
@@ -1397,7 +1420,9 @@ fn test_budget_02_hybrid() {
     let vector = load_budget_vector("budget_02_hybrid");
     assert_eq!(vector.category, "budgeting");
 
-    let files: Vec<(String, String)> = vector.input.files
+    let files: Vec<(String, String)> = vector
+        .input
+        .files
         .iter()
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
@@ -1412,10 +1437,7 @@ fn test_budget_02_hybrid() {
     );
 
     // Verify strategy
-    assert_eq!(
-        report.strategy, "hybrid",
-        "Strategy should be 'hybrid'"
-    );
+    assert_eq!(report.strategy, "hybrid", "Strategy should be 'hybrid'");
 
     // Verify selected count
     assert_eq!(
@@ -1426,7 +1448,10 @@ fn test_budget_02_hybrid() {
     // Hybrid strategy may truncate large files
     // The truncated_count might differ due to heuristic vs tiktoken differences
     // Just verify it's non-negative
-    assert!(report.truncated_count >= 0, "Truncated count should be non-negative");
+    assert!(
+        report.truncated_count >= 0,
+        "Truncated count should be non-negative"
+    );
 }
 
 #[test]
@@ -1434,7 +1459,9 @@ fn test_budget_03_lens_priority() {
     let vector = load_budget_vector("budget_03_lens_priority");
     assert_eq!(vector.category, "budgeting");
 
-    let files: Vec<(String, String)> = vector.input.files
+    let files: Vec<(String, String)> = vector
+        .input
+        .files
         .iter()
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();

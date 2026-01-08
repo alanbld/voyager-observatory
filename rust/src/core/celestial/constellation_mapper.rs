@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use super::nebula_namer::{NebulaNamer, NebulaName};
+use super::nebula_namer::{NebulaName, NebulaNamer};
 use crate::core::fractal::semantic::UniversalConceptType;
 
 // =============================================================================
@@ -142,7 +142,9 @@ impl Nebula {
     /// Get the brightest star in the nebula.
     pub fn brightest_star(&self) -> Option<&Star> {
         self.stars.iter().max_by(|a, b| {
-            a.brightness.partial_cmp(&b.brightness).unwrap_or(std::cmp::Ordering::Equal)
+            a.brightness
+                .partial_cmp(&b.brightness)
+                .unwrap_or(std::cmp::Ordering::Equal)
         })
     }
 
@@ -184,12 +186,18 @@ impl Nebula {
         // Sort stars by brightness (descending)
         let mut sorted_stars: Vec<_> = self.stars.iter().collect();
         sorted_stars.sort_by(|a, b| {
-            b.brightness.partial_cmp(&a.brightness).unwrap_or(std::cmp::Ordering::Equal)
+            b.brightness
+                .partial_cmp(&a.brightness)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // Display stars (limit to top 5 for readability)
         for star in sorted_stars.iter().take(5) {
-            let brightest_marker = if star.is_brightest { " (Brightest Star)" } else { "" };
+            let brightest_marker = if star.is_brightest {
+                " (Brightest Star)"
+            } else {
+                ""
+            };
             output.push_str(&format!(
                 "    {} {}{}\n",
                 star.brightness_indicator(),
@@ -283,7 +291,10 @@ impl CelestialMap {
                 output.push_str(&format!("    · {}\n", star.file_name()));
             }
             if self.ungrouped_stars.len() > 3 {
-                output.push_str(&format!("    ... and {} more\n", self.ungrouped_stars.len() - 3));
+                output.push_str(&format!(
+                    "    ... and {} more\n",
+                    self.ungrouped_stars.len() - 3
+                ));
             }
         }
 
@@ -408,7 +419,11 @@ impl ConstellationMapper {
     /// Map files with semantic similarity consideration.
     ///
     /// Uses pairwise similarity to refine groupings.
-    pub fn map_with_similarity(&self, files: &[FileInfo], similarities: &[(usize, usize, f32)]) -> CelestialMap {
+    pub fn map_with_similarity(
+        &self,
+        files: &[FileInfo],
+        similarities: &[(usize, usize, f32)],
+    ) -> CelestialMap {
         let start = std::time::Instant::now();
         let mut map = CelestialMap::new();
 
@@ -527,7 +542,10 @@ impl ConstellationMapper {
     }
 
     /// Calculate concept type counts for a group of files.
-    fn calculate_concept_counts(&self, files: &[&FileInfo]) -> HashMap<UniversalConceptType, usize> {
+    fn calculate_concept_counts(
+        &self,
+        files: &[&FileInfo],
+    ) -> HashMap<UniversalConceptType, usize> {
         let mut counts = HashMap::new();
         for file in files {
             if let Some(concept) = file.concept_type {
@@ -613,7 +631,10 @@ mod tests {
 
     #[test]
     fn test_nebula_brightest_star() {
-        let mut nebula = Nebula::new("test", NebulaName::new("Test", super::super::nebula_namer::NamingStrategy::Fallback));
+        let mut nebula = Nebula::new(
+            "test",
+            NebulaName::new("Test", super::super::nebula_namer::NamingStrategy::Fallback),
+        );
 
         nebula.add_star(Star::new("a.rs", "rust").with_brightness(0.5));
         nebula.add_star(Star::new("b.rs", "rust").with_brightness(0.9));
@@ -664,7 +685,10 @@ mod tests {
 
         let mut nebula = Nebula::new(
             "test",
-            NebulaName::new("Service Layer", super::super::nebula_namer::NamingStrategy::ConceptBased),
+            NebulaName::new(
+                "Service Layer",
+                super::super::nebula_namer::NamingStrategy::ConceptBased,
+            ),
         );
         nebula.add_star(Star::new("service.rs", "rust").with_brightness(0.9));
         nebula.add_star(Star::new("handler.rs", "rust").with_brightness(0.7));
@@ -687,14 +711,22 @@ mod tests {
         let mut map = CelestialMap::new();
 
         // Add ungrouped stars (fewer than 3)
-        map.ungrouped_stars.push(Star::new("orphan1.rs", "rust").with_brightness(0.5));
-        map.ungrouped_stars.push(Star::new("orphan2.py", "python").with_brightness(0.4));
+        map.ungrouped_stars
+            .push(Star::new("orphan1.rs", "rust").with_brightness(0.5));
+        map.ungrouped_stars
+            .push(Star::new("orphan2.py", "python").with_brightness(0.4));
 
         let display = map.format_display();
-        assert!(display.contains("Ungrouped Stars (2 files)"), "Should show ungrouped count");
+        assert!(
+            display.contains("Ungrouped Stars (2 files)"),
+            "Should show ungrouped count"
+        );
         assert!(display.contains("orphan1.rs"), "Should show first orphan");
         assert!(display.contains("orphan2.py"), "Should show second orphan");
-        assert!(!display.contains("... and"), "Should not show 'and more' for <3 files");
+        assert!(
+            !display.contains("... and"),
+            "Should not show 'and more' for <3 files"
+        );
     }
 
     #[test]
@@ -702,19 +734,33 @@ mod tests {
         let mut map = CelestialMap::new();
 
         // Add more than 3 ungrouped stars
-        map.ungrouped_stars.push(Star::new("orphan1.rs", "rust").with_brightness(0.5));
-        map.ungrouped_stars.push(Star::new("orphan2.py", "python").with_brightness(0.4));
-        map.ungrouped_stars.push(Star::new("orphan3.js", "javascript").with_brightness(0.3));
-        map.ungrouped_stars.push(Star::new("orphan4.ts", "typescript").with_brightness(0.2));
-        map.ungrouped_stars.push(Star::new("orphan5.go", "go").with_brightness(0.1));
+        map.ungrouped_stars
+            .push(Star::new("orphan1.rs", "rust").with_brightness(0.5));
+        map.ungrouped_stars
+            .push(Star::new("orphan2.py", "python").with_brightness(0.4));
+        map.ungrouped_stars
+            .push(Star::new("orphan3.js", "javascript").with_brightness(0.3));
+        map.ungrouped_stars
+            .push(Star::new("orphan4.ts", "typescript").with_brightness(0.2));
+        map.ungrouped_stars
+            .push(Star::new("orphan5.go", "go").with_brightness(0.1));
 
         let display = map.format_display();
-        assert!(display.contains("Ungrouped Stars (5 files)"), "Should show total count");
+        assert!(
+            display.contains("Ungrouped Stars (5 files)"),
+            "Should show total count"
+        );
         assert!(display.contains("orphan1.rs"), "Should show first 3");
         assert!(display.contains("orphan2.py"), "Should show first 3");
         assert!(display.contains("orphan3.js"), "Should show first 3");
-        assert!(!display.contains("orphan4.ts"), "Should not show beyond first 3");
-        assert!(display.contains("... and 2 more"), "Should show remaining count");
+        assert!(
+            !display.contains("orphan4.ts"),
+            "Should not show beyond first 3"
+        );
+        assert!(
+            display.contains("... and 2 more"),
+            "Should show remaining count"
+        );
     }
 
     #[test]
@@ -722,11 +768,18 @@ mod tests {
         let mut map = CelestialMap::new();
 
         // Only ungrouped stars, no nebulae
-        map.ungrouped_stars.push(Star::new("lonely.rs", "rust").with_brightness(0.8));
+        map.ungrouped_stars
+            .push(Star::new("lonely.rs", "rust").with_brightness(0.8));
 
         let display = map.format_display();
-        assert!(display.contains("CELESTIAL MAP"), "Should still have header");
-        assert!(display.contains("Ungrouped Stars"), "Should show ungrouped section");
+        assert!(
+            display.contains("CELESTIAL MAP"),
+            "Should still have header"
+        );
+        assert!(
+            display.contains("Ungrouped Stars"),
+            "Should show ungrouped section"
+        );
         assert!(display.contains("lonely.rs"), "Should show the orphan");
     }
 
@@ -735,8 +788,14 @@ mod tests {
         let map = CelestialMap::new();
 
         let display = map.format_display();
-        assert!(display.contains("CELESTIAL MAP"), "Should have header even when empty");
-        assert!(!display.contains("Ungrouped Stars"), "Should not show ungrouped section when empty");
+        assert!(
+            display.contains("CELESTIAL MAP"),
+            "Should have header even when empty"
+        );
+        assert!(
+            !display.contains("Ungrouped Stars"),
+            "Should not show ungrouped section when empty"
+        );
     }
 
     #[test]
@@ -750,9 +809,7 @@ mod tests {
     #[test]
     fn test_constellation_mapper_default() {
         let mapper = ConstellationMapper::default();
-        let files = vec![
-            FileInfo::new("test.rs", "rust").with_utility(0.5),
-        ];
+        let files = vec![FileInfo::new("test.rs", "rust").with_utility(0.5)];
         let map = mapper.map(&files);
         assert_eq!(map.total_stars, 1);
     }
@@ -764,19 +821,27 @@ mod tests {
         // Add a nebula
         let mut nebula = Nebula::new(
             "src",
-            NebulaName::new("Core Logic", super::super::nebula_namer::NamingStrategy::ConceptBased),
+            NebulaName::new(
+                "Core Logic",
+                super::super::nebula_namer::NamingStrategy::ConceptBased,
+            ),
         );
         nebula.add_star(Star::new("src/lib.rs", "rust").with_brightness(0.9));
         nebula.mark_brightest();
         map.add_nebula(nebula);
 
         // Add ungrouped stars
-        map.ungrouped_stars.push(Star::new("README.md", "markdown").with_brightness(0.3));
-        map.ungrouped_stars.push(Star::new("Cargo.toml", "toml").with_brightness(0.4));
+        map.ungrouped_stars
+            .push(Star::new("README.md", "markdown").with_brightness(0.3));
+        map.ungrouped_stars
+            .push(Star::new("Cargo.toml", "toml").with_brightness(0.4));
 
         let display = map.format_display();
         assert!(display.contains("Core Logic"), "Should show nebula");
-        assert!(display.contains("Ungrouped Stars (2 files)"), "Should show ungrouped");
+        assert!(
+            display.contains("Ungrouped Stars (2 files)"),
+            "Should show ungrouped"
+        );
         assert!(display.contains("README.md"), "Should list ungrouped files");
     }
 }

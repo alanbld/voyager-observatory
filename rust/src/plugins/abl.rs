@@ -32,10 +32,10 @@
 
 use std::collections::HashMap;
 
-use crate::core::regex_engine::{CompiledRegex, global_engine};
 use crate::core::fractal::{
-    ExtractedSymbol, Import, Range, SymbolKind, Parameter, ConceptType, Visibility,
+    ConceptType, ExtractedSymbol, Import, Parameter, Range, SymbolKind, Visibility,
 };
+use crate::core::regex_engine::{global_engine, CompiledRegex};
 
 use super::{FileInfo, LanguagePlugin, PluginResult};
 
@@ -218,7 +218,13 @@ impl AblPlugin {
                 let mut comment_lines = Vec::new();
                 while idx > 0 {
                     let cline = lines.get(idx)?;
-                    comment_lines.push(cline.trim().trim_start_matches("/*").trim_end_matches("*/").trim());
+                    comment_lines.push(
+                        cline
+                            .trim()
+                            .trim_start_matches("/*")
+                            .trim_end_matches("*/")
+                            .trim(),
+                    );
                     if cline.contains("/*") {
                         break;
                     }
@@ -230,7 +236,12 @@ impl AblPlugin {
 
             // Single line block comment: /* comment */
             if trimmed.starts_with("/*") && trimmed.ends_with("*/") {
-                docs.push(trimmed.trim_start_matches("/*").trim_end_matches("*/").trim());
+                docs.push(
+                    trimmed
+                        .trim_start_matches("/*")
+                        .trim_end_matches("*/")
+                        .trim(),
+                );
                 idx = idx.saturating_sub(1);
             } else if trimmed.is_empty() {
                 // Allow blank lines between doc and declaration
@@ -249,7 +260,12 @@ impl AblPlugin {
     }
 
     /// Count parameters in a procedure/function.
-    fn extract_parameters(&self, content: &str, proc_start: usize, proc_end: usize) -> Vec<Parameter> {
+    fn extract_parameters(
+        &self,
+        content: &str,
+        proc_start: usize,
+        proc_end: usize,
+    ) -> Vec<Parameter> {
         let block = &content[proc_start..proc_end.min(content.len())];
         let mut params = Vec::new();
 
@@ -277,7 +293,8 @@ impl AblPlugin {
             _ => return start + 100, // Default heuristic
         };
 
-        end_pattern.find(search)
+        end_pattern
+            .find(search)
             .map(|m| start + m.end())
             .unwrap_or_else(|| content.len())
     }
@@ -287,91 +304,136 @@ impl AblPlugin {
         let name_lower = name.to_lowercase();
 
         // Calculation patterns
-        if name_lower.starts_with("calc") || name_lower.starts_with("calculate")
-            || name_lower.contains("-calc") || name_lower.contains("_calc")
-            || name_lower.contains("-total") || name_lower.contains("_total")
-            || name_lower.contains("-sum") || name_lower.contains("_sum")
-            || name_lower.contains("-avg") || name_lower.contains("_avg")
-            || name_lower.contains("-price") || name_lower.contains("_price")
-            || name_lower.contains("-cost") || name_lower.contains("_cost")
-            || name_lower.contains("-tax") || name_lower.contains("_tax")
+        if name_lower.starts_with("calc")
+            || name_lower.starts_with("calculate")
+            || name_lower.contains("-calc")
+            || name_lower.contains("_calc")
+            || name_lower.contains("-total")
+            || name_lower.contains("_total")
+            || name_lower.contains("-sum")
+            || name_lower.contains("_sum")
+            || name_lower.contains("-avg")
+            || name_lower.contains("_avg")
+            || name_lower.contains("-price")
+            || name_lower.contains("_price")
+            || name_lower.contains("-cost")
+            || name_lower.contains("_cost")
+            || name_lower.contains("-tax")
+            || name_lower.contains("_tax")
         {
             return ConceptType::Calculation;
         }
 
         // Validation patterns
-        if name_lower.starts_with("validate") || name_lower.starts_with("check")
-            || name_lower.starts_with("verify") || name_lower.starts_with("is-")
-            || name_lower.contains("-validate") || name_lower.contains("_validate")
-            || name_lower.contains("-check") || name_lower.contains("_check")
-            || name_lower.contains("-valid") || name_lower.contains("_valid")
+        if name_lower.starts_with("validate")
+            || name_lower.starts_with("check")
+            || name_lower.starts_with("verify")
+            || name_lower.starts_with("is-")
+            || name_lower.contains("-validate")
+            || name_lower.contains("_validate")
+            || name_lower.contains("-check")
+            || name_lower.contains("_check")
+            || name_lower.contains("-valid")
+            || name_lower.contains("_valid")
         {
             return ConceptType::Validation;
         }
 
         // Error handling patterns
-        if name_lower.starts_with("error") || name_lower.starts_with("handle")
-            || name_lower.contains("-error") || name_lower.contains("_error")
-            || name_lower.contains("-exception") || name_lower.contains("_exception")
-            || name_lower.contains("-recover") || name_lower.contains("_recover")
+        if name_lower.starts_with("error")
+            || name_lower.starts_with("handle")
+            || name_lower.contains("-error")
+            || name_lower.contains("_error")
+            || name_lower.contains("-exception")
+            || name_lower.contains("_exception")
+            || name_lower.contains("-recover")
+            || name_lower.contains("_recover")
         {
             return ConceptType::ErrorHandling;
         }
 
         // Logging patterns
-        if name_lower.starts_with("log") || name_lower.starts_with("trace")
-            || name_lower.contains("-log") || name_lower.contains("_log")
-            || name_lower.contains("-audit") || name_lower.contains("_audit")
-            || name_lower.contains("-trace") || name_lower.contains("_trace")
+        if name_lower.starts_with("log")
+            || name_lower.starts_with("trace")
+            || name_lower.contains("-log")
+            || name_lower.contains("_log")
+            || name_lower.contains("-audit")
+            || name_lower.contains("_audit")
+            || name_lower.contains("-trace")
+            || name_lower.contains("_trace")
         {
             return ConceptType::Logging;
         }
 
         // Configuration patterns
-        if name_lower.starts_with("config") || name_lower.starts_with("init")
-            || name_lower.starts_with("setup") || name_lower.starts_with("load-config")
-            || name_lower.contains("-config") || name_lower.contains("_config")
-            || name_lower.contains("-init") || name_lower.contains("_init")
-            || name_lower.contains("-setup") || name_lower.contains("_setup")
+        if name_lower.starts_with("config")
+            || name_lower.starts_with("init")
+            || name_lower.starts_with("setup")
+            || name_lower.starts_with("load-config")
+            || name_lower.contains("-config")
+            || name_lower.contains("_config")
+            || name_lower.contains("-init")
+            || name_lower.contains("_init")
+            || name_lower.contains("-setup")
+            || name_lower.contains("_setup")
         {
             return ConceptType::Configuration;
         }
 
         // Transformation/conversion patterns
-        if name_lower.starts_with("convert") || name_lower.starts_with("transform")
-            || name_lower.starts_with("format") || name_lower.starts_with("parse")
-            || name_lower.contains("-convert") || name_lower.contains("_convert")
-            || name_lower.contains("-transform") || name_lower.contains("_transform")
-            || name_lower.contains("-to-") || name_lower.contains("_to_")
-            || name_lower.contains("-format") || name_lower.contains("_format")
+        if name_lower.starts_with("convert")
+            || name_lower.starts_with("transform")
+            || name_lower.starts_with("format")
+            || name_lower.starts_with("parse")
+            || name_lower.contains("-convert")
+            || name_lower.contains("_convert")
+            || name_lower.contains("-transform")
+            || name_lower.contains("_transform")
+            || name_lower.contains("-to-")
+            || name_lower.contains("_to_")
+            || name_lower.contains("-format")
+            || name_lower.contains("_format")
         {
             return ConceptType::Transformation;
         }
 
         // Decision/routing patterns
-        if name_lower.starts_with("route") || name_lower.starts_with("dispatch")
-            || name_lower.starts_with("process") || name_lower.starts_with("main")
-            || name_lower.contains("-route") || name_lower.contains("_route")
-            || name_lower.contains("-dispatch") || name_lower.contains("_dispatch")
-            || name_lower.contains("-handler") || name_lower.contains("_handler")
+        if name_lower.starts_with("route")
+            || name_lower.starts_with("dispatch")
+            || name_lower.starts_with("process")
+            || name_lower.starts_with("main")
+            || name_lower.contains("-route")
+            || name_lower.contains("_route")
+            || name_lower.contains("-dispatch")
+            || name_lower.contains("_dispatch")
+            || name_lower.contains("-handler")
+            || name_lower.contains("_handler")
         {
             return ConceptType::Decision;
         }
 
         // Infrastructure patterns
-        if name_lower.starts_with("open") || name_lower.starts_with("close")
-            || name_lower.starts_with("connect") || name_lower.starts_with("read")
-            || name_lower.starts_with("write") || name_lower.starts_with("send")
-            || name_lower.contains("-db") || name_lower.contains("_db")
-            || name_lower.contains("-file") || name_lower.contains("_file")
-            || name_lower.contains("-socket") || name_lower.contains("_socket")
+        if name_lower.starts_with("open")
+            || name_lower.starts_with("close")
+            || name_lower.starts_with("connect")
+            || name_lower.starts_with("read")
+            || name_lower.starts_with("write")
+            || name_lower.starts_with("send")
+            || name_lower.contains("-db")
+            || name_lower.contains("_db")
+            || name_lower.contains("-file")
+            || name_lower.contains("_file")
+            || name_lower.contains("-socket")
+            || name_lower.contains("_socket")
         {
             return ConceptType::Infrastructure;
         }
 
         // Testing patterns
-        if name_lower.starts_with("test") || name_lower.ends_with("-test")
-            || name_lower.ends_with("_test") || name_lower.contains("-mock")
+        if name_lower.starts_with("test")
+            || name_lower.ends_with("-test")
+            || name_lower.ends_with("_test")
+            || name_lower.contains("-mock")
             || name_lower.contains("_mock")
         {
             return ConceptType::Testing;
@@ -420,7 +482,8 @@ impl LanguagePlugin for AblPlugin {
 
             // Extract RUN calls within the procedure
             let block = &content[match_start..block_end.min(content.len())];
-            let calls: Vec<String> = self.run_pattern
+            let calls: Vec<String> = self
+                .run_pattern
                 .captures_iter(block)
                 .map(|c| c[1].to_string())
                 .collect();
@@ -457,7 +520,8 @@ impl LanguagePlugin for AblPlugin {
 
             // Extract RUN calls within the function
             let block = &content[match_start..block_end.min(content.len())];
-            let calls: Vec<String> = self.run_pattern
+            let calls: Vec<String> = self
+                .run_pattern
                 .captures_iter(block)
                 .map(|c| c[1].to_string())
                 .collect();
@@ -520,7 +584,8 @@ impl LanguagePlugin for AblPlugin {
 
             // Extract RUN calls within the method
             let block = &content[match_start..block_end.min(content.len())];
-            let calls: Vec<String> = self.run_pattern
+            let calls: Vec<String> = self
+                .run_pattern
                 .captures_iter(block)
                 .map(|c| c[1].to_string())
                 .collect();
@@ -682,20 +747,25 @@ impl LanguagePlugin for AblPlugin {
         // Strong name-based signals should not be overridden
         // Calculation, Validation, ErrorHandling, Logging are strong signals
         match name_concept {
-            ConceptType::Calculation | ConceptType::Validation |
-            ConceptType::ErrorHandling | ConceptType::Logging |
-            ConceptType::Configuration | ConceptType::Testing => {
+            ConceptType::Calculation
+            | ConceptType::Validation
+            | ConceptType::ErrorHandling
+            | ConceptType::Logging
+            | ConceptType::Configuration
+            | ConceptType::Testing => {
                 return name_concept;
             }
             _ => {}
         }
 
         // For weaker signals, check content patterns
-        let start_byte = content.lines()
+        let start_byte = content
+            .lines()
             .take(symbol.range.start_line)
             .map(|l| l.len() + 1)
             .sum::<usize>();
-        let end_byte = content.lines()
+        let end_byte = content
+            .lines()
             .take(symbol.range.end_line.min(content.lines().count()))
             .map(|l| l.len() + 1)
             .sum::<usize>();
@@ -760,7 +830,12 @@ impl LanguagePlugin for AblPlugin {
                 }
                 // Boost procedures with CATCH/FINALLY
                 let start = symbol.range.start_line;
-                let block = content.lines().skip(start).take(50).collect::<Vec<_>>().join("\n");
+                let block = content
+                    .lines()
+                    .skip(start)
+                    .take(50)
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 if block.to_lowercase().contains("catch") {
                     boost += 0.2;
                 }
@@ -806,16 +881,17 @@ impl LanguagePlugin for AblPlugin {
         let mut features = Vec::new();
 
         // Feature indices (using 50-63 for language-specific features)
-        const FEAT_FOR_EACH_DENSITY: usize = 50;    // Database access patterns
-        const FEAT_RUN_CALLS: usize = 51;           // External procedure calls
-        const FEAT_ERROR_HANDLING: usize = 52;      // CATCH/UNDO/RETRY patterns
-        const FEAT_TRANSACTION: usize = 53;         // Transaction blocks
-        const FEAT_BUFFER_OPS: usize = 54;          // Buffer operations
+        const FEAT_FOR_EACH_DENSITY: usize = 50; // Database access patterns
+        const FEAT_RUN_CALLS: usize = 51; // External procedure calls
+        const FEAT_ERROR_HANDLING: usize = 52; // CATCH/UNDO/RETRY patterns
+        const FEAT_TRANSACTION: usize = 53; // Transaction blocks
+        const FEAT_BUFFER_OPS: usize = 54; // Buffer operations
 
         // Extract the symbol's code block
         let start = symbol.range.start_line;
         let end = symbol.range.end_line.min(content.lines().count());
-        let block: String = content.lines()
+        let block: String = content
+            .lines()
             .skip(start)
             .take(end - start + 1)
             .collect::<Vec<_>>()
@@ -837,13 +913,25 @@ impl LanguagePlugin for AblPlugin {
         // Error handling patterns
         let has_catch = block_lower.contains("catch") || block_lower.contains("undo, throw");
         let has_retry = block_lower.contains("retry");
-        let error_score = if has_catch && has_retry { 1.0 } else if has_catch { 0.7 } else { 0.0 };
+        let error_score = if has_catch && has_retry {
+            1.0
+        } else if has_catch {
+            0.7
+        } else {
+            0.0
+        };
         features.push((FEAT_ERROR_HANDLING, error_score));
 
         // Transaction patterns
         let has_transaction = block_lower.contains("do transaction");
         let has_validate = block_lower.contains("validate");
-        let transaction_score = if has_transaction { 0.8 } else if has_validate { 0.5 } else { 0.0 };
+        let transaction_score = if has_transaction {
+            0.8
+        } else if has_validate {
+            0.5
+        } else {
+            0.0
+        };
         features.push((FEAT_TRANSACTION, transaction_score));
 
         // Buffer operations
@@ -925,13 +1013,16 @@ END FUNCTION.
         let plugin = AblPlugin::new();
         let symbols = plugin.extract_symbols(ABL_SAMPLE).unwrap();
 
-        let procedures: Vec<_> = symbols.iter()
+        let procedures: Vec<_> = symbols
+            .iter()
             .filter(|s| s.kind == SymbolKind::Function && s.signature.starts_with("PROCEDURE"))
             .collect();
 
         assert_eq!(procedures.len(), 2, "Should find 2 procedures");
 
-        let calc_proc = procedures.iter().find(|s| s.name == "calculate-order-total");
+        let calc_proc = procedures
+            .iter()
+            .find(|s| s.name == "calculate-order-total");
         assert!(calc_proc.is_some(), "Should find calculate-order-total");
 
         let validate_proc = procedures.iter().find(|s| s.name == "validate-order");
@@ -943,7 +1034,8 @@ END FUNCTION.
         let plugin = AblPlugin::new();
         let symbols = plugin.extract_symbols(ABL_SAMPLE).unwrap();
 
-        let functions: Vec<_> = symbols.iter()
+        let functions: Vec<_> = symbols
+            .iter()
             .filter(|s| s.signature.starts_with("FUNCTION"))
             .collect();
 
@@ -957,7 +1049,8 @@ END FUNCTION.
         let plugin = AblPlugin::new();
         let symbols = plugin.extract_symbols(ABL_SAMPLE).unwrap();
 
-        let temp_tables: Vec<_> = symbols.iter()
+        let temp_tables: Vec<_> = symbols
+            .iter()
             .filter(|s| s.signature.contains("TEMP-TABLE"))
             .collect();
 
@@ -980,29 +1073,58 @@ END FUNCTION.
         let plugin = AblPlugin::new();
         let symbols = plugin.extract_symbols(ABL_SAMPLE).unwrap();
 
-        let calc_proc = symbols.iter()
+        let calc_proc = symbols
+            .iter()
             .find(|s| s.name == "calculate-order-total")
             .unwrap();
 
         assert_eq!(calc_proc.parameters.len(), 2, "Should have 2 parameters");
 
-        let input_param = calc_proc.parameters.iter()
+        let input_param = calc_proc
+            .parameters
+            .iter()
             .find(|p| p.name == "ip-order-id");
         assert!(input_param.is_some());
-        assert!(input_param.unwrap().type_hint.as_ref().unwrap().contains("INPUT"));
+        assert!(input_param
+            .unwrap()
+            .type_hint
+            .as_ref()
+            .unwrap()
+            .contains("INPUT"));
     }
 
     #[test]
     fn test_concept_classification() {
         let plugin = AblPlugin::new();
 
-        assert_eq!(plugin.classify_abl_name("calculate-order-total"), ConceptType::Calculation);
-        assert_eq!(plugin.classify_abl_name("validate-order"), ConceptType::Validation);
-        assert_eq!(plugin.classify_abl_name("handle-error"), ConceptType::ErrorHandling);
-        assert_eq!(plugin.classify_abl_name("log-transaction"), ConceptType::Logging);
-        assert_eq!(plugin.classify_abl_name("init-database"), ConceptType::Configuration);
-        assert_eq!(plugin.classify_abl_name("format-currency"), ConceptType::Transformation);
-        assert_eq!(plugin.classify_abl_name("process-order"), ConceptType::Decision);
+        assert_eq!(
+            plugin.classify_abl_name("calculate-order-total"),
+            ConceptType::Calculation
+        );
+        assert_eq!(
+            plugin.classify_abl_name("validate-order"),
+            ConceptType::Validation
+        );
+        assert_eq!(
+            plugin.classify_abl_name("handle-error"),
+            ConceptType::ErrorHandling
+        );
+        assert_eq!(
+            plugin.classify_abl_name("log-transaction"),
+            ConceptType::Logging
+        );
+        assert_eq!(
+            plugin.classify_abl_name("init-database"),
+            ConceptType::Configuration
+        );
+        assert_eq!(
+            plugin.classify_abl_name("format-currency"),
+            ConceptType::Transformation
+        );
+        assert_eq!(
+            plugin.classify_abl_name("process-order"),
+            ConceptType::Decision
+        );
     }
 
     #[test]
@@ -1010,11 +1132,20 @@ END FUNCTION.
         let plugin = AblPlugin::new();
         let symbols = plugin.extract_symbols(ABL_SAMPLE).unwrap();
 
-        let calc_proc = symbols.iter().find(|s| s.name == "calculate-order-total").unwrap();
-        assert_eq!(plugin.infer_concept_type(calc_proc, ABL_SAMPLE), ConceptType::Calculation);
+        let calc_proc = symbols
+            .iter()
+            .find(|s| s.name == "calculate-order-total")
+            .unwrap();
+        assert_eq!(
+            plugin.infer_concept_type(calc_proc, ABL_SAMPLE),
+            ConceptType::Calculation
+        );
 
         let validate_proc = symbols.iter().find(|s| s.name == "validate-order").unwrap();
-        assert_eq!(plugin.infer_concept_type(validate_proc, ABL_SAMPLE), ConceptType::Validation);
+        assert_eq!(
+            plugin.infer_concept_type(validate_proc, ABL_SAMPLE),
+            ConceptType::Validation
+        );
     }
 
     #[test]
@@ -1022,7 +1153,10 @@ END FUNCTION.
         let plugin = AblPlugin::new();
         let symbols = plugin.extract_symbols(ABL_SAMPLE).unwrap();
 
-        let calc_proc = symbols.iter().find(|s| s.name == "calculate-order-total").unwrap();
+        let calc_proc = symbols
+            .iter()
+            .find(|s| s.name == "calculate-order-total")
+            .unwrap();
 
         // Should get boost for business-logic intent
         let boost = plugin.semantic_relevance_boost(calc_proc, "business-logic", ABL_SAMPLE);
@@ -1034,13 +1168,19 @@ END FUNCTION.
         let plugin = AblPlugin::new();
         let symbols = plugin.extract_symbols(ABL_SAMPLE).unwrap();
 
-        let calc_proc = symbols.iter().find(|s| s.name == "calculate-order-total").unwrap();
+        let calc_proc = symbols
+            .iter()
+            .find(|s| s.name == "calculate-order-total")
+            .unwrap();
         let features = plugin.language_features(calc_proc, ABL_SAMPLE);
 
         // Should have FOR EACH feature
         let for_each_feat = features.iter().find(|(idx, _)| *idx == 50);
         assert!(for_each_feat.is_some(), "Should have FOR EACH feature");
-        assert!(for_each_feat.unwrap().1 > 0.0, "FOR EACH feature should be > 0");
+        assert!(
+            for_each_feat.unwrap().1 > 0.0,
+            "FOR EACH feature should be > 0"
+        );
     }
 
     #[test]
@@ -1112,7 +1252,8 @@ END CLASS.
         let plugin = AblPlugin::new();
         let symbols = plugin.extract_symbols(ABL_CLASS_SAMPLE).unwrap();
 
-        let classes: Vec<_> = symbols.iter()
+        let classes: Vec<_> = symbols
+            .iter()
             .filter(|s| s.kind == SymbolKind::Class)
             .collect();
 
@@ -1125,7 +1266,8 @@ END CLASS.
         let plugin = AblPlugin::new();
         let symbols = plugin.extract_symbols(ABL_CLASS_SAMPLE).unwrap();
 
-        let methods: Vec<_> = symbols.iter()
+        let methods: Vec<_> = symbols
+            .iter()
             .filter(|s| s.kind == SymbolKind::Method)
             .collect();
 
@@ -1156,7 +1298,8 @@ END.
         let symbols = plugin.extract_symbols(ABL_TRIGGER_SAMPLE).unwrap();
 
         // Triggers should be found
-        let triggers: Vec<_> = symbols.iter()
+        let triggers: Vec<_> = symbols
+            .iter()
             .filter(|s| s.signature.contains("ON ") && s.signature.contains(" OF "))
             .collect();
 
@@ -1236,31 +1379,76 @@ END FUNCTION.
         let plugin = AblPlugin::new();
 
         // Test more calculation patterns
-        assert_eq!(plugin.classify_abl_name("sum-values"), ConceptType::Calculation);
-        assert_eq!(plugin.classify_abl_name("get-avg-price"), ConceptType::Calculation);
-        assert_eq!(plugin.classify_abl_name("calc-tax-amount"), ConceptType::Calculation);
+        assert_eq!(
+            plugin.classify_abl_name("sum-values"),
+            ConceptType::Calculation
+        );
+        assert_eq!(
+            plugin.classify_abl_name("get-avg-price"),
+            ConceptType::Calculation
+        );
+        assert_eq!(
+            plugin.classify_abl_name("calc-tax-amount"),
+            ConceptType::Calculation
+        );
 
         // Test validation patterns
-        assert_eq!(plugin.classify_abl_name("is-valid-order"), ConceptType::Validation);
-        assert_eq!(plugin.classify_abl_name("verify-customer"), ConceptType::Validation);
+        assert_eq!(
+            plugin.classify_abl_name("is-valid-order"),
+            ConceptType::Validation
+        );
+        assert_eq!(
+            plugin.classify_abl_name("verify-customer"),
+            ConceptType::Validation
+        );
 
         // Test error handling (patterns: starts_with handle/error, contains -error/-exception/-recover)
-        assert_eq!(plugin.classify_abl_name("handle-db-error"), ConceptType::ErrorHandling);
-        assert_eq!(plugin.classify_abl_name("error-handler"), ConceptType::ErrorHandling);
-        assert_eq!(plugin.classify_abl_name("on-exception"), ConceptType::ErrorHandling);
+        assert_eq!(
+            plugin.classify_abl_name("handle-db-error"),
+            ConceptType::ErrorHandling
+        );
+        assert_eq!(
+            plugin.classify_abl_name("error-handler"),
+            ConceptType::ErrorHandling
+        );
+        assert_eq!(
+            plugin.classify_abl_name("on-exception"),
+            ConceptType::ErrorHandling
+        );
 
         // Test logging (patterns: starts_with log/trace, contains -log/-audit/-trace)
-        assert_eq!(plugin.classify_abl_name("trace-request"), ConceptType::Logging);
-        assert_eq!(plugin.classify_abl_name("log-activity"), ConceptType::Logging);
-        assert_eq!(plugin.classify_abl_name("write-audit-log"), ConceptType::Logging);
+        assert_eq!(
+            plugin.classify_abl_name("trace-request"),
+            ConceptType::Logging
+        );
+        assert_eq!(
+            plugin.classify_abl_name("log-activity"),
+            ConceptType::Logging
+        );
+        assert_eq!(
+            plugin.classify_abl_name("write-audit-log"),
+            ConceptType::Logging
+        );
 
         // Test configuration
-        assert_eq!(plugin.classify_abl_name("setup-connection"), ConceptType::Configuration);
-        assert_eq!(plugin.classify_abl_name("load-config-file"), ConceptType::Configuration);
+        assert_eq!(
+            plugin.classify_abl_name("setup-connection"),
+            ConceptType::Configuration
+        );
+        assert_eq!(
+            plugin.classify_abl_name("load-config-file"),
+            ConceptType::Configuration
+        );
 
         // Test transformation
-        assert_eq!(plugin.classify_abl_name("convert-to-json"), ConceptType::Transformation);
-        assert_eq!(plugin.classify_abl_name("parse-xml-data"), ConceptType::Transformation);
+        assert_eq!(
+            plugin.classify_abl_name("convert-to-json"),
+            ConceptType::Transformation
+        );
+        assert_eq!(
+            plugin.classify_abl_name("parse-xml-data"),
+            ConceptType::Transformation
+        );
     }
 
     // ==================== Plugin Default Tests ====================

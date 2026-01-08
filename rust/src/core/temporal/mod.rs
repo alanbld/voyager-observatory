@@ -26,8 +26,8 @@ mod engine;
 #[cfg(feature = "temporal")]
 mod cache;
 
-mod metrics;
 mod geological;
+mod metrics;
 mod stellar_drift;
 
 #[cfg(feature = "temporal")]
@@ -35,24 +35,20 @@ pub use engine::{ChronosEngine, DEFAULT_COMMIT_DEPTH, FULL_COMMIT_DEPTH};
 
 #[cfg(feature = "temporal")]
 pub use cache::{
-    ChronosCache, ChronosCacheManager, CachedObservation, CachedGalaxyStats,
-    WarpStatus,
+    CachedGalaxyStats, CachedObservation, ChronosCache, ChronosCacheManager, WarpStatus,
 };
 
 pub use metrics::{
-    ChronosMetrics, StellarAge, VolcanicChurn, Observer, ObserverImpact,
-    TemporalCensus, ConstellationChurn, FileChurn, ChronosState,
-    TectonicShift, AncientStar, Supernova,
-    AgeClassification, ChurnClassification,
+    AgeClassification, AncientStar, ChronosMetrics, ChronosState, ChurnClassification,
+    ConstellationChurn, FileChurn, Observer, ObserverImpact, StellarAge, Supernova, TectonicShift,
+    TemporalCensus, VolcanicChurn,
 };
 
-pub use geological::{
-    GeologicalAnalyzer, GeologicalSummary, GeologicalActivity,
-};
+pub use geological::{GeologicalActivity, GeologicalAnalyzer, GeologicalSummary};
 
 pub use stellar_drift::{
-    StellarDriftAnalyzer, StellarDriftReport, ConstellationEvolution, NewStar,
-    NEW_STAR_THRESHOLD_DAYS, ANCIENT_STAR_THRESHOLD_DAYS, DRIFT_WINDOW_DAYS,
+    ConstellationEvolution, NewStar, StellarDriftAnalyzer, StellarDriftReport,
+    ANCIENT_STAR_THRESHOLD_DAYS, DRIFT_WINDOW_DAYS, NEW_STAR_THRESHOLD_DAYS,
 };
 
 /// Static Galaxy fallback when temporal feature is disabled or unavailable
@@ -129,19 +125,28 @@ mod tests {
             observer_count: 10,
             depth_limit: 1000,
         };
-        assert_eq!(temporal_state_description(&state), "Shallow Chronos (partial history)");
+        assert_eq!(
+            temporal_state_description(&state),
+            "Shallow Chronos (partial history)"
+        );
     }
 
     #[test]
     fn test_temporal_state_description_static() {
         let state = ChronosState::StaticGalaxy;
-        assert_eq!(temporal_state_description(&state), "Static Galaxy (no temporal data)");
+        assert_eq!(
+            temporal_state_description(&state),
+            "Static Galaxy (no temporal data)"
+        );
     }
 
     #[test]
     fn test_temporal_state_description_no_repo() {
         let state = ChronosState::NoRepository;
-        assert_eq!(temporal_state_description(&state), "No observation history found");
+        assert_eq!(
+            temporal_state_description(&state),
+            "No observation history found"
+        );
     }
 
     #[test]
@@ -164,7 +169,12 @@ mod tests {
             galaxy_age_days: 100,
             observer_count: 3,
         };
-        if let ChronosState::Active { total_events, galaxy_age_days, observer_count } = active {
+        if let ChronosState::Active {
+            total_events,
+            galaxy_age_days,
+            observer_count,
+        } = active
+        {
             assert_eq!(total_events, 50);
             assert_eq!(galaxy_age_days, 100);
             assert_eq!(observer_count, 3);

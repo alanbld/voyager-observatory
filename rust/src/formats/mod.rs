@@ -5,4 +5,4 @@
 
 pub mod xml_writer;
 
-pub use xml_writer::{XmlWriter, XmlConfig, XmlError, AttentionEntry, escape_cdata};
+pub use xml_writer::{escape_cdata, AttentionEntry, XmlConfig, XmlError, XmlWriter};

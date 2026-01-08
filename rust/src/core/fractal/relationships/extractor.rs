@@ -225,7 +225,9 @@ impl CallExtractor {
             let is_pub = cap.get(1).is_some();
             let _is_async = cap.get(2).is_some();
             let params = cap.get(5).map(|m| m.as_str()).unwrap_or("");
-            let return_type = cap.get(6).map(|m| m.as_str().trim_start_matches("->").trim());
+            let return_type = cap
+                .get(6)
+                .map(|m| m.as_str().trim_start_matches("->").trim());
 
             let line = content[..cap.get(0).unwrap().start()]
                 .lines()
@@ -274,10 +276,9 @@ impl CallExtractor {
                     let call_name = call.get(1).unwrap().as_str();
                     // Skip common keywords and control flow
                     if !is_rust_keyword(call_name) {
-                        let line_in_body = fn_body[..call.get(0).unwrap().start()]
-                            .lines()
-                            .count();
-                        let edge = CallEdge::new(CallKind::Direct).with_location(line_in_body, None);
+                        let line_in_body = fn_body[..call.get(0).unwrap().start()].lines().count();
+                        let edge =
+                            CallEdge::new(CallKind::Direct).with_location(line_in_body, None);
                         callees.push((call_name.to_string(), edge));
                     }
                 }
@@ -286,10 +287,9 @@ impl CallExtractor {
                 for call in self.rust_method_call_pattern.captures_iter(fn_body) {
                     let call_name = call.get(1).unwrap().as_str();
                     if !is_rust_keyword(call_name) {
-                        let line_in_body = fn_body[..call.get(0).unwrap().start()]
-                            .lines()
-                            .count();
-                        let edge = CallEdge::new(CallKind::Method).with_location(line_in_body, None);
+                        let line_in_body = fn_body[..call.get(0).unwrap().start()].lines().count();
+                        let edge =
+                            CallEdge::new(CallKind::Method).with_location(line_in_body, None);
                         callees.push((call_name.to_string(), edge));
                     }
                 }
@@ -297,9 +297,7 @@ impl CallExtractor {
                 // Extract macro calls
                 for call in self.rust_macro_pattern.captures_iter(fn_body) {
                     let call_name = call.get(1).unwrap().as_str();
-                    let line_in_body = fn_body[..call.get(0).unwrap().start()]
-                        .lines()
-                        .count();
+                    let line_in_body = fn_body[..call.get(0).unwrap().start()].lines().count();
                     let edge = CallEdge::new(CallKind::Macro).with_location(line_in_body, None);
                     callees.push((format!("{}!", call_name), edge));
                 }
@@ -417,8 +415,8 @@ impl CallExtractor {
                 .count()
                 .saturating_add(1);
 
-            let node = CallNode::new(name, name, CallableKind::Function)
-                .with_location(file_path, line);
+            let node =
+                CallNode::new(name, name, CallableKind::Function).with_location(file_path, line);
 
             let callees = self.extract_js_calls_in_arrow(content, &cap);
 
@@ -569,7 +567,11 @@ impl CallExtractor {
                 params.split(',').count()
             };
 
-            let is_pub = name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
+            let is_pub = name
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false);
 
             let node = CallNode::new(name, name, CallableKind::Function)
                 .with_location(file_path, line)

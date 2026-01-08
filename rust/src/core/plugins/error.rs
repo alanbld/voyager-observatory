@@ -58,7 +58,9 @@ impl From<mlua::Error> for PluginError {
             PluginError::TimeoutExceeded
         } else if msg.contains("memory") || msg.contains("Memory") {
             PluginError::MemoryQuotaExceeded
-        } else if msg.contains("nil value") && (msg.contains("io") || msg.contains("os") || msg.contains("debug")) {
+        } else if msg.contains("nil value")
+            && (msg.contains("io") || msg.contains("os") || msg.contains("debug"))
+        {
             PluginError::SandboxViolation(format!("Attempted access to disabled library: {}", msg))
         } else {
             PluginError::LuaError(msg)

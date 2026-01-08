@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use crate::core::fractal::{ContextLayer, LayerContent, SymbolKind, ZoomLevel, BlockType};
+use crate::core::fractal::{BlockType, ContextLayer, LayerContent, SymbolKind, ZoomLevel};
 
 // =============================================================================
 // Feature Vector
@@ -46,7 +46,12 @@ impl FeatureVector {
             return 0.0;
         }
 
-        let dot: f32 = self.values.iter().zip(other.values.iter()).map(|(a, b)| a * b).sum();
+        let dot: f32 = self
+            .values
+            .iter()
+            .zip(other.values.iter())
+            .map(|(a, b)| a * b)
+            .sum();
         let mag_a: f32 = self.values.iter().map(|x| x.powi(2)).sum::<f32>().sqrt();
         let mag_b: f32 = other.values.iter().map(|x| x.powi(2)).sum::<f32>().sqrt();
 
@@ -187,20 +192,26 @@ impl SymbolVectorizer {
 
                 // 4. Textual features (8 dimensions)
                 if self.config.include_textual {
-                    features.extend(self.extract_textual_features(
-                        name,
-                        documentation.as_deref(),
-                    ));
+                    features.extend(self.extract_textual_features(name, documentation.as_deref()));
                     feature_types.push(FeatureType::Textual);
                 }
             }
 
-            LayerContent::Block { block_type, nested_depth, .. } => {
+            LayerContent::Block {
+                block_type,
+                nested_depth,
+                ..
+            } => {
                 features.extend(self.extract_block_features(block_type, *nested_depth));
                 feature_types.push(FeatureType::Structural);
             }
 
-            LayerContent::File { language, line_count, symbol_count, .. } => {
+            LayerContent::File {
+                language,
+                line_count,
+                symbol_count,
+                ..
+            } => {
                 features.extend(self.extract_file_features(language, *line_count, *symbol_count));
                 feature_types.push(FeatureType::Structural);
             }
@@ -230,7 +241,10 @@ impl SymbolVectorizer {
 
     /// Vectorize multiple layers.
     pub fn vectorize_layers(&self, layers: &[&ContextLayer]) -> Vec<FeatureVector> {
-        layers.iter().map(|layer| self.vectorize_layer(layer)).collect()
+        layers
+            .iter()
+            .map(|layer| self.vectorize_layer(layer))
+            .collect()
     }
 
     // -------------------------------------------------------------------------
@@ -319,129 +333,173 @@ impl SymbolVectorizer {
         let text = format!("{} {} {}", lower_name, lower_sig, docs);
 
         // [0] Error handling
-        features[0] = if text.contains("error") || text.contains("exception") ||
-                        text.contains("result") || text.contains("try") {
+        features[0] = if text.contains("error")
+            || text.contains("exception")
+            || text.contains("result")
+            || text.contains("try")
+        {
             0.9
         } else {
             0.0
         };
 
         // [1] Validation
-        features[1] = if text.contains("valid") || text.contains("check") ||
-                        text.contains("assert") || text.contains("verify") {
+        features[1] = if text.contains("valid")
+            || text.contains("check")
+            || text.contains("assert")
+            || text.contains("verify")
+        {
             0.9
         } else {
             0.0
         };
 
         // [2] Data processing
-        features[2] = if text.contains("process") || text.contains("transform") ||
-                        text.contains("convert") || text.contains("parse") {
+        features[2] = if text.contains("process")
+            || text.contains("transform")
+            || text.contains("convert")
+            || text.contains("parse")
+        {
             0.9
         } else {
             0.0
         };
 
         // [3] IO operations
-        features[3] = if text.contains("read") || text.contains("write") ||
-                        text.contains("file") || text.contains("stream") {
+        features[3] = if text.contains("read")
+            || text.contains("write")
+            || text.contains("file")
+            || text.contains("stream")
+        {
             0.9
         } else {
             0.0
         };
 
         // [4] Computation
-        features[4] = if text.contains("calc") || text.contains("compute") ||
-                        text.contains("sum") || text.contains("count") {
+        features[4] = if text.contains("calc")
+            || text.contains("compute")
+            || text.contains("sum")
+            || text.contains("count")
+        {
             0.9
         } else {
             0.0
         };
 
         // [5] Initialization
-        features[5] = if text.contains("init") || text.contains("new") ||
-                        text.contains("create") || text.contains("build") {
+        features[5] = if text.contains("init")
+            || text.contains("new")
+            || text.contains("create")
+            || text.contains("build")
+        {
             0.9
         } else {
             0.0
         };
 
         // [6] Cleanup
-        features[6] = if text.contains("clean") || text.contains("close") ||
-                        text.contains("drop") || text.contains("free") {
+        features[6] = if text.contains("clean")
+            || text.contains("close")
+            || text.contains("drop")
+            || text.contains("free")
+        {
             0.9
         } else {
             0.0
         };
 
         // [7] Configuration
-        features[7] = if text.contains("config") || text.contains("setting") ||
-                        text.contains("option") || text.contains("param") {
+        features[7] = if text.contains("config")
+            || text.contains("setting")
+            || text.contains("option")
+            || text.contains("param")
+        {
             0.9
         } else {
             0.0
         };
 
         // [8] Async/concurrent
-        features[8] = if text.contains("async") || text.contains("await") ||
-                        text.contains("thread") || text.contains("spawn") {
+        features[8] = if text.contains("async")
+            || text.contains("await")
+            || text.contains("thread")
+            || text.contains("spawn")
+        {
             0.9
         } else {
             0.0
         };
 
         // [9] Getter
-        features[9] = if lower_name.starts_with("get") || lower_name.starts_with("is_") ||
-                        lower_name.starts_with("has_") {
+        features[9] = if lower_name.starts_with("get")
+            || lower_name.starts_with("is_")
+            || lower_name.starts_with("has_")
+        {
             0.9
         } else {
             0.0
         };
 
         // [10] Setter
-        features[10] = if lower_name.starts_with("set") || lower_name.starts_with("update") ||
-                         lower_name.starts_with("modify") {
+        features[10] = if lower_name.starts_with("set")
+            || lower_name.starts_with("update")
+            || lower_name.starts_with("modify")
+        {
             0.9
         } else {
             0.0
         };
 
         // [11] Collection operation
-        features[11] = if text.contains("add") || text.contains("remove") ||
-                         text.contains("push") || text.contains("pop") ||
-                         text.contains("insert") || text.contains("delete") {
+        features[11] = if text.contains("add")
+            || text.contains("remove")
+            || text.contains("push")
+            || text.contains("pop")
+            || text.contains("insert")
+            || text.contains("delete")
+        {
             0.9
         } else {
             0.0
         };
 
         // [12] Search/find
-        features[12] = if text.contains("find") || text.contains("search") ||
-                         text.contains("lookup") || text.contains("query") {
+        features[12] = if text.contains("find")
+            || text.contains("search")
+            || text.contains("lookup")
+            || text.contains("query")
+        {
             0.9
         } else {
             0.0
         };
 
         // [13] Formatting
-        features[13] = if text.contains("format") || text.contains("display") ||
-                         text.contains("render") || text.contains("to_string") {
+        features[13] = if text.contains("format")
+            || text.contains("display")
+            || text.contains("render")
+            || text.contains("to_string")
+        {
             0.9
         } else {
             0.0
         };
 
         // [14] Testing
-        features[14] = if text.contains("test") || text.contains("mock") ||
-                         text.contains("expect") || text.contains("assert") {
+        features[14] = if text.contains("test")
+            || text.contains("mock")
+            || text.contains("expect")
+            || text.contains("assert")
+        {
             0.9
         } else {
             0.0
         };
 
         // [15] Utility/helper
-        features[15] = if text.contains("helper") || text.contains("util") ||
-                         text.contains("misc") {
+        features[15] = if text.contains("helper") || text.contains("util") || text.contains("misc")
+        {
             0.9
         } else {
             0.0
@@ -470,8 +528,11 @@ impl SymbolVectorizer {
         );
 
         // [0] Pure function (no side effects)
-        features[0] = if !text.contains("mut") && !text.contains("write") &&
-                        !text.contains("set") && !text.contains("modify") {
+        features[0] = if !text.contains("mut")
+            && !text.contains("write")
+            && !text.contains("set")
+            && !text.contains("modify")
+        {
             0.7
         } else {
             0.0
@@ -492,8 +553,10 @@ impl SymbolVectorizer {
         };
 
         // [3] Takes callback
-        features[3] = if signature.contains("Fn") || signature.contains("fn(") ||
-                        signature.contains("callback") {
+        features[3] = if signature.contains("Fn")
+            || signature.contains("fn(")
+            || signature.contains("callback")
+        {
             0.9
         } else {
             0.0
@@ -521,8 +584,11 @@ impl SymbolVectorizer {
         };
 
         // [7] Constructor pattern
-        features[7] = if name == "new" || name == "default" || name.starts_with("from_") ||
-                        name.starts_with("with_") {
+        features[7] = if name == "new"
+            || name == "default"
+            || name.starts_with("from_")
+            || name.starts_with("with_")
+        {
             0.9
         } else {
             0.0
@@ -543,16 +609,23 @@ impl SymbolVectorizer {
         };
 
         // [10] Trait implementation
-        features[10] = if name.starts_with("fmt") || name == "clone" || name == "default" ||
-                         name == "eq" || name == "cmp" {
+        features[10] = if name.starts_with("fmt")
+            || name == "clone"
+            || name == "default"
+            || name == "eq"
+            || name == "cmp"
+        {
             0.9
         } else {
             0.0
         };
 
         // [11] Conversion
-        features[11] = if name.starts_with("to_") || name.starts_with("into_") ||
-                         name.starts_with("as_") || name.starts_with("from_") {
+        features[11] = if name.starts_with("to_")
+            || name.starts_with("into_")
+            || name.starts_with("as_")
+            || name.starts_with("from_")
+        {
             0.9
         } else {
             0.0
@@ -575,9 +648,10 @@ impl SymbolVectorizer {
         features[1] = if name.contains('_') { 1.0 } else { 0.0 };
 
         // [2] CamelCase
-        features[2] = if name.chars().any(|c| c.is_uppercase()) &&
-                        name.chars().any(|c| c.is_lowercase()) &&
-                        !name.contains('_') {
+        features[2] = if name.chars().any(|c| c.is_uppercase())
+            && name.chars().any(|c| c.is_lowercase())
+            && !name.contains('_')
+        {
             1.0
         } else {
             0.0
@@ -606,9 +680,13 @@ impl SymbolVectorizer {
         };
 
         // [7] Has common prefix (get_, set_, is_, has_)
-        features[7] = if name.starts_with("get_") || name.starts_with("set_") ||
-                        name.starts_with("is_") || name.starts_with("has_") ||
-                        name.starts_with("on_") || name.starts_with("do_") {
+        features[7] = if name.starts_with("get_")
+            || name.starts_with("set_")
+            || name.starts_with("is_")
+            || name.starts_with("has_")
+            || name.starts_with("on_")
+            || name.starts_with("do_")
+        {
             1.0
         } else {
             0.0
@@ -649,9 +727,13 @@ impl SymbolVectorizer {
         // [2] Is control flow
         features[2] = if matches!(
             block_type,
-            BlockType::If | BlockType::Else | BlockType::ElseIf |
-            BlockType::Loop | BlockType::While | BlockType::For |
-            BlockType::Match
+            BlockType::If
+                | BlockType::Else
+                | BlockType::ElseIf
+                | BlockType::Loop
+                | BlockType::While
+                | BlockType::For
+                | BlockType::Match
         ) {
             1.0
         } else {
@@ -659,7 +741,10 @@ impl SymbolVectorizer {
         };
 
         // [3] Is error handling
-        features[3] = if matches!(block_type, BlockType::Try | BlockType::Catch | BlockType::Finally) {
+        features[3] = if matches!(
+            block_type,
+            BlockType::Try | BlockType::Catch | BlockType::Finally
+        ) {
             1.0
         } else {
             0.0
@@ -672,7 +757,12 @@ impl SymbolVectorizer {
     // File Features
     // -------------------------------------------------------------------------
 
-    fn extract_file_features(&self, language: &str, line_count: usize, symbol_count: usize) -> Vec<f32> {
+    fn extract_file_features(
+        &self,
+        language: &str,
+        line_count: usize,
+        symbol_count: usize,
+    ) -> Vec<f32> {
         let mut features = vec![0.0; 8];
 
         // [0] Language encoding
@@ -773,7 +863,7 @@ impl SymbolVectorizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::fractal::{Range, Visibility, Parameter};
+    use crate::core::fractal::{Parameter, Range, Visibility};
 
     fn create_test_symbol(name: &str, kind: SymbolKind) -> ContextLayer {
         ContextLayer::new(
@@ -815,9 +905,21 @@ mod tests {
                 signature: "pub fn process_data(a: i32, b: i32, c: i32) -> Result<()>".to_string(),
                 return_type: Some("Result<()>".to_string()),
                 parameters: vec![
-                    Parameter { name: "a".to_string(), type_hint: Some("i32".to_string()), default_value: None },
-                    Parameter { name: "b".to_string(), type_hint: Some("i32".to_string()), default_value: None },
-                    Parameter { name: "c".to_string(), type_hint: Some("i32".to_string()), default_value: None },
+                    Parameter {
+                        name: "a".to_string(),
+                        type_hint: Some("i32".to_string()),
+                        default_value: None,
+                    },
+                    Parameter {
+                        name: "b".to_string(),
+                        type_hint: Some("i32".to_string()),
+                        default_value: None,
+                    },
+                    Parameter {
+                        name: "c".to_string(),
+                        type_hint: Some("i32".to_string()),
+                        default_value: None,
+                    },
                 ],
                 documentation: Some("Process data and transform it".to_string()),
                 visibility: Visibility::Public,
@@ -971,6 +1073,9 @@ mod tests {
 
         assert_eq!(vector.dim(), 32);
         // Only structural features should be present
-        assert!(vector.metadata.feature_types.contains(&FeatureType::Structural));
+        assert!(vector
+            .metadata
+            .feature_types
+            .contains(&FeatureType::Structural));
     }
 }

@@ -492,10 +492,7 @@ impl UnifiedSemanticSubstrate {
             .values()
             .filter(|c| !context.should_ignore(c.language()))
             .map(|c| {
-                let type_score = type_weights
-                    .get(&c.universal_type)
-                    .copied()
-                    .unwrap_or(0.1);
+                let type_score = type_weights.get(&c.universal_type).copied().unwrap_or(0.1);
                 let familiarity = context.get_familiarity(c.language());
                 let score = type_score * (0.5 + 0.5 * familiarity);
                 (c, score)
@@ -762,10 +759,10 @@ mod tests {
     // Phase 1: Coverage Blitz - from_layers() tests
     // =========================================================================
 
+    use crate::core::fractal::clustering::vectorizer::{FeatureType, VectorMetadata};
     use crate::core::fractal::{
         LayerContent, Range, SymbolKind, Visibility as LayerVisibility, ZoomLevel,
     };
-    use crate::core::fractal::clustering::vectorizer::{VectorMetadata, FeatureType};
 
     fn create_symbol_layer(
         name: &str,
@@ -783,7 +780,12 @@ mod tests {
                 parameters: vec![],
                 documentation: doc.map(|s| s.to_string()),
                 visibility: LayerVisibility::Public,
-                range: Range { start_line: 1, start_col: 0, end_line: 10, end_col: 0 },
+                range: Range {
+                    start_line: 1,
+                    start_col: 0,
+                    end_line: 10,
+                    end_col: 0,
+                },
             },
         )
     }
@@ -810,12 +812,8 @@ mod tests {
         )];
         let vectors = vec![create_feature_vector(64)];
 
-        let substrate = UnifiedSemanticSubstrate::from_layers(
-            &layers,
-            &vectors,
-            Language::Rust,
-            "tax.rs",
-        );
+        let substrate =
+            UnifiedSemanticSubstrate::from_layers(&layers, &vectors, Language::Rust, "tax.rs");
 
         assert_eq!(substrate.concept_count(), 1);
         let concepts: Vec<_> = substrate.concepts().collect();
@@ -826,8 +824,18 @@ mod tests {
     #[test]
     fn test_from_layers_multiple_symbols() {
         let layers = vec![
-            create_symbol_layer("validate_input", SymbolKind::Function, "fn validate_input()", None),
-            create_symbol_layer("process_data", SymbolKind::Function, "fn process_data()", None),
+            create_symbol_layer(
+                "validate_input",
+                SymbolKind::Function,
+                "fn validate_input()",
+                None,
+            ),
+            create_symbol_layer(
+                "process_data",
+                SymbolKind::Function,
+                "fn process_data()",
+                None,
+            ),
             create_symbol_layer("UserConfig", SymbolKind::Struct, "struct UserConfig", None),
         ];
         let vectors = vec![
@@ -836,12 +844,8 @@ mod tests {
             create_feature_vector(64),
         ];
 
-        let substrate = UnifiedSemanticSubstrate::from_layers(
-            &layers,
-            &vectors,
-            Language::Rust,
-            "main.rs",
-        );
+        let substrate =
+            UnifiedSemanticSubstrate::from_layers(&layers, &vectors, Language::Rust, "main.rs");
 
         assert_eq!(substrate.concept_count(), 3);
         assert_eq!(substrate.languages(), vec![Language::Rust]);
@@ -857,12 +861,8 @@ mod tests {
         )];
         let vectors = vec![create_feature_vector(64)];
 
-        let substrate = UnifiedSemanticSubstrate::from_layers(
-            &layers,
-            &vectors,
-            Language::Rust,
-            "api.rs",
-        );
+        let substrate =
+            UnifiedSemanticSubstrate::from_layers(&layers, &vectors, Language::Rust, "api.rs");
 
         let concept = substrate.concepts().next().unwrap();
         assert!(concept.properties.is_async);
@@ -873,12 +873,8 @@ mod tests {
         let layers: Vec<ContextLayer> = vec![];
         let vectors: Vec<FeatureVector> = vec![];
 
-        let substrate = UnifiedSemanticSubstrate::from_layers(
-            &layers,
-            &vectors,
-            Language::Python,
-            "empty.py",
-        );
+        let substrate =
+            UnifiedSemanticSubstrate::from_layers(&layers, &vectors, Language::Python, "empty.py");
 
         assert_eq!(substrate.concept_count(), 0);
     }
@@ -900,12 +896,8 @@ mod tests {
         let layers = vec![file_layer];
         let vectors = vec![create_feature_vector(64)];
 
-        let substrate = UnifiedSemanticSubstrate::from_layers(
-            &layers,
-            &vectors,
-            Language::Rust,
-            "test.rs",
-        );
+        let substrate =
+            UnifiedSemanticSubstrate::from_layers(&layers, &vectors, Language::Rust, "test.rs");
 
         // File-level layers should be skipped
         assert_eq!(substrate.concept_count(), 0);
@@ -966,8 +958,10 @@ mod tests {
     #[test]
     fn test_merge_preserves_equivalences() {
         let mut substrate_a = UnifiedSemanticSubstrate::new();
-        let concept_a1 = create_test_concept("func_a1", Language::Rust, UniversalConceptType::Calculation);
-        let concept_a2 = create_test_concept("func_a2", Language::Rust, UniversalConceptType::Calculation);
+        let concept_a1 =
+            create_test_concept("func_a1", Language::Rust, UniversalConceptType::Calculation);
+        let concept_a2 =
+            create_test_concept("func_a2", Language::Rust, UniversalConceptType::Calculation);
         let id_a1 = concept_a1.id.clone();
         let id_a2 = concept_a2.id.clone();
         substrate_a.add_concept(concept_a1);
@@ -975,8 +969,16 @@ mod tests {
         substrate_a.register_equivalence(&id_a1, &id_a2);
 
         let mut substrate_b = UnifiedSemanticSubstrate::new();
-        let concept_b1 = create_test_concept("func_b1", Language::Python, UniversalConceptType::Validation);
-        let concept_b2 = create_test_concept("func_b2", Language::Python, UniversalConceptType::Validation);
+        let concept_b1 = create_test_concept(
+            "func_b1",
+            Language::Python,
+            UniversalConceptType::Validation,
+        );
+        let concept_b2 = create_test_concept(
+            "func_b2",
+            Language::Python,
+            UniversalConceptType::Validation,
+        );
         let id_b1 = concept_b1.id.clone();
         let id_b2 = concept_b2.id.clone();
         substrate_b.add_concept(concept_b1);
@@ -989,8 +991,14 @@ mod tests {
         // Note: register_equivalence creates bidirectional links, so after merge
         // id_a1 has id_a2 as equivalent (and vice versa via the other direction)
         // The merge adds equivalences from substrate_b, maintaining the existing ones
-        assert!(substrate_a.find_equivalents(&id_a1).len() >= 1, "id_a1 should have at least one equivalent");
-        assert!(substrate_a.find_equivalents(&id_b1).len() >= 1, "id_b1 should have at least one equivalent");
+        assert!(
+            substrate_a.find_equivalents(&id_a1).len() >= 1,
+            "id_a1 should have at least one equivalent"
+        );
+        assert!(
+            substrate_a.find_equivalents(&id_b1).len() >= 1,
+            "id_b1 should have at least one equivalent"
+        );
 
         // Verify the concepts themselves were merged
         assert_eq!(substrate_a.concept_count(), 4);
@@ -1044,37 +1052,62 @@ mod tests {
     #[test]
     fn test_similarity_service_endpoint_high() {
         let sim = UniversalConceptType::Service.similarity_to(&UniversalConceptType::Endpoint);
-        assert!(sim >= 0.7, "Service-Endpoint similarity should be high: {}", sim);
+        assert!(
+            sim >= 0.7,
+            "Service-Endpoint similarity should be high: {}",
+            sim
+        );
     }
 
     #[test]
     fn test_similarity_data_structure_database_moderate() {
-        let sim = UniversalConceptType::DataStructure.similarity_to(&UniversalConceptType::DatabaseOperation);
-        assert!(sim >= 0.4 && sim <= 0.6, "DataStructure-Database similarity should be moderate: {}", sim);
+        let sim = UniversalConceptType::DataStructure
+            .similarity_to(&UniversalConceptType::DatabaseOperation);
+        assert!(
+            sim >= 0.4 && sim <= 0.6,
+            "DataStructure-Database similarity should be moderate: {}",
+            sim
+        );
     }
 
     #[test]
     fn test_similarity_config_infrastructure_related() {
-        let sim = UniversalConceptType::Configuration.similarity_to(&UniversalConceptType::Infrastructure);
-        assert!(sim >= 0.5, "Config-Infrastructure should be related: {}", sim);
+        let sim = UniversalConceptType::Configuration
+            .similarity_to(&UniversalConceptType::Infrastructure);
+        assert!(
+            sim >= 0.5,
+            "Config-Infrastructure should be related: {}",
+            sim
+        );
     }
 
     #[test]
     fn test_similarity_observability_error_handling() {
-        let sim = UniversalConceptType::Observability.similarity_to(&UniversalConceptType::ErrorHandling);
-        assert!(sim > 0.2 && sim < 0.6, "Observability-ErrorHandling moderate: {}", sim);
+        let sim =
+            UniversalConceptType::Observability.similarity_to(&UniversalConceptType::ErrorHandling);
+        assert!(
+            sim > 0.2 && sim < 0.6,
+            "Observability-ErrorHandling moderate: {}",
+            sim
+        );
     }
 
     #[test]
     fn test_similarity_unknown_always_low() {
-        assert!(UniversalConceptType::Unknown.similarity_to(&UniversalConceptType::Calculation) <= 0.2);
+        assert!(
+            UniversalConceptType::Unknown.similarity_to(&UniversalConceptType::Calculation) <= 0.2
+        );
         assert!(UniversalConceptType::Unknown.similarity_to(&UniversalConceptType::Service) <= 0.2);
     }
 
     #[test]
     fn test_similarity_testing_validation_low() {
         let sim = UniversalConceptType::Testing.similarity_to(&UniversalConceptType::Validation);
-        assert!(sim <= 0.4, "Testing-Validation should be low-moderate: {}", sim);
+        assert!(
+            sim <= 0.4,
+            "Testing-Validation should be low-moderate: {}",
+            sim
+        );
     }
 
     #[test]

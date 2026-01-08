@@ -3,9 +3,9 @@
 //! This module defines the data structures for temporal analysis,
 //! including stellar age, volcanic churn, and observer impact.
 
-use std::collections::BTreeMap;
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 // =============================================================================
 // Core Temporal Types
@@ -340,7 +340,10 @@ mod tests {
         assert_eq!(AgeClassification::from_days(15), AgeClassification::Newborn);
         assert_eq!(AgeClassification::from_days(100), AgeClassification::Young);
         assert_eq!(AgeClassification::from_days(500), AgeClassification::Mature);
-        assert_eq!(AgeClassification::from_days(800), AgeClassification::Ancient);
+        assert_eq!(
+            AgeClassification::from_days(800),
+            AgeClassification::Ancient
+        );
     }
 
     #[test]
@@ -352,7 +355,10 @@ mod tests {
         assert_eq!(AgeClassification::from_days(364), AgeClassification::Young);
         assert_eq!(AgeClassification::from_days(365), AgeClassification::Mature);
         assert_eq!(AgeClassification::from_days(729), AgeClassification::Mature);
-        assert_eq!(AgeClassification::from_days(730), AgeClassification::Ancient);
+        assert_eq!(
+            AgeClassification::from_days(730),
+            AgeClassification::Ancient
+        );
     }
 
     #[test]
@@ -381,41 +387,86 @@ mod tests {
 
     #[test]
     fn test_churn_classification() {
-        assert_eq!(ChurnClassification::from_counts(0, 0), ChurnClassification::Dormant);
-        assert_eq!(ChurnClassification::from_counts(1, 2), ChurnClassification::Low);
-        assert_eq!(ChurnClassification::from_counts(3, 8), ChurnClassification::Moderate);
-        assert_eq!(ChurnClassification::from_counts(5, 15), ChurnClassification::High);
-        assert_eq!(ChurnClassification::from_counts(35, 50), ChurnClassification::Supernova);
+        assert_eq!(
+            ChurnClassification::from_counts(0, 0),
+            ChurnClassification::Dormant
+        );
+        assert_eq!(
+            ChurnClassification::from_counts(1, 2),
+            ChurnClassification::Low
+        );
+        assert_eq!(
+            ChurnClassification::from_counts(3, 8),
+            ChurnClassification::Moderate
+        );
+        assert_eq!(
+            ChurnClassification::from_counts(5, 15),
+            ChurnClassification::High
+        );
+        assert_eq!(
+            ChurnClassification::from_counts(35, 50),
+            ChurnClassification::Supernova
+        );
     }
 
     #[test]
     fn test_churn_classification_boundaries() {
         // Dormant: last_90 = 0
-        assert_eq!(ChurnClassification::from_counts(0, 0), ChurnClassification::Dormant);
+        assert_eq!(
+            ChurnClassification::from_counts(0, 0),
+            ChurnClassification::Dormant
+        );
 
         // Low: 0 < last_90 <= 3
-        assert_eq!(ChurnClassification::from_counts(0, 1), ChurnClassification::Low);
-        assert_eq!(ChurnClassification::from_counts(0, 3), ChurnClassification::Low);
+        assert_eq!(
+            ChurnClassification::from_counts(0, 1),
+            ChurnClassification::Low
+        );
+        assert_eq!(
+            ChurnClassification::from_counts(0, 3),
+            ChurnClassification::Low
+        );
 
         // Moderate: 3 < last_90 <= 10
-        assert_eq!(ChurnClassification::from_counts(0, 4), ChurnClassification::Moderate);
-        assert_eq!(ChurnClassification::from_counts(0, 10), ChurnClassification::Moderate);
+        assert_eq!(
+            ChurnClassification::from_counts(0, 4),
+            ChurnClassification::Moderate
+        );
+        assert_eq!(
+            ChurnClassification::from_counts(0, 10),
+            ChurnClassification::Moderate
+        );
 
         // High: last_90 > 10
-        assert_eq!(ChurnClassification::from_counts(0, 11), ChurnClassification::High);
+        assert_eq!(
+            ChurnClassification::from_counts(0, 11),
+            ChurnClassification::High
+        );
 
         // Supernova: last_30 > 30 (overrides everything)
-        assert_eq!(ChurnClassification::from_counts(31, 0), ChurnClassification::Supernova);
-        assert_eq!(ChurnClassification::from_counts(31, 100), ChurnClassification::Supernova);
+        assert_eq!(
+            ChurnClassification::from_counts(31, 0),
+            ChurnClassification::Supernova
+        );
+        assert_eq!(
+            ChurnClassification::from_counts(31, 100),
+            ChurnClassification::Supernova
+        );
     }
 
     #[test]
     fn test_churn_classification_description() {
         assert_eq!(ChurnClassification::Dormant.description(), "Dormant");
         assert_eq!(ChurnClassification::Low.description(), "Low Activity");
-        assert_eq!(ChurnClassification::Moderate.description(), "Moderate Activity");
+        assert_eq!(
+            ChurnClassification::Moderate.description(),
+            "Moderate Activity"
+        );
         assert_eq!(ChurnClassification::High.description(), "High Activity");
-        assert_eq!(ChurnClassification::Supernova.description(), "Supernova (Extreme Activity)");
+        assert_eq!(
+            ChurnClassification::Supernova.description(),
+            "Supernova (Extreme Activity)"
+        );
     }
 
     #[test]
@@ -429,7 +480,10 @@ mod tests {
 
     #[test]
     fn test_churn_classification_default() {
-        assert_eq!(ChurnClassification::default(), ChurnClassification::Moderate);
+        assert_eq!(
+            ChurnClassification::default(),
+            ChurnClassification::Moderate
+        );
     }
 
     // =========================================================================
@@ -624,8 +678,12 @@ mod tests {
         census.total_observations = 500;
         census.observer_count = 10;
 
-        census.constellations.insert("src".to_string(), ConstellationChurn::default());
-        census.files.insert("src/main.rs".to_string(), FileChurn::default());
+        census
+            .constellations
+            .insert("src".to_string(), ConstellationChurn::default());
+        census
+            .files
+            .insert("src/main.rs".to_string(), FileChurn::default());
 
         assert_eq!(census.constellations.len(), 1);
         assert_eq!(census.files.len(), 1);

@@ -6,7 +6,7 @@
 //! - Stripped dangerous libraries (io, os, debug, package)
 
 #[cfg(feature = "plugins")]
-use mlua::{Lua, Result as LuaResult, Value, HookTriggers};
+use mlua::{HookTriggers, Lua, Result as LuaResult, Value};
 #[cfg(feature = "plugins")]
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 #[cfg(feature = "plugins")]
@@ -67,33 +67,43 @@ impl IronSandbox {
         let globals = lua.globals();
 
         // Remove I/O libraries
-        globals.set("io", Value::Nil)
+        globals
+            .set("io", Value::Nil)
             .map_err(|e| PluginError::LuaError(e.to_string()))?;
-        globals.set("os", Value::Nil)
+        globals
+            .set("os", Value::Nil)
             .map_err(|e| PluginError::LuaError(e.to_string()))?;
 
         // Remove debug library (can be used to escape sandbox)
-        globals.set("debug", Value::Nil)
+        globals
+            .set("debug", Value::Nil)
             .map_err(|e| PluginError::LuaError(e.to_string()))?;
 
         // Remove package/require (prevents loading external modules)
-        globals.set("package", Value::Nil)
+        globals
+            .set("package", Value::Nil)
             .map_err(|e| PluginError::LuaError(e.to_string()))?;
-        globals.set("require", Value::Nil)
+        globals
+            .set("require", Value::Nil)
             .map_err(|e| PluginError::LuaError(e.to_string()))?;
 
         // Remove dynamic code loading functions
-        globals.set("load", Value::Nil)
+        globals
+            .set("load", Value::Nil)
             .map_err(|e| PluginError::LuaError(e.to_string()))?;
-        globals.set("loadfile", Value::Nil)
+        globals
+            .set("loadfile", Value::Nil)
             .map_err(|e| PluginError::LuaError(e.to_string()))?;
-        globals.set("dofile", Value::Nil)
+        globals
+            .set("dofile", Value::Nil)
             .map_err(|e| PluginError::LuaError(e.to_string()))?;
-        globals.set("loadstring", Value::Nil)
+        globals
+            .set("loadstring", Value::Nil)
             .map_err(|e| PluginError::LuaError(e.to_string()))?;
 
         // Remove collectgarbage (can be used to probe memory)
-        globals.set("collectgarbage", Value::Nil)
+        globals
+            .set("collectgarbage", Value::Nil)
             .map_err(|e| PluginError::LuaError(e.to_string()))?;
 
         Ok(())
@@ -116,7 +126,9 @@ impl IronSandbox {
                 let count = instruction_count_clone.fetch_add(1000, Ordering::Relaxed);
                 if count >= INSTRUCTION_LIMIT {
                     timed_out_clone.store(true, Ordering::SeqCst);
-                    Err(mlua::Error::RuntimeError("Instruction limit exceeded".to_string()))
+                    Err(mlua::Error::RuntimeError(
+                        "Instruction limit exceeded".to_string(),
+                    ))
                 } else {
                     Ok(mlua::VmState::Continue)
                 }
@@ -138,9 +150,7 @@ impl IronSandbox {
 
     /// Execute a Lua script string
     pub fn execute_script(&self, script: &str) -> PluginResult<()> {
-        self.execute(|lua| {
-            lua.load(script).exec()
-        })
+        self.execute(|lua| lua.load(script).exec())
     }
 
     /// Execute a Lua script and return a value
@@ -148,9 +158,7 @@ impl IronSandbox {
     where
         T: mlua::FromLua,
     {
-        self.execute(|lua| {
-            lua.load(script).eval::<T>()
-        })
+        self.execute(|lua| lua.load(script).eval::<T>())
     }
 
     /// Get a reference to the Lua runtime (for setting up globals)
@@ -192,7 +200,9 @@ pub struct IronSandbox;
 #[cfg(not(feature = "plugins"))]
 impl IronSandbox {
     pub fn new() -> PluginResult<Self> {
-        Err(PluginError::LuaError("Plugins feature not enabled".to_string()))
+        Err(PluginError::LuaError(
+            "Plugins feature not enabled".to_string(),
+        ))
     }
 }
 
@@ -263,10 +273,7 @@ mod tests {
 
     #[test]
     fn test_sandbox_timeout() {
-        let sandbox = IronSandbox::with_limits(
-            Duration::from_millis(50),
-            MEMORY_LIMIT,
-        ).unwrap();
+        let sandbox = IronSandbox::with_limits(Duration::from_millis(50), MEMORY_LIMIT).unwrap();
 
         let result = sandbox.execute_script("while true do end");
 
@@ -284,12 +291,16 @@ mod tests {
         let sandbox = IronSandbox::new().unwrap();
 
         // Execute some code that allocates memory
-        sandbox.execute_script(r#"
+        sandbox
+            .execute_script(
+                r#"
             local t = {}
             for i = 1, 1000 do
                 t[i] = string.rep("x", 100)
             end
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
 
         assert!(sandbox.memory_used() > 0, "Should track memory usage");
     }
@@ -299,22 +310,26 @@ mod tests {
         let sandbox = IronSandbox::new().unwrap();
 
         // String operations
-        let result: String = sandbox.execute_script_with_result(
-            r#"return string.upper("hello")"#
-        ).unwrap();
+        let result: String = sandbox
+            .execute_script_with_result(r#"return string.upper("hello")"#)
+            .unwrap();
         assert_eq!(result, "HELLO");
 
         // Math operations
-        let result: f64 = sandbox.execute_script_with_result(
-            "return math.sqrt(16)"
-        ).unwrap();
+        let result: f64 = sandbox
+            .execute_script_with_result("return math.sqrt(16)")
+            .unwrap();
         assert_eq!(result, 4.0);
 
         // Table operations
-        let result: i32 = sandbox.execute_script_with_result(r#"
+        let result: i32 = sandbox
+            .execute_script_with_result(
+                r#"
             local t = {1, 2, 3}
             return #t
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         assert_eq!(result, 3);
     }
 }

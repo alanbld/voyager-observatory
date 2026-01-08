@@ -275,8 +275,12 @@ impl CrossLanguageAligner {
 
         // Build clusters
         for eq in equivalents {
-            parent.entry(eq.concept_a_id.clone()).or_insert(eq.concept_a_id.clone());
-            parent.entry(eq.concept_b_id.clone()).or_insert(eq.concept_b_id.clone());
+            parent
+                .entry(eq.concept_a_id.clone())
+                .or_insert(eq.concept_a_id.clone());
+            parent
+                .entry(eq.concept_b_id.clone())
+                .or_insert(eq.concept_b_id.clone());
             union(&mut parent, &eq.concept_a_id, &eq.concept_b_id);
         }
 
@@ -293,7 +297,8 @@ impl CrossLanguageAligner {
             .into_iter()
             .filter(|(_, members)| members.len() > 1)
             .map(|(_, members)| {
-                let mut class = EquivalenceClass::new(self.derive_canonical_name(&members, substrate));
+                let mut class =
+                    EquivalenceClass::new(self.derive_canonical_name(&members, substrate));
                 for id in members {
                     if let Some(concept) = substrate.get_concept(&id) {
                         class.add_member(id, concept.language());
@@ -345,11 +350,21 @@ impl CrossLanguageAligner {
 
         // Remove common prefixes/suffixes
         let patterns = [
-            "calculate_", "calc_", "_calc",
-            "validate_", "check_", "_validate",
-            "get_", "fetch_", "_get",
-            "process_", "handle_", "_process",
-            "is_", "has_", "can_",
+            "calculate_",
+            "calc_",
+            "_calc",
+            "validate_",
+            "check_",
+            "_validate",
+            "get_",
+            "fetch_",
+            "_get",
+            "process_",
+            "handle_",
+            "_process",
+            "is_",
+            "has_",
+            "can_",
         ];
 
         for pattern in &patterns {
@@ -371,7 +386,11 @@ impl CrossLanguageAligner {
     }
 
     /// Derive a canonical name for an equivalence class
-    fn derive_canonical_name(&self, members: &[ConceptId], substrate: &UnifiedSemanticSubstrate) -> String {
+    fn derive_canonical_name(
+        &self,
+        members: &[ConceptId],
+        substrate: &UnifiedSemanticSubstrate,
+    ) -> String {
         // Use the most common normalized name
         let mut name_counts: HashMap<String, usize> = HashMap::new();
 
@@ -390,7 +409,11 @@ impl CrossLanguageAligner {
     }
 
     /// Calculate cohesion (internal similarity) of an equivalence class
-    fn calculate_cohesion(&self, class: &EquivalenceClass, substrate: &UnifiedSemanticSubstrate) -> f32 {
+    fn calculate_cohesion(
+        &self,
+        class: &EquivalenceClass,
+        substrate: &UnifiedSemanticSubstrate,
+    ) -> f32 {
         if class.members.len() < 2 {
             return 1.0;
         }
@@ -510,7 +533,11 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
 
     for i in 1..=m {
         for j in 1..=n {
-            let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+            let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                0
+            } else {
+                1
+            };
             dp[i][j] = (dp[i - 1][j] + 1)
                 .min(dp[i][j - 1] + 1)
                 .min(dp[i - 1][j - 1] + cost);
@@ -527,8 +554,8 @@ fn levenshtein_distance(a: &str, b: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use crate::core::fractal::{ConceptType, Visibility};
+    use std::collections::HashMap;
 
     fn create_test_concept(
         name: &str,
@@ -564,7 +591,10 @@ mod tests {
     #[test]
     fn test_name_similarity_exact() {
         let aligner = CrossLanguageAligner::new();
-        assert_eq!(aligner.name_similarity("calculate_total", "calculate_total"), 1.0);
+        assert_eq!(
+            aligner.name_similarity("calculate_total", "calculate_total"),
+            1.0
+        );
     }
 
     #[test]
@@ -572,14 +602,22 @@ mod tests {
         let aligner = CrossLanguageAligner::new();
         // calculateTotal -> calculate_total (after normalization)
         let sim = aligner.name_similarity("calculateTotal", "calculate_total");
-        assert!(sim > 0.9, "camelCase and snake_case should be similar: {}", sim);
+        assert!(
+            sim > 0.9,
+            "camelCase and snake_case should be similar: {}",
+            sim
+        );
     }
 
     #[test]
     fn test_name_similarity_different() {
         let aligner = CrossLanguageAligner::new();
         let sim = aligner.name_similarity("calculate_tax", "send_email");
-        assert!(sim < 0.5, "Different names should have low similarity: {}", sim);
+        assert!(
+            sim < 0.5,
+            "Different names should have low similarity: {}",
+            sim
+        );
     }
 
     #[test]
@@ -624,17 +662,29 @@ mod tests {
         let equivalents = aligner.find_equivalents(&substrate);
 
         // Should find the calculate_order_total equivalence
-        assert!(!equivalents.is_empty(), "Should find at least one equivalent");
+        assert!(
+            !equivalents.is_empty(),
+            "Should find at least one equivalent"
+        );
 
         let found_calc_equiv = equivalents.iter().any(|eq| {
-            let names_match = (eq.concept_a_id.to_string().contains("calculate_order_total")
+            let names_match = (eq
+                .concept_a_id
+                .to_string()
+                .contains("calculate_order_total")
                 && eq.concept_b_id.to_string().contains("calculateOrderTotal"))
                 || (eq.concept_a_id.to_string().contains("calculateOrderTotal")
-                    && eq.concept_b_id.to_string().contains("calculate_order_total"));
+                    && eq
+                        .concept_b_id
+                        .to_string()
+                        .contains("calculate_order_total"));
             names_match
         });
 
-        assert!(found_calc_equiv, "Should find calculate_order_total equivalence");
+        assert!(
+            found_calc_equiv,
+            "Should find calculate_order_total equivalence"
+        );
     }
 
     #[test]
@@ -714,7 +764,11 @@ mod tests {
 
         assert_eq!(classes.len(), 1, "Should form one equivalence class");
         assert_eq!(classes[0].members.len(), 3, "Class should have 3 members");
-        assert_eq!(classes[0].languages.len(), 3, "Class should span 3 languages");
+        assert_eq!(
+            classes[0].languages.len(),
+            3,
+            "Class should span 3 languages"
+        );
     }
 
     #[test]

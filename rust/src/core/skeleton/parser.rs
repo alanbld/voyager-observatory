@@ -223,7 +223,10 @@ impl Skeletonizer {
                 }
 
                 // Struct/Enum/Trait definitions
-                if RUST_STRUCT.is_match(trimmed) || RUST_ENUM.is_match(trimmed) || RUST_TRAIT.is_match(trimmed) {
+                if RUST_STRUCT.is_match(trimmed)
+                    || RUST_ENUM.is_match(trimmed)
+                    || RUST_TRAIT.is_match(trimmed)
+                {
                     result.append(&mut pending_attrs);
 
                     // Extract symbol name
@@ -387,7 +390,11 @@ impl Skeletonizer {
                 pending_docstring.push(line.to_string());
 
                 // Check if it's a single-line docstring
-                let quote = if trimmed.starts_with("\"\"\"") { "\"\"\"" } else { "'''" };
+                let quote = if trimmed.starts_with("\"\"\"") {
+                    "\"\"\""
+                } else {
+                    "'''"
+                };
                 if trimmed.len() > 6 && trimmed[3..].contains(quote) {
                     in_docstring = false;
                     if self.preserve_docstrings {
@@ -461,10 +468,15 @@ impl Skeletonizer {
                         }
 
                         // Check for nested docstring
-                        if PYTHON_DOCSTRING_START.is_match(next_trimmed) && self.preserve_docstrings {
+                        if PYTHON_DOCSTRING_START.is_match(next_trimmed) && self.preserve_docstrings
+                        {
                             result.push(next_line.to_string());
                             // Handle multi-line docstring
-                            let quote = if next_trimmed.starts_with("\"\"\"") { "\"\"\"" } else { "'''" };
+                            let quote = if next_trimmed.starts_with("\"\"\"") {
+                                "\"\"\""
+                            } else {
+                                "'''"
+                            };
                             if !(next_trimmed.len() > 6 && next_trimmed[3..].contains(quote)) {
                                 i += 1;
                                 while i < lines.len() {

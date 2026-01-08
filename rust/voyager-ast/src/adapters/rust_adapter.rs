@@ -5,8 +5,8 @@
 
 use super::{find_child_by_kind, find_children_by_kind, node_text, node_to_span, LanguageAdapter};
 use crate::ir::{
-    Block, Call, Comment, CommentKind, ControlFlow, ControlFlowKind, Declaration,
-    DeclarationKind, ImportKind, ImportLike, LanguageId, Parameter, Span, Visibility,
+    Block, Call, Comment, CommentKind, ControlFlow, ControlFlowKind, Declaration, DeclarationKind,
+    ImportKind, ImportLike, LanguageId, Parameter, Span, Visibility,
 };
 
 /// Rust language adapter using Tree-sitter
@@ -38,11 +38,7 @@ impl LanguageAdapter for RustTreeSitterAdapter {
         self.language.clone()
     }
 
-    fn extract_declarations(
-        &self,
-        tree: &tree_sitter::Tree,
-        source: &str,
-    ) -> Vec<Declaration> {
+    fn extract_declarations(&self, tree: &tree_sitter::Tree, source: &str) -> Vec<Declaration> {
         let mut declarations = Vec::new();
         let root = tree.root_node();
         let mut cursor = root.walk();
@@ -106,21 +102,11 @@ impl LanguageAdapter for RustTreeSitterAdapter {
 
         // Extract the body block
         let body_node = match node.kind() {
-            "function_item" | "closure_expression" => {
-                find_child_by_kind(&node, "block")
-            }
-            "impl_item" => {
-                find_child_by_kind(&node, "declaration_list")
-            }
-            "struct_item" => {
-                find_child_by_kind(&node, "field_declaration_list")
-            }
-            "enum_item" => {
-                find_child_by_kind(&node, "enum_variant_list")
-            }
-            "trait_item" => {
-                find_child_by_kind(&node, "declaration_list")
-            }
+            "function_item" | "closure_expression" => find_child_by_kind(&node, "block"),
+            "impl_item" => find_child_by_kind(&node, "declaration_list"),
+            "struct_item" => find_child_by_kind(&node, "field_declaration_list"),
+            "enum_item" => find_child_by_kind(&node, "enum_variant_list"),
+            "trait_item" => find_child_by_kind(&node, "declaration_list"),
             _ => None,
         }?;
 
@@ -148,11 +134,7 @@ impl LanguageAdapter for RustTreeSitterAdapter {
 
 impl RustTreeSitterAdapter {
     /// Extract a declaration from a node
-    fn extract_declaration(
-        &self,
-        node: &tree_sitter::Node,
-        source: &str,
-    ) -> Option<Declaration> {
+    fn extract_declaration(&self, node: &tree_sitter::Node, source: &str) -> Option<Declaration> {
         let kind = node.kind();
         let decl_kind = match kind {
             "function_item" => DeclarationKind::Function,
@@ -197,7 +179,10 @@ impl RustTreeSitterAdapter {
         // Extract children for impl/trait/struct/enum
         if matches!(
             decl_kind,
-            DeclarationKind::Impl | DeclarationKind::Trait | DeclarationKind::Struct | DeclarationKind::Enum
+            DeclarationKind::Impl
+                | DeclarationKind::Trait
+                | DeclarationKind::Struct
+                | DeclarationKind::Enum
         ) {
             decl.children = self.extract_children(node, source);
         }
@@ -246,7 +231,8 @@ impl RustTreeSitterAdapter {
                 "line_comment" => {
                     let text = node_text(&prev_node, source);
                     if text.starts_with("///") || text.starts_with("//!") {
-                        let comment_text = text.trim_start_matches("///")
+                        let comment_text = text
+                            .trim_start_matches("///")
                             .trim_start_matches("//!")
                             .trim();
                         doc_lines.insert(0, comment_text.to_string());
@@ -337,7 +323,11 @@ impl RustTreeSitterAdapter {
                 "identifier" => {
                     name = Some(node_text(&child, source).to_string());
                 }
-                "type" | "reference_type" | "primitive_type" | "generic_type" | "scoped_type_identifier" => {
+                "type"
+                | "reference_type"
+                | "primitive_type"
+                | "generic_type"
+                | "scoped_type_identifier" => {
                     type_annotation = Some(node_text(&child, source).to_string());
                 }
                 _ => {}
@@ -364,8 +354,13 @@ impl RustTreeSitterAdapter {
             } else if found_arrow {
                 // The next non-trivial node after -> is the return type
                 match child.kind() {
-                    "type" | "reference_type" | "primitive_type" | "generic_type"
-                    | "scoped_type_identifier" | "tuple_type" | "unit_type" => {
+                    "type"
+                    | "reference_type"
+                    | "primitive_type"
+                    | "generic_type"
+                    | "scoped_type_identifier"
+                    | "tuple_type"
+                    | "unit_type" => {
                         return Some(node_text(&child, source).to_string());
                     }
                     _ => {}
@@ -377,8 +372,13 @@ impl RustTreeSitterAdapter {
     }
 
     /// Extract signature span (up to but not including the body)
-    fn extract_signature_span(&self, node: &tree_sitter::Node, source: &str) -> Option<Span> {
-        let body_kinds = ["block", "field_declaration_list", "enum_variant_list", "declaration_list"];
+    fn extract_signature_span(&self, node: &tree_sitter::Node, _source: &str) -> Option<Span> {
+        let body_kinds = [
+            "block",
+            "field_declaration_list",
+            "enum_variant_list",
+            "declaration_list",
+        ];
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
@@ -400,7 +400,12 @@ impl RustTreeSitterAdapter {
 
     /// Extract body span
     fn extract_body_span(&self, node: &tree_sitter::Node, _source: &str) -> Option<Span> {
-        let body_kinds = ["block", "field_declaration_list", "enum_variant_list", "declaration_list"];
+        let body_kinds = [
+            "block",
+            "field_declaration_list",
+            "enum_variant_list",
+            "declaration_list",
+        ];
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
@@ -416,7 +421,11 @@ impl RustTreeSitterAdapter {
     fn extract_children(&self, node: &tree_sitter::Node, source: &str) -> Vec<Declaration> {
         let mut children = Vec::new();
 
-        let body_kinds = ["declaration_list", "field_declaration_list", "enum_variant_list"];
+        let body_kinds = [
+            "declaration_list",
+            "field_declaration_list",
+            "enum_variant_list",
+        ];
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
@@ -449,7 +458,8 @@ impl RustTreeSitterAdapter {
                 // struct field
                 if let Some(name_node) = find_child_by_kind(node, "field_identifier") {
                     let name = node_text(&name_node, source).to_string();
-                    let mut decl = Declaration::new(name, DeclarationKind::Variable, node_to_span(node));
+                    let mut decl =
+                        Declaration::new(name, DeclarationKind::Variable, node_to_span(node));
                     decl.visibility = self.extract_visibility(node, source);
                     Some(decl)
                 } else {
@@ -459,7 +469,11 @@ impl RustTreeSitterAdapter {
             "enum_variant" => {
                 if let Some(name_node) = find_child_by_kind(node, "identifier") {
                     let name = node_text(&name_node, source).to_string();
-                    Some(Declaration::new(name, DeclarationKind::Variable, node_to_span(node)))
+                    Some(Declaration::new(
+                        name,
+                        DeclarationKind::Variable,
+                        node_to_span(node),
+                    ))
                 } else {
                     None
                 }
@@ -470,7 +484,11 @@ impl RustTreeSitterAdapter {
     }
 
     /// Extract a use declaration
-    fn extract_use_declaration(&self, node: &tree_sitter::Node, source: &str) -> Option<ImportLike> {
+    fn extract_use_declaration(
+        &self,
+        node: &tree_sitter::Node,
+        source: &str,
+    ) -> Option<ImportLike> {
         // Find the use_tree or scoped_identifier
         let use_tree = find_child_by_kind(node, "use_tree")
             .or_else(|| find_child_by_kind(node, "scoped_identifier"))?;
@@ -538,8 +556,8 @@ impl RustTreeSitterAdapter {
 
     /// Extract an extern crate declaration
     fn extract_extern_crate(&self, node: &tree_sitter::Node, source: &str) -> Option<ImportLike> {
-        let name = find_child_by_kind(node, "identifier")
-            .or_else(|| find_child_by_kind(node, "crate"))?;
+        let name =
+            find_child_by_kind(node, "identifier").or_else(|| find_child_by_kind(node, "crate"))?;
 
         Some(ImportLike {
             source: node_text(&name, source).to_string(),
@@ -552,6 +570,7 @@ impl RustTreeSitterAdapter {
     }
 
     /// Visit all comments in a tree
+    #[allow(clippy::only_used_in_recursion)]
     fn visit_comments(&self, node: &tree_sitter::Node, source: &str, comments: &mut Vec<Comment>) {
         let mut cursor = node.walk();
 
@@ -744,8 +763,7 @@ impl RustTreeSitterAdapter {
         let mut branches = Vec::new();
 
         // Extract condition
-        let condition_span = find_child_by_kind(node, "condition")
-            .map(|n| node_to_span(&n));
+        let condition_span = find_child_by_kind(node, "condition").map(|n| node_to_span(&n));
 
         // Extract then block
         if let Some(block) = find_child_by_kind(node, "block") {
@@ -798,8 +816,7 @@ impl RustTreeSitterAdapter {
         ControlFlow {
             kind: ControlFlowKind::Match,
             span: node_to_span(node),
-            condition_span: find_child_by_kind(node, "value")
-                .map(|n| node_to_span(&n)),
+            condition_span: find_child_by_kind(node, "value").map(|n| node_to_span(&n)),
             branches,
         }
     }
@@ -810,17 +827,22 @@ impl RustTreeSitterAdapter {
             .or_else(|| find_child_by_kind(node, "scoped_identifier"))?;
 
         let args = find_child_by_kind(node, "arguments");
-        let arg_count = args.map(|a| {
-            let mut count = 0;
-            let mut cursor = a.walk();
-            for child in a.children(&mut cursor) {
-                // Count non-punctuation children
-                if !child.kind().starts_with(',') && !child.kind().starts_with('(') && !child.kind().starts_with(')') {
-                    count += 1;
+        let arg_count = args
+            .map(|a| {
+                let mut count = 0;
+                let mut cursor = a.walk();
+                for child in a.children(&mut cursor) {
+                    // Count non-punctuation children
+                    if !child.kind().starts_with(',')
+                        && !child.kind().starts_with('(')
+                        && !child.kind().starts_with(')')
+                    {
+                        count += 1;
+                    }
                 }
-            }
-            count
-        }).unwrap_or(0);
+                count
+            })
+            .unwrap_or(0);
 
         Some(Call {
             callee: node_text(&function, source).to_string(),
@@ -836,9 +858,7 @@ impl RustTreeSitterAdapter {
         let callee = node_text(node, source).to_string();
 
         let args = find_child_by_kind(node, "arguments");
-        let arg_count = args.map(|a| {
-            a.named_child_count()
-        }).unwrap_or(0);
+        let arg_count = args.map(|a| a.named_child_count()).unwrap_or(0);
 
         Some(Call {
             callee,
@@ -855,7 +875,9 @@ mod tests {
 
     fn parse_rust(source: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&tree_sitter_rust::LANGUAGE.into())
+            .unwrap();
         parser.parse(source, None).unwrap()
     }
 
@@ -890,7 +912,8 @@ mod tests {
 
     #[test]
     fn test_extract_function() {
-        let source = "/// A simple function\npub fn hello_world() {\n    println!(\"Hello!\");\n}\n";
+        let source =
+            "/// A simple function\npub fn hello_world() {\n    println!(\"Hello!\");\n}\n";
         let tree = parse_rust(source);
         let adapter = RustTreeSitterAdapter::new();
         let decls = adapter.extract_declarations(&tree, source);
@@ -1117,7 +1140,9 @@ mod tests {
         let imports = adapter.extract_imports(&tree, source);
 
         // mod utils; should be treated as an import
-        assert!(imports.iter().any(|i| i.source == "utils" && i.kind == ImportKind::Module));
+        assert!(imports
+            .iter()
+            .any(|i| i.source == "utils" && i.kind == ImportKind::Module));
     }
 
     #[test]
@@ -1196,7 +1221,11 @@ mod tests {
         let adapter = RustTreeSitterAdapter::new();
         let imports = adapter.extract_imports(&tree, source);
 
-        assert!(imports.len() >= 2, "Expected at least 2 imports, got {}", imports.len());
+        assert!(
+            imports.len() >= 2,
+            "Expected at least 2 imports, got {}",
+            imports.len()
+        );
         assert!(imports[0].source.contains("HashMap"));
     }
 
@@ -1415,7 +1444,8 @@ mod tests {
 
     #[test]
     fn test_extract_match_control_flow() {
-        let source = "fn test(x: i32) {\n    match x {\n        0 => {},\n        _ => {},\n    }\n}";
+        let source =
+            "fn test(x: i32) {\n    match x {\n        0 => {},\n        _ => {},\n    }\n}";
         let tree = parse_rust(source);
         let adapter = RustTreeSitterAdapter::new();
         let decls = adapter.extract_declarations(&tree, source);

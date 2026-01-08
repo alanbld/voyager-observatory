@@ -13,17 +13,14 @@
 use std::collections::{BTreeMap, HashMap};
 
 use pm_encoder::core::{
-    StellarDriftAnalyzer, StellarDriftReport, ConstellationEvolution, NewStar,
-    ChurnClassification,
+    ChurnClassification, ConstellationEvolution, NewStar, StellarDriftAnalyzer, StellarDriftReport,
 };
 
 #[cfg(feature = "temporal")]
 use chrono::{Duration, Utc};
 
 #[cfg(feature = "temporal")]
-use pm_encoder::core::{
-    TemporalCensus, FileChurn, ChronosState,
-};
+use pm_encoder::core::{ChronosState, FileChurn, TemporalCensus};
 
 // =============================================================================
 // TEST HELPERS
@@ -59,7 +56,10 @@ fn test_new_star_identification() {
     // New file (30 days old)
     files.insert("new_file.rs".to_string(), make_file_churn(30, 5, Some(5)));
     // Old file (500 days old)
-    files.insert("old_file.rs".to_string(), make_file_churn(500, 2, Some(100)));
+    files.insert(
+        "old_file.rs".to_string(),
+        make_file_churn(500, 2, Some(100)),
+    );
 
     let temporal_census = TemporalCensus {
         state: ChronosState::Active {
@@ -91,7 +91,10 @@ fn test_ancient_star_identification() {
 
     let mut files = BTreeMap::new();
     // File that hasn't been touched in 3 years (1100 days dormant)
-    files.insert("ancient.rs".to_string(), make_file_churn(1500, 0, Some(1100)));
+    files.insert(
+        "ancient.rs".to_string(),
+        make_file_churn(1500, 0, Some(1100)),
+    );
 
     let temporal_census = TemporalCensus {
         state: ChronosState::Active {
@@ -109,8 +112,14 @@ fn test_ancient_star_identification() {
 
     let report = analyzer.analyze(&temporal_census, &star_counts, None, None);
 
-    assert!(!report.ancient_stars.is_empty(), "Should identify ancient stars");
-    assert_eq!(report.ancient_star_total, 15, "Should count 15 ancient stars");
+    assert!(
+        !report.ancient_stars.is_empty(),
+        "Should identify ancient stars"
+    );
+    assert_eq!(
+        report.ancient_star_total, 15,
+        "Should count 15 ancient stars"
+    );
 }
 
 /// Test stellar drift percentage calculation
@@ -144,7 +153,10 @@ fn test_drift_calculation() {
 
     assert_eq!(report.total_stars, 20, "Should have 20 total stars");
     // Active file was modified in last 6 months, so drift should be positive
-    assert!(report.stellar_drift_percent >= 0.0, "Should have non-negative drift");
+    assert!(
+        report.stellar_drift_percent >= 0.0,
+        "Should have non-negative drift"
+    );
 }
 
 /// Test health indicators
@@ -163,8 +175,14 @@ fn test_health_indicators() {
         ..Default::default()
     };
 
-    assert!(report.is_expanding, "Should be expanding when new > ancient");
-    assert!(!report.is_ossifying, "Should not be ossifying with new stars");
+    assert!(
+        report.is_expanding,
+        "Should be expanding when new > ancient"
+    );
+    assert!(
+        !report.is_ossifying,
+        "Should not be ossifying with new stars"
+    );
 
     // Test ossifying galaxy (all ancient, no new)
     let report2 = StellarDriftReport {
@@ -179,7 +197,10 @@ fn test_health_indicators() {
         ..Default::default()
     };
 
-    assert!(report2.is_ossifying, "Should be ossifying with all ancient stars");
+    assert!(
+        report2.is_ossifying,
+        "Should be ossifying with all ancient stars"
+    );
     assert!(report2.is_stable, "Low drift should be stable");
 }
 
@@ -195,8 +216,14 @@ fn test_path_prefix_mapping() {
 
     // Temporal census has paths relative to git root (e.g., "rust/src/main.rs")
     let mut files = BTreeMap::new();
-    files.insert("rust/src/main.rs".to_string(), make_file_churn(100, 5, Some(10)));
-    files.insert("rust/src/lib.rs".to_string(), make_file_churn(100, 3, Some(20)));
+    files.insert(
+        "rust/src/main.rs".to_string(),
+        make_file_churn(100, 5, Some(10)),
+    );
+    files.insert(
+        "rust/src/lib.rs".to_string(),
+        make_file_churn(100, 3, Some(20)),
+    );
 
     let temporal_census = TemporalCensus {
         state: ChronosState::Active {
@@ -216,11 +243,17 @@ fn test_path_prefix_mapping() {
 
     // Without prefix, paths won't match
     let report_no_prefix = analyzer.analyze(&temporal_census, &star_counts, None, None);
-    assert_eq!(report_no_prefix.total_stars, 30, "Should have 30 total stars");
+    assert_eq!(
+        report_no_prefix.total_stars, 30,
+        "Should have 30 total stars"
+    );
 
     // With "rust" prefix, paths should match
     let report_with_prefix = analyzer.analyze(&temporal_census, &star_counts, None, Some("rust"));
-    assert_eq!(report_with_prefix.total_stars, 30, "Should have 30 total stars");
+    assert_eq!(
+        report_with_prefix.total_stars, 30,
+        "Should have 30 total stars"
+    );
     // The prefixed star_counts should now match temporal census paths
 }
 
@@ -277,9 +310,18 @@ fn test_default_thresholds() {
     let analyzer = StellarDriftAnalyzer::new();
 
     // The analyzer exposes the thresholds as public fields
-    assert_eq!(analyzer.new_star_threshold, 90, "New star threshold should be 90 days");
-    assert_eq!(analyzer.ancient_star_threshold, 730, "Ancient star threshold should be 730 days (2 years)");
-    assert_eq!(analyzer.drift_window_days, 180, "Drift window should be 180 days (6 months)");
+    assert_eq!(
+        analyzer.new_star_threshold, 90,
+        "New star threshold should be 90 days"
+    );
+    assert_eq!(
+        analyzer.ancient_star_threshold, 730,
+        "Ancient star threshold should be 730 days (2 years)"
+    );
+    assert_eq!(
+        analyzer.drift_window_days, 180,
+        "Drift window should be 180 days (6 months)"
+    );
 }
 
 // =============================================================================

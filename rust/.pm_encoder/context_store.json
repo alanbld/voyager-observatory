@@ -1,16 +1,22 @@
 {
   "version": "2.0.0",
   "files": {
-    "src/core/search.rs": {
-      "score": 0.5900000000000001,
-      "access_count": 6,
-      "last_accessed": "2025-12-20T17:53:23.762879280+00:00",
-      "tags": []
-    },
     "src/core/zoom.rs": {
       "score": 0.515,
       "access_count": 1,
       "last_accessed": "2025-12-20T17:42:08.753359504+00:00",
+      "tags": []
+    },
+    "src/core/engine.rs": {
+      "score": 0.53,
+      "access_count": 2,
+      "last_accessed": "2025-12-26T17:02:44.912418803+00:00",
+      "tags": []
+    },
+    "src/core/search.rs": {
+      "score": 0.5900000000000001,
+      "access_count": 6,
+      "last_accessed": "2025-12-20T17:53:23.762879280+00:00",
       "tags": []
     }
   },

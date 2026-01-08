@@ -5,8 +5,7 @@
 use crate::core::FileTier;
 
 /// Compression level for file content
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum CompressionLevel {
     /// L0: Full content preserved
     #[default]
@@ -16,7 +15,6 @@ pub enum CompressionLevel {
     /// L3: File excluded from output
     Drop,
 }
-
 
 /// Supported programming languages for skeletonization
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -170,12 +168,8 @@ mod tests {
 
     #[test]
     fn test_compression_ratio_calculation() {
-        let result = SkeletonResult::new(
-            "fn main();".to_string(),
-            100,
-            10,
-            vec!["main".to_string()],
-        );
+        let result =
+            SkeletonResult::new("fn main();".to_string(), 100, 10, vec!["main".to_string()]);
         assert_eq!(result.compression_ratio, 0.9);
     }
 
@@ -221,7 +215,7 @@ mod tests {
         // When original_tokens is 0, compression_ratio should be 0.0
         let result = SkeletonResult::new(
             "".to_string(),
-            0,  // original_tokens = 0
+            0, // original_tokens = 0
             0,
             vec![],
         );

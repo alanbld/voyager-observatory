@@ -552,11 +552,7 @@ impl CallGraph {
                 let count = self
                     .id_to_index
                     .get(&n.id)
-                    .map(|&idx| {
-                        self.graph
-                            .edges_directed(idx, Direction::Incoming)
-                            .count()
-                    })
+                    .map(|&idx| self.graph.edges_directed(idx, Direction::Incoming).count())
                     .unwrap_or(0);
                 (n, count)
             })
@@ -879,7 +875,11 @@ mod tests {
         let mut graph = CallGraph::new();
         graph.add_node(CallNode::new("entry1", "entry1", CallableKind::Function));
         graph.add_node(CallNode::new("entry2", "entry2", CallableKind::Function));
-        graph.add_node(CallNode::new("internal", "internal", CallableKind::Function));
+        graph.add_node(CallNode::new(
+            "internal",
+            "internal",
+            CallableKind::Function,
+        ));
 
         graph.add_call("entry1", "internal");
         graph.add_call("entry2", "internal");

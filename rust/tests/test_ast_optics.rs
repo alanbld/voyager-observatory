@@ -228,9 +228,7 @@ fn test_ast_detects_doc_comments() {
     let temp_dir = create_rust_test_project();
 
     let mut cmd = Command::cargo_bin("vo").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--format")
-        .arg("xml");
+    cmd.arg(temp_dir.path()).arg("--format").arg("xml");
 
     let output = cmd.assert().success();
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
@@ -249,15 +247,15 @@ fn test_ast_detects_doc_comments() {
 
 /// List of forbidden jargon terms that should never appear in user-facing output
 const FORBIDDEN_JARGON: &[&str] = &[
-    "AST",           // Abstract Syntax Tree - too technical
-    "Tree-sitter",   // Implementation detail
-    "tree_sitter",   // snake_case variant
-    "TreeSitter",    // PascalCase variant
-    "node",          // Tree terminology (when referring to AST nodes)
-    "subtree",       // Tree terminology
-    "parse tree",    // Compiler terminology
-    "syntax tree",   // Compiler terminology
-    "grammar",       // Compiler terminology (unless in doc context)
+    "AST",         // Abstract Syntax Tree - too technical
+    "Tree-sitter", // Implementation detail
+    "tree_sitter", // snake_case variant
+    "TreeSitter",  // PascalCase variant
+    "node",        // Tree terminology (when referring to AST nodes)
+    "subtree",     // Tree terminology
+    "parse tree",  // Compiler terminology
+    "syntax tree", // Compiler terminology
+    "grammar",     // Compiler terminology (unless in doc context)
 ];
 
 /// Terms that ARE allowed (our metaphor)
@@ -314,16 +312,20 @@ fn test_output_is_jargon_free_xml_format() {
     let temp_dir = create_rust_test_project();
 
     let mut cmd = Command::cargo_bin("vo").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--format")
-        .arg("xml");
+    cmd.arg(temp_dir.path()).arg("--format").arg("xml");
 
     let output = cmd.assert().success();
     let stdout = String::from_utf8_lossy(&output.get_output().stdout);
     let stdout_lower = stdout.to_lowercase();
 
     // Check specific jargon that should never appear
-    for jargon in &["Tree-sitter", "tree_sitter", "TreeSitter", "parse tree", "syntax tree"] {
+    for jargon in &[
+        "Tree-sitter",
+        "tree_sitter",
+        "TreeSitter",
+        "parse tree",
+        "syntax tree",
+    ] {
         assert!(
             !stdout_lower.contains(&jargon.to_lowercase()),
             "XML output should not contain '{}' jargon",
@@ -348,7 +350,13 @@ fn test_output_is_jargon_free_skeleton_mode() {
     let stdout_lower = stdout.to_lowercase();
 
     // Skeleton mode especially should be jargon-free since it uses AST heavily
-    for jargon in &["Tree-sitter", "tree_sitter", "TreeSitter", "subtree", "parse tree"] {
+    for jargon in &[
+        "Tree-sitter",
+        "tree_sitter",
+        "TreeSitter",
+        "subtree",
+        "parse tree",
+    ] {
         assert!(
             !stdout_lower.contains(&jargon.to_lowercase()),
             "Skeleton output should not contain '{}' jargon. Output:\n{}",
@@ -375,9 +383,7 @@ pub fn broken( {
     .unwrap();
 
     let mut cmd = Command::cargo_bin("vo").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--skeleton")
-        .arg("auto");
+    cmd.arg(temp_dir.path()).arg("--skeleton").arg("auto");
 
     // The command should still succeed (graceful degradation)
     // but any warnings/errors should be jargon-free
@@ -430,9 +436,7 @@ class ContextEngine:
     .unwrap();
 
     let mut cmd = Command::cargo_bin("vo").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--skeleton")
-        .arg("auto");
+    cmd.arg(temp_dir.path()).arg("--skeleton").arg("auto");
 
     // Should handle Python gracefully (regex fallback)
     let output = cmd.assert().success();
@@ -458,7 +462,7 @@ fn test_ast_analysis_on_actual_project() {
         .unwrap_or_else(|_| std::path::PathBuf::from("."));
 
     cmd.current_dir(&project_root)
-        .arg("src/core")  // Run on the core directory
+        .arg("src/core") // Run on the core directory
         .arg("--skeleton")
         .arg("auto")
         .arg("--format")
@@ -534,6 +538,12 @@ fn test_voyager_ast_graceful_fallback() {
     let result = bridge.analyze_file("def foo(): pass", LanguageId::Python);
     assert!(result.is_some(), "Python should be supported");
     let file = result.unwrap();
-    assert!(!file.declarations.is_empty(), "Python should extract declarations");
-    assert!(file.declarations.iter().any(|d| d.name == "foo"), "Should extract 'foo' function");
+    assert!(
+        !file.declarations.is_empty(),
+        "Python should extract declarations"
+    );
+    assert!(
+        file.declarations.iter().any(|d| d.name == "foo"),
+        "Should extract 'foo' function"
+    );
 }

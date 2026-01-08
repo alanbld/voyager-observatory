@@ -35,36 +35,47 @@
 //! }
 //! ```
 
-pub mod ir;
-pub mod error;
-pub mod provider;
 pub mod adapters;
+pub mod error;
+pub mod ir;
+pub mod provider;
 mod registry;
 
 // Re-export core types for convenience
 pub use ir::{
-    // Core types
-    File, Span, Region,
-    // Declarations
-    Declaration, DeclarationKind, Visibility, Parameter,
     // Blocks and control flow
-    Block, ControlFlow, ControlFlowKind, Call,
-    // Imports
-    ImportLike, ImportKind,
+    Block,
+    Call,
     // Comments
-    Comment, CommentKind,
-    // Error recovery
-    UnknownNode, UnparsedBlock,
+    Comment,
+    CommentKind,
+    ControlFlow,
+    ControlFlowKind,
+    // Declarations
+    Declaration,
+    DeclarationKind,
+    // Core types
+    File,
+    ImportKind,
+    // Imports
+    ImportLike,
     // Language
     LanguageId,
+    Parameter,
+    Region,
+    Span,
+    // Error recovery
+    UnknownNode,
+    UnparsedBlock,
+    Visibility,
 };
 
+pub use adapters::LanguageAdapter;
 pub use error::AstError;
 pub use provider::{
-    AstProvider, IndexOptions, ZoomOptions,
-    PlanetariumModel, MicroscopeModel, IndexStats, IndexError, ContextWindow,
+    AstProvider, ContextWindow, IndexError, IndexOptions, IndexStats, MicroscopeModel,
+    PlanetariumModel, ZoomOptions,
 };
-pub use adapters::LanguageAdapter;
 pub use registry::AdapterRegistry;
 
 /// Version of the IR schema

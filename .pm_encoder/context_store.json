@@ -1,16 +1,22 @@
 {
   "version": "2.0.0",
   "files": {
+    "rust/src/lib.rs": {
+      "score": 0.62,
+      "access_count": 1,
+      "last_accessed": "2025-12-20T21:16:50.798933262+00:00",
+      "tags": []
+    },
     "src/core/engine.rs": {
       "score": 0.635,
       "access_count": 1,
       "last_accessed": "2025-12-20T22:17:00.555945957+00:00",
       "tags": []
     },
-    "rust/src/lib.rs": {
-      "score": 0.62,
+    "rust/src/core/plugins/bridges/vo_table.rs": {
+      "score": 0.515,
       "access_count": 1,
-      "last_accessed": "2025-12-20T21:16:50.798933262+00:00",
+      "last_accessed": "2026-01-03T18:11:32.145574916+00:00",
       "tags": []
     }
   },

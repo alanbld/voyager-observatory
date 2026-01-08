@@ -49,13 +49,22 @@ pub enum AstError {
 impl AstError {
     /// Check if this error has partial results available
     pub fn has_partial(&self) -> bool {
-        matches!(self, AstError::ParseError { partial: Some(_), .. })
+        matches!(
+            self,
+            AstError::ParseError {
+                partial: Some(_),
+                ..
+            }
+        )
     }
 
     /// Extract partial results if available
     pub fn take_partial(self) -> Option<File> {
         match self {
-            AstError::ParseError { partial: Some(file), .. } => Some(*file),
+            AstError::ParseError {
+                partial: Some(file),
+                ..
+            } => Some(*file),
             _ => None,
         }
     }

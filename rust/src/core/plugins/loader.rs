@@ -7,11 +7,11 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "plugins")]
+use super::bridges::vo_table::{create_vo_table, PluginContributions, SharedContributions};
 use super::error::{PluginError, PluginResult};
 #[cfg(feature = "plugins")]
 use super::sandbox::IronSandbox;
-#[cfg(feature = "plugins")]
-use super::bridges::vo_table::{create_vo_table, SharedContributions, PluginContributions};
 #[cfg(feature = "plugins")]
 use std::sync::{Arc, Mutex};
 
@@ -151,7 +151,8 @@ impl PluginLoader {
         }
 
         // Sort by priority (higher first)
-        self.plugins.sort_by(|a, b| b.entry.priority.cmp(&a.entry.priority));
+        self.plugins
+            .sort_by(|a, b| b.entry.priority.cmp(&a.entry.priority));
 
         self.plugins.iter().collect()
     }
@@ -277,7 +278,10 @@ impl PluginLoader {
 
         // Set up the vo global
         let vo = create_vo_table(sandbox.lua(), contributions)?;
-        sandbox.lua().globals().set("vo", vo)
+        sandbox
+            .lua()
+            .globals()
+            .set("vo", vo)
             .map_err(|e| PluginError::LuaError(e.to_string()))?;
 
         // Execute the plugin
@@ -443,7 +447,8 @@ mod tests {
         std::fs::write(
             plugins_dir.join(MANIFEST_FILE),
             serde_json::to_string(&manifest).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         std::fs::write(plugins_dir.join("low.lua"), "-- low").unwrap();
         std::fs::write(plugins_dir.join("high.lua"), "-- high").unwrap();
@@ -470,7 +475,8 @@ mod tests {
                 vo.log("info", "Plugin loaded")
                 vo.contribute_tag("test:1", "simple-tag")
             "#,
-        ).unwrap();
+        )
+        .unwrap();
 
         let mut loader = PluginLoader::with_paths(vec![plugins_dir]);
         loader.discover();
@@ -529,10 +535,13 @@ mod tests {
         let plugins_dir = temp_dir.path().join("plugins");
 
         // Create manifest with one enabled and one disabled
-        create_test_manifest(&plugins_dir, &[
-            ("enabled-plugin", "enabled.lua", true),
-            ("disabled-plugin", "disabled.lua", false),
-        ]);
+        create_test_manifest(
+            &plugins_dir,
+            &[
+                ("enabled-plugin", "enabled.lua", true),
+                ("disabled-plugin", "disabled.lua", false),
+            ],
+        );
 
         std::fs::write(plugins_dir.join("enabled.lua"), "-- enabled").unwrap();
 
@@ -549,11 +558,14 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let plugins_dir = temp_dir.path().join("plugins");
 
-        create_test_manifest(&plugins_dir, &[
-            ("plugin-a", "a.lua", true),
-            ("plugin-b", "b.lua", true),
-            ("plugin-c", "c.lua", false),
-        ]);
+        create_test_manifest(
+            &plugins_dir,
+            &[
+                ("plugin-a", "a.lua", true),
+                ("plugin-b", "b.lua", true),
+                ("plugin-c", "c.lua", false),
+            ],
+        );
 
         std::fs::write(plugins_dir.join("a.lua"), "-- a").unwrap();
         std::fs::write(plugins_dir.join("b.lua"), "-- b").unwrap();

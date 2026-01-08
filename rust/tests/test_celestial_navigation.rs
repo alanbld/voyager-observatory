@@ -6,7 +6,7 @@
 //! - Exploration history tracking
 //! - Faded nebulae (ignored patterns)
 
-use pm_encoder::core::{ObserversJournal, ExplorationEntry};
+use pm_encoder::core::{ExplorationEntry, ObserversJournal};
 use tempfile::TempDir;
 
 // =============================================================================
@@ -36,7 +36,9 @@ fn test_journal_save_and_load_roundtrip() {
     journal.mark_star_with_note("src/core/engine.rs", 0.9, "Critical engine file");
 
     // Save
-    journal.save(temp_dir.path()).expect("Failed to save journal");
+    journal
+        .save(temp_dir.path())
+        .expect("Failed to save journal");
 
     // Verify file exists
     let journal_path = ObserversJournal::default_path(temp_dir.path());
@@ -231,7 +233,7 @@ fn test_journal_display_format() {
     let output = journal.display();
 
     assert!(output.contains("OBSERVER'S JOURNAL"));
-    assert!(output.contains("⭐"));  // Bright star marker
+    assert!(output.contains("⭐")); // Bright star marker
     assert!(output.contains("src/lib.rs"));
     assert!(output.contains("Marked Stars: 1"));
 }
@@ -264,7 +266,7 @@ fn test_journal_clear_resets_all() {
 
 #[test]
 fn test_brightness_indicator_levels() {
-    use pm_encoder::core::models::{ProcessedFile, FileEntry};
+    use pm_encoder::core::models::{FileEntry, ProcessedFile};
 
     let entry = FileEntry::new("test.rs", "fn main() {}");
 
@@ -291,7 +293,7 @@ fn test_brightness_indicator_levels() {
 
 #[test]
 fn test_is_bright_star_check() {
-    use pm_encoder::core::models::{ProcessedFile, FileEntry};
+    use pm_encoder::core::models::{FileEntry, ProcessedFile};
 
     let entry = FileEntry::new("test.rs", "fn main() {}");
 
@@ -311,7 +313,7 @@ fn test_is_bright_star_check() {
 
 #[test]
 fn test_nebula_namer_concept_based_naming() {
-    use pm_encoder::core::celestial::{NebulaNamer, NamingStrategy};
+    use pm_encoder::core::celestial::{NamingStrategy, NebulaNamer};
     use pm_encoder::core::fractal::semantic::UniversalConceptType;
     use std::collections::HashMap;
 
@@ -330,7 +332,7 @@ fn test_nebula_namer_concept_based_naming() {
 
 #[test]
 fn test_nebula_namer_directory_fallback() {
-    use pm_encoder::core::celestial::{NebulaNamer, NamingStrategy};
+    use pm_encoder::core::celestial::{NamingStrategy, NebulaNamer};
     use std::collections::HashMap;
 
     let namer = NebulaNamer::new();
@@ -349,7 +351,7 @@ fn test_nebula_namer_directory_fallback() {
 
 #[test]
 fn test_nebula_namer_pattern_based_tests() {
-    use pm_encoder::core::celestial::{NebulaNamer, NamingStrategy};
+    use pm_encoder::core::celestial::{NamingStrategy, NebulaNamer};
     use std::collections::HashMap;
 
     let namer = NebulaNamer::new();
@@ -451,7 +453,7 @@ fn test_constellation_mapper_mixed_languages() {
 
 #[test]
 fn test_celestial_map_display_format() {
-    use pm_encoder::core::celestial::{ConstellationMapper, FileInfo, CelestialMap};
+    use pm_encoder::core::celestial::{CelestialMap, ConstellationMapper, FileInfo};
     use pm_encoder::core::fractal::semantic::UniversalConceptType;
 
     let mapper = ConstellationMapper::new();
@@ -485,8 +487,7 @@ fn test_celestial_map_display_format() {
 #[test]
 fn test_navigation_compass_suggests_brightest() {
     use pm_encoder::core::celestial::{
-        NavigationCompass, CelestialMap, Nebula, Star, NebulaName, NamingStrategy,
-        SuggestionAction,
+        CelestialMap, NamingStrategy, NavigationCompass, Nebula, NebulaName, Star, SuggestionAction,
     };
     use pm_encoder::core::fractal::semantic::UniversalConceptType;
 
@@ -539,8 +540,7 @@ fn test_navigation_compass_suggests_brightest() {
 #[test]
 fn test_navigation_compass_suggests_skim_for_faded() {
     use pm_encoder::core::celestial::{
-        NavigationCompass, CelestialMap, Nebula, Star, NebulaName, NamingStrategy,
-        SuggestionAction,
+        CelestialMap, NamingStrategy, NavigationCompass, Nebula, NebulaName, Star, SuggestionAction,
     };
     use pm_encoder::core::fractal::semantic::UniversalConceptType;
 
@@ -583,7 +583,7 @@ fn test_navigation_compass_suggests_skim_for_faded() {
 #[test]
 fn test_navigation_display_format() {
     use pm_encoder::core::celestial::{
-        NavigationCompass, CelestialMap, Nebula, Star, NebulaName, NamingStrategy,
+        CelestialMap, NamingStrategy, NavigationCompass, Nebula, NebulaName, Star,
     };
     use pm_encoder::core::fractal::semantic::UniversalConceptType;
 

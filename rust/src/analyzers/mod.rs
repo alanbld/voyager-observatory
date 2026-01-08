@@ -1,13 +1,13 @@
+pub mod generic;
 /// Language analyzers for extracting metadata from source files
 pub mod rust_analyzer;
-pub mod generic;
 
-pub use rust_analyzer::RustAnalyzer;
 pub use generic::{
-    GenericAnalyzer, AnalyzerConfig,
-    create_python_analyzer, create_javascript_analyzer, create_shell_analyzer,
-    create_markdown_analyzer, create_json_analyzer, create_yaml_analyzer
+    create_javascript_analyzer, create_json_analyzer, create_markdown_analyzer,
+    create_python_analyzer, create_shell_analyzer, create_yaml_analyzer, AnalyzerConfig,
+    GenericAnalyzer,
 };
+pub use rust_analyzer::RustAnalyzer;
 
 /// Result of file analysis containing extracted metadata
 #[derive(Debug, Clone)]

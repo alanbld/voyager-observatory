@@ -56,8 +56,8 @@ mod ast;
 
 pub use adapter::{SyntaxRegistry, TreeSitterAdapter};
 pub use ast::{
-    NormalizedAst, Symbol, SymbolKind, SymbolVisibility, Import, ImportKind,
-    Module, Scope, Location, Span, Parameter, ParseDiagnostic, DiagnosticSeverity,
+    DiagnosticSeverity, Import, ImportKind, Location, Module, NormalizedAst, Parameter,
+    ParseDiagnostic, Scope, Span, Symbol, SymbolKind, SymbolVisibility,
 };
 
 use std::collections::HashMap;
@@ -440,13 +440,19 @@ mod tests {
         assert_eq!(Language::from_extension("zsh"), Some(Language::Bash));
         assert_eq!(Language::from_extension("tf"), Some(Language::Hcl));
         assert_eq!(Language::from_extension("hcl"), Some(Language::Hcl));
-        assert_eq!(Language::from_extension("dockerfile"), Some(Language::Dockerfile));
+        assert_eq!(
+            Language::from_extension("dockerfile"),
+            Some(Language::Dockerfile)
+        );
     }
 
     #[test]
     fn test_language_from_extension_docs() {
         assert_eq!(Language::from_extension("md"), Some(Language::Markdown));
-        assert_eq!(Language::from_extension("markdown"), Some(Language::Markdown));
+        assert_eq!(
+            Language::from_extension("markdown"),
+            Some(Language::Markdown)
+        );
     }
 
     #[test]
@@ -677,11 +683,14 @@ mod tests {
             by_language: HashMap::new(),
         };
 
-        stats.by_language.insert(Language::Rust, LanguageStats {
-            files: 50,
-            symbols: 300,
-            avg_parse_time_ms: 10.5,
-        });
+        stats.by_language.insert(
+            Language::Rust,
+            LanguageStats {
+                files: 50,
+                symbols: 300,
+                avg_parse_time_ms: 10.5,
+            },
+        );
 
         assert_eq!(stats.files_parsed, 100);
         assert_eq!(stats.by_language.len(), 1);

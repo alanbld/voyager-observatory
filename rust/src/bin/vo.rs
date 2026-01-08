@@ -15,15 +15,16 @@
 #![cfg_attr(tarpaulin, ignore)]
 
 use clap::{Parser, ValueEnum};
-use pm_encoder::{self, EncoderConfig, LensManager, OutputFormat, parse_token_budget, apply_token_budget};
 use pm_encoder::core::{
-    ContextEngine, ZoomConfig, ZoomTarget, ContextStore, DEFAULT_ALPHA, SkeletonMode,
-    SemanticDepth, DetailLevel, ObserversJournal,
-    IntelligentPresenter,
+    ContextEngine, ContextStore, DetailLevel, IntelligentPresenter, ObserversJournal,
+    SemanticDepth, SkeletonMode, ZoomConfig, ZoomTarget, DEFAULT_ALPHA,
 };
 use pm_encoder::server::McpServer;
-use std::path::PathBuf;
+use pm_encoder::{
+    self, apply_token_budget, parse_token_budget, EncoderConfig, LensManager, OutputFormat,
+};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// 🌌 Voyager Observatory: Navigate the code galaxy with ease.
 ///
@@ -61,27 +62,39 @@ struct Cli {
     // ═══════════════════════════════════════════════════════════════════════════
     // 🔭 THE VIEWFINDER (Essential)
     // ═══════════════════════════════════════════════════════════════════════════
-
     /// Project directory or file to explore
     #[arg(value_name = "PATH", help_heading = "🔭 VIEWFINDER (Essential)")]
     project_root: Option<PathBuf>,
 
     /// What to look for [architecture, debug, security, onboarding, minimal]
-    #[arg(long = "lens", value_name = "LENS", help_heading = "🔭 VIEWFINDER (Essential)")]
+    #[arg(
+        long = "lens",
+        value_name = "LENS",
+        help_heading = "🔭 VIEWFINDER (Essential)"
+    )]
     lens: Option<String>,
 
     /// Output file path (default: stdout)
-    #[arg(short = 'o', long = "output", value_name = "FILE", help_heading = "🔭 VIEWFINDER (Essential)")]
+    #[arg(
+        short = 'o',
+        long = "output",
+        value_name = "FILE",
+        help_heading = "🔭 VIEWFINDER (Essential)"
+    )]
     output: Option<PathBuf>,
 
     /// Output format [plus-minus, xml, markdown, claude-xml]
-    #[arg(long = "format", value_enum, default_value = "plus-minus", help_heading = "🔭 VIEWFINDER (Essential)")]
+    #[arg(
+        long = "format",
+        value_enum,
+        default_value = "plus-minus",
+        help_heading = "🔭 VIEWFINDER (Essential)"
+    )]
     format: OutputFormatArg,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // 🔍 LENS FILTERS (Context Control)
     // ═══════════════════════════════════════════════════════════════════════════
-
     /// Include files matching pattern
     #[arg(long = "include", value_name = "PATTERN", num_args = 0.., help_heading = "🔍 LENS FILTERS")]
     include: Vec<String>,
@@ -91,7 +104,12 @@ struct Cli {
     exclude: Vec<String>,
 
     /// Analysis depth [quick, balanced, deep]
-    #[arg(long = "semantic-depth", value_enum, default_value = "balanced", help_heading = "🔍 LENS FILTERS")]
+    #[arg(
+        long = "semantic-depth",
+        value_enum,
+        default_value = "balanced",
+        help_heading = "🔍 LENS FILTERS"
+    )]
     semantic_depth: SemanticDepthArg,
 
     /// Use cached analysis (deterministic output)
@@ -103,27 +121,50 @@ struct Cli {
     allow_sensitive: bool,
 
     /// Config file path
-    #[arg(short = 'c', long = "config", value_name = "FILE", help_heading = "🔍 LENS FILTERS")]
+    #[arg(
+        short = 'c',
+        long = "config",
+        value_name = "FILE",
+        help_heading = "🔍 LENS FILTERS"
+    )]
     config: Option<PathBuf>,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // 🔬 MAGNIFICATION (Zoom Control)
     // ═══════════════════════════════════════════════════════════════════════════
-
     /// Zoom into target: fn=name, class=name, file=path[:lines]
-    #[arg(long = "zoom", value_name = "TARGET", help_heading = "🔬 MAGNIFICATION")]
+    #[arg(
+        long = "zoom",
+        value_name = "TARGET",
+        help_heading = "🔬 MAGNIFICATION"
+    )]
     zoom: Option<String>,
 
     /// Show skeleton only (signatures without bodies)
-    #[arg(long = "skeleton", value_name = "MODE", default_value = "auto", help_heading = "🔬 MAGNIFICATION")]
+    #[arg(
+        long = "skeleton",
+        value_name = "MODE",
+        default_value = "auto",
+        help_heading = "🔬 MAGNIFICATION"
+    )]
     skeleton: String,
 
     /// Truncate files to N lines (0 = no truncation)
-    #[arg(long = "truncate", value_name = "LINES", default_value = "0", help_heading = "🔬 MAGNIFICATION")]
+    #[arg(
+        long = "truncate",
+        value_name = "LINES",
+        default_value = "0",
+        help_heading = "🔬 MAGNIFICATION"
+    )]
     truncate: usize,
 
     /// Truncation mode [simple, smart, structure]
-    #[arg(long = "truncate-mode", value_enum, default_value = "simple", help_heading = "🔬 MAGNIFICATION")]
+    #[arg(
+        long = "truncate-mode",
+        value_enum,
+        default_value = "simple",
+        help_heading = "🔬 MAGNIFICATION"
+    )]
     truncate_mode: TruncateMode,
 
     /// Never truncate files matching pattern
@@ -133,25 +174,41 @@ struct Cli {
     // ═══════════════════════════════════════════════════════════════════════════
     // 🔋 POWER GRID (Token Budget)
     // ═══════════════════════════════════════════════════════════════════════════
-
     /// Maximum tokens for output (e.g., 100k, 2M)
-    #[arg(long = "token-budget", value_name = "BUDGET", help_heading = "🔋 POWER GRID")]
+    #[arg(
+        long = "token-budget",
+        value_name = "BUDGET",
+        help_heading = "🔋 POWER GRID"
+    )]
     token_budget: Option<String>,
 
     /// Budget strategy [drop, truncate, hybrid]
-    #[arg(long = "budget-strategy", value_enum, default_value = "drop", help_heading = "🔋 POWER GRID")]
+    #[arg(
+        long = "budget-strategy",
+        value_enum,
+        default_value = "drop",
+        help_heading = "🔋 POWER GRID"
+    )]
     budget_strategy: BudgetStrategy,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // 💡 OBSERVATION LOGS (Intelligence)
     // ═══════════════════════════════════════════════════════════════════════════
-
     /// Explore with intent [business-logic, debugging, onboarding, security, migration]
-    #[arg(long = "explore", value_name = "INTENT", help_heading = "💡 EXPLORATION")]
+    #[arg(
+        long = "explore",
+        value_name = "INTENT",
+        help_heading = "💡 EXPLORATION"
+    )]
     explore: Option<String>,
 
     /// Output detail level [summary, smart, detailed]
-    #[arg(long = "detail", value_enum, default_value = "smart", help_heading = "💡 EXPLORATION")]
+    #[arg(
+        long = "detail",
+        value_enum,
+        default_value = "smart",
+        help_heading = "💡 EXPLORATION"
+    )]
     detail: DetailLevelArg,
 
     /// Show technical reasoning behind decisions
@@ -167,15 +224,23 @@ struct Cli {
     explore_tests: bool,
 
     /// Maximum files for exploration analysis
-    #[arg(long = "explore-max-files", value_name = "N", default_value = "200", help_heading = "💡 EXPLORATION")]
+    #[arg(
+        long = "explore-max-files",
+        value_name = "N",
+        default_value = "200",
+        help_heading = "💡 EXPLORATION"
+    )]
     explore_max_files: usize,
 
     // ═══════════════════════════════════════════════════════════════════════════
     // ⚙️ ADVANCED OPTIONS
     // ═══════════════════════════════════════════════════════════════════════════
-
     /// Manage zoom sessions [create:name, load:name, list, delete:name, show]
-    #[arg(long = "zoom-session", value_name = "ACTION:NAME", help_heading = "⚙️ ADVANCED")]
+    #[arg(
+        long = "zoom-session",
+        value_name = "ACTION:NAME",
+        help_heading = "⚙️ ADVANCED"
+    )]
     zoom_session: Option<String>,
 
     /// Undo last zoom action
@@ -187,11 +252,19 @@ struct Cli {
     zoom_redo: bool,
 
     /// Collapse zoom target back to structure
-    #[arg(long = "zoom-collapse", value_name = "TARGET", help_heading = "⚙️ ADVANCED")]
+    #[arg(
+        long = "zoom-collapse",
+        value_name = "TARGET",
+        help_heading = "⚙️ ADVANCED"
+    )]
     zoom_collapse: Option<String>,
 
     /// Report file utility for learning [path:score:reason]
-    #[arg(long = "report-utility", value_name = "FILE:SCORE:REASON", help_heading = "⚙️ ADVANCED")]
+    #[arg(
+        long = "report-utility",
+        value_name = "FILE:SCORE:REASON",
+        help_heading = "⚙️ ADVANCED"
+    )]
     report_utility: Option<String>,
 
     /// Enable privacy hashing for paths
@@ -199,11 +272,21 @@ struct Cli {
     store_privacy: bool,
 
     /// Sort files by [name, mtime, ctime]
-    #[arg(long = "sort-by", value_enum, default_value = "name", help_heading = "⚙️ ADVANCED")]
+    #[arg(
+        long = "sort-by",
+        value_enum,
+        default_value = "name",
+        help_heading = "⚙️ ADVANCED"
+    )]
     sort_by: SortBy,
 
     /// Sort order [asc, desc]
-    #[arg(long = "sort-order", value_enum, default_value = "asc", help_heading = "⚙️ ADVANCED")]
+    #[arg(
+        long = "sort-order",
+        value_enum,
+        default_value = "asc",
+        help_heading = "⚙️ ADVANCED"
+    )]
     sort_order: SortOrder,
 
     /// Enable streaming mode (lower latency)
@@ -215,11 +298,21 @@ struct Cli {
     follow_symlinks: bool,
 
     /// Metadata mode [auto, all, none, size-only]
-    #[arg(short = 'm', long = "metadata", value_enum, default_value = "auto", help_heading = "⚙️ ADVANCED")]
+    #[arg(
+        short = 'm',
+        long = "metadata",
+        value_enum,
+        default_value = "auto",
+        help_heading = "⚙️ ADVANCED"
+    )]
     metadata: CliMetadataMode,
 
     /// Include truncation summary
-    #[arg(long = "truncate-summary", default_value = "true", help_heading = "⚙️ ADVANCED")]
+    #[arg(
+        long = "truncate-summary",
+        default_value = "true",
+        help_heading = "⚙️ ADVANCED"
+    )]
     truncate_summary: bool,
 
     /// Disable truncation summary
@@ -233,7 +326,6 @@ struct Cli {
     // ═══════════════════════════════════════════════════════════════════════════
     // 📓 OBSERVER'S JOURNAL
     // ═══════════════════════════════════════════════════════════════════════════
-
     /// Mark a star (file) as important in your journal
     #[arg(long = "mark", value_name = "PATH", help_heading = "📓 JOURNAL")]
     mark: Option<String>,
@@ -249,17 +341,26 @@ struct Cli {
     // ═══════════════════════════════════════════════════════════════════════════
     // 📊 CELESTIAL CENSUS (Code Health Survey)
     // ═══════════════════════════════════════════════════════════════════════════
-
     /// Survey the codebase [composition, health]
     #[arg(long = "survey", value_name = "MODE", help_heading = "📊 CENSUS")]
     survey: Option<SurveyMode>,
 
     /// Grouping level for survey [constellation, galaxy, sector]
-    #[arg(long = "by", value_enum, default_value = "constellation", help_heading = "📊 CENSUS")]
+    #[arg(
+        long = "by",
+        value_enum,
+        default_value = "constellation",
+        help_heading = "📊 CENSUS"
+    )]
     by: SurveyGrouping,
 
     /// Git history depth for temporal analysis [shallow=1000, full=100000]
-    #[arg(long = "chronos-depth", value_enum, default_value = "shallow", help_heading = "📊 CENSUS")]
+    #[arg(
+        long = "chronos-depth",
+        value_enum,
+        default_value = "shallow",
+        help_heading = "📊 CENSUS"
+    )]
     chronos_depth: ChronosDepth,
 
     /// Disable Chronos Warp cache (force fresh git analysis)
@@ -273,7 +374,6 @@ struct Cli {
     // ═══════════════════════════════════════════════════════════════════════════
     // 🚀 SPECIAL MODES
     // ═══════════════════════════════════════════════════════════════════════════
-
     /// Run as MCP server (JSON-RPC 2.0 over stdio)
     #[arg(long = "server", help_heading = "🚀 SPECIAL MODES")]
     server: bool,
@@ -283,11 +383,21 @@ struct Cli {
     init_prompt: bool,
 
     /// Lens for init-prompt
-    #[arg(long = "init-lens", value_name = "LENS", default_value = "architecture", help_heading = "🚀 SPECIAL MODES")]
+    #[arg(
+        long = "init-lens",
+        value_name = "LENS",
+        default_value = "architecture",
+        help_heading = "🚀 SPECIAL MODES"
+    )]
     init_lens: String,
 
     /// Target AI [claude, gemini]
-    #[arg(long = "target", value_enum, default_value = "claude", help_heading = "🚀 SPECIAL MODES")]
+    #[arg(
+        long = "target",
+        value_enum,
+        default_value = "claude",
+        help_heading = "🚀 SPECIAL MODES"
+    )]
     target: TargetAI,
 }
 
@@ -465,7 +575,10 @@ fn parse_report_utility(s: &str) -> Result<(String, f64, String), String> {
     };
 
     let score: f64 = score_str.parse().map_err(|_| {
-        format!("Invalid utility score: '{}'. Expected a number between 0.0 and 1.0", score_str)
+        format!(
+            "Invalid utility score: '{}'. Expected a number between 0.0 and 1.0",
+            score_str
+        )
     })?;
 
     if !(0.0..=1.0).contains(&score) {
@@ -557,13 +670,13 @@ fn parse_zoom_target(s: &str) -> Result<ZoomConfig, String> {
 
 /// Run the Celestial Census survey
 fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &Cli) {
-    use pm_encoder::core::{
-        CelestialCensus, GalaxyCensus, AstBridge,
-    };
+    use pm_encoder::core::{AstBridge, CelestialCensus, GalaxyCensus};
     #[cfg(feature = "temporal")]
-    use pm_encoder::core::{ChronosEngine, TemporalCensus, StellarDriftAnalyzer, StellarDriftReport};
-    use std::time::Instant;
+    use pm_encoder::core::{
+        ChronosEngine, StellarDriftAnalyzer, StellarDriftReport, TemporalCensus,
+    };
     use std::collections::HashMap;
+    use std::time::Instant;
 
     let start = Instant::now();
 
@@ -612,7 +725,11 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
     #[cfg(feature = "temporal")]
     use pm_encoder::core::WarpStatus;
     #[cfg(feature = "temporal")]
-    let (temporal_census, drift_report, warp_status): (Option<TemporalCensus>, Option<StellarDriftReport>, Option<WarpStatus>) = {
+    let (temporal_census, drift_report, warp_status): (
+        Option<TemporalCensus>,
+        Option<StellarDriftReport>,
+        Option<WarpStatus>,
+    ) = {
         use pm_encoder::core::{DEFAULT_COMMIT_DEPTH, FULL_COMMIT_DEPTH};
 
         let needs_temporal = matches!(mode, SurveyMode::Evolution | SurveyMode::Health);
@@ -638,7 +755,8 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
                         // Canonicalize root to get absolute path for comparison
                         let abs_root = root.canonicalize().ok();
                         if let Some(abs_root) = abs_root {
-                            abs_root.strip_prefix(&git_root)
+                            abs_root
+                                .strip_prefix(&git_root)
                                 .ok()
                                 .map(|p| p.to_string_lossy().to_string())
                                 .filter(|s| !s.is_empty())
@@ -723,7 +841,12 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
                 }
                 SurveyMode::Evolution => {
                     #[cfg(feature = "temporal")]
-                    print_evolution_report(&galaxy, grouping, drift_report.as_ref(), temporal_census.as_ref());
+                    print_evolution_report(
+                        &galaxy,
+                        grouping,
+                        drift_report.as_ref(),
+                        temporal_census.as_ref(),
+                    );
                     #[cfg(not(feature = "temporal"))]
                     print_evolution_report_static(&galaxy);
                 }
@@ -740,15 +863,26 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
             Some(WarpStatus::Calibrating) => " [Warp Calibrating]",
             _ => "",
         };
-        eprintln!("Survey completed in {:.1}ms ({} files, {} chronos events){}",
-            elapsed.as_secs_f64() * 1000.0, galaxy.total_files, tc.total_observations, warp_indicator);
+        eprintln!(
+            "Survey completed in {:.1}ms ({} files, {} chronos events){}",
+            elapsed.as_secs_f64() * 1000.0,
+            galaxy.total_files,
+            tc.total_observations,
+            warp_indicator
+        );
     } else {
-        eprintln!("Survey completed in {:.1}ms ({} files analyzed)",
-            elapsed.as_secs_f64() * 1000.0, galaxy.total_files);
+        eprintln!(
+            "Survey completed in {:.1}ms ({} files analyzed)",
+            elapsed.as_secs_f64() * 1000.0,
+            galaxy.total_files
+        );
     }
     #[cfg(not(feature = "temporal"))]
-    eprintln!("Survey completed in {:.1}ms ({} files analyzed)",
-        elapsed.as_secs_f64() * 1000.0, galaxy.total_files);
+    eprintln!(
+        "Survey completed in {:.1}ms ({} files analyzed)",
+        elapsed.as_secs_f64() * 1000.0,
+        galaxy.total_files
+    );
 }
 
 /// Print composition table with Technical Overlays
@@ -794,26 +928,37 @@ fn print_composition_table(
             let totals = &galaxy.totals;
             let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
             let indicator = format_health_indicator(rating);
-            let churn = temporal.map(|t| t.constellations.values().map(|c| c.churn_90d).sum::<usize>()).unwrap_or(0);
+            let churn = temporal
+                .map(|t| {
+                    t.constellations
+                        .values()
+                        .map(|c| c.churn_90d)
+                        .sum::<usize>()
+                })
+                .unwrap_or(0);
             let mass = format_mass(totals.total_lines);
 
             if has_temporal {
-                println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
+                println!(
+                    "║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
                     truncate_path(&galaxy.root, 37),
                     totals.stars.count,
                     totals.nebulae.doc_lines + totals.nebulae.comment_lines,
                     totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
                     mass,
                     churn,
-                    indicator);
+                    indicator
+                );
             } else {
-                println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
+                println!(
+                    "║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
                     truncate_path(&galaxy.root, 37),
                     totals.stars.count,
                     totals.nebulae.doc_lines + totals.nebulae.comment_lines,
                     totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
                     mass,
-                    indicator);
+                    indicator
+                );
             }
         }
         SurveyGrouping::Constellation => {
@@ -822,27 +967,35 @@ fn print_composition_table(
                 let indicator = format_health_indicator(rating);
                 let dark_matter = constellation.totals.dark_matter.unknown_regions
                     + constellation.totals.dark_matter.volcanic_regions;
-                let churn = temporal.and_then(|t| t.constellations.get(path).map(|c| c.churn_90d)).unwrap_or(0);
+                let churn = temporal
+                    .and_then(|t| t.constellations.get(path).map(|c| c.churn_90d))
+                    .unwrap_or(0);
                 let mass = format_mass(constellation.totals.total_lines);
 
                 // Use hierarchical display for nebula grouping visual depth
                 if has_temporal {
-                    println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
+                    println!(
+                        "║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
                         format_hierarchical_path(path, 37),
                         constellation.totals.stars.count,
-                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        constellation.totals.nebulae.doc_lines
+                            + constellation.totals.nebulae.comment_lines,
                         dark_matter,
                         mass,
                         churn,
-                        indicator);
+                        indicator
+                    );
                 } else {
-                    println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
+                    println!(
+                        "║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
                         format_hierarchical_path(path, 37),
                         constellation.totals.stars.count,
-                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        constellation.totals.nebulae.doc_lines
+                            + constellation.totals.nebulae.comment_lines,
                         dark_matter,
                         mass,
-                        indicator);
+                        indicator
+                    );
                 }
             }
         }
@@ -853,26 +1006,34 @@ fn print_composition_table(
                 let indicator = format_health_indicator(rating);
                 let dark_matter = constellation.totals.dark_matter.unknown_regions
                     + constellation.totals.dark_matter.volcanic_regions;
-                let churn = temporal.and_then(|t| t.constellations.get(path).map(|c| c.churn_90d)).unwrap_or(0);
+                let churn = temporal
+                    .and_then(|t| t.constellations.get(path).map(|c| c.churn_90d))
+                    .unwrap_or(0);
                 let mass = format_mass(constellation.totals.total_lines);
 
                 if has_temporal {
-                    println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
+                    println!(
+                        "║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
                         truncate_path(path, 37),
                         constellation.totals.stars.count,
-                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        constellation.totals.nebulae.doc_lines
+                            + constellation.totals.nebulae.comment_lines,
                         dark_matter,
                         mass,
                         churn,
-                        indicator);
+                        indicator
+                    );
                 } else {
-                    println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
+                    println!(
+                        "║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
                         truncate_path(path, 37),
                         constellation.totals.stars.count,
-                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        constellation.totals.nebulae.doc_lines
+                            + constellation.totals.nebulae.comment_lines,
                         dark_matter,
                         mass,
-                        indicator);
+                        indicator
+                    );
                 }
             }
         }
@@ -889,27 +1050,38 @@ fn print_composition_table(
     let totals = &galaxy.totals;
     let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
     let indicator = format_health_indicator(rating);
-    let total_churn = temporal.map(|t| t.constellations.values().map(|c| c.churn_90d).sum::<usize>()).unwrap_or(0);
+    let total_churn = temporal
+        .map(|t| {
+            t.constellations
+                .values()
+                .map(|c| c.churn_90d)
+                .sum::<usize>()
+        })
+        .unwrap_or(0);
     let total_mass = format_mass(totals.total_lines);
 
     if has_temporal {
-        println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
+        println!(
+            "║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:5} ║ {:21} ║",
             "TOTAL",
             totals.stars.count,
             totals.nebulae.doc_lines + totals.nebulae.comment_lines,
             totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
             total_mass,
             total_churn,
-            indicator);
+            indicator
+        );
         println!("╚═══════════════════════════════════════╩═══════╩════════╩════════╩═══════╩═══════╩═══════════════════════╝");
     } else {
-        println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
+        println!(
+            "║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
             "TOTAL",
             totals.stars.count,
             totals.nebulae.doc_lines + totals.nebulae.comment_lines,
             totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
             total_mass,
-            indicator);
+            indicator
+        );
         println!("╚═══════════════════════════════════════╩═══════╩════════╩════════╩═══════╩═════════════════╝");
     }
 
@@ -920,9 +1092,18 @@ fn print_composition_table(
     // Derived metrics
     println!();
     println!("Derived Metrics:");
-    println!("  Stellar Density: {:.1} stars/1k LOC", totals.derived.stellar_density);
-    println!("  Nebula Ratio:    {:.0}% documented", totals.derived.nebula_ratio * 100.0);
-    println!("  Health Score:    {:.0}/100", totals.derived.health_score * 100.0);
+    println!(
+        "  Stellar Density: {:.1} stars/1k LOC",
+        totals.derived.stellar_density
+    );
+    println!(
+        "  Nebula Ratio:    {:.0}% documented",
+        totals.derived.nebula_ratio * 100.0
+    );
+    println!(
+        "  Health Score:    {:.0}/100",
+        totals.derived.health_score * 100.0
+    );
 
     // Temporal metrics
     if let Some(tc) = temporal {
@@ -932,7 +1113,10 @@ fn print_composition_table(
         println!("  Total Events:    {} observations", tc.total_observations);
         println!("  Observers:       {} unique", tc.observer_count);
         if !tc.supernovas.is_empty() {
-            println!("  Supernovas:      {} detected (high churn)", tc.supernovas.len());
+            println!(
+                "  Supernovas:      {} detected (high churn)",
+                tc.supernovas.len()
+            );
         }
     }
 }
@@ -968,13 +1152,15 @@ fn print_composition_table<T>(
             let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
             let indicator = format_health_indicator(rating);
             let mass = format_mass(totals.total_lines);
-            println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
+            println!(
+                "║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
                 truncate_path(&galaxy.root, 37),
                 totals.stars.count,
                 totals.nebulae.doc_lines + totals.nebulae.comment_lines,
                 totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
                 mass,
-                indicator);
+                indicator
+            );
         }
         SurveyGrouping::Constellation | SurveyGrouping::Sector => {
             for (path, constellation) in &galaxy.constellations {
@@ -984,13 +1170,16 @@ fn print_composition_table<T>(
                     + constellation.totals.dark_matter.volcanic_regions;
                 let mass = format_mass(constellation.totals.total_lines);
                 // Use hierarchical display for nebula grouping visual depth
-                println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
+                println!(
+                    "║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
                     format_hierarchical_path(path, 37),
                     constellation.totals.stars.count,
-                    constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                    constellation.totals.nebulae.doc_lines
+                        + constellation.totals.nebulae.comment_lines,
                     dark_matter,
                     mass,
-                    indicator);
+                    indicator
+                );
             }
         }
     }
@@ -1000,21 +1189,33 @@ fn print_composition_table<T>(
     let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
     let indicator = format_health_indicator(rating);
     let total_mass = format_mass(totals.total_lines);
-    println!("║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
-        "TOTAL", totals.stars.count,
+    println!(
+        "║ {:37} ║ {:5} ║ {:6} ║ {:6} ║ {:5} ║ {:15} ║",
+        "TOTAL",
+        totals.stars.count,
         totals.nebulae.doc_lines + totals.nebulae.comment_lines,
         totals.dark_matter.unknown_regions + totals.dark_matter.volcanic_regions,
         total_mass,
-        indicator);
+        indicator
+    );
     println!("╚═══════════════════════════════════════╩═══════╩════════╩════════╩═══════╩═════════════════╝");
 
     println!();
     println!("Legend: star=Healthy  checkmark=Stable  warning=High Dark Matter  alert=Critical");
     println!();
     println!("Derived Metrics:");
-    println!("  Stellar Density: {:.1} stars/1k LOC", totals.derived.stellar_density);
-    println!("  Nebula Ratio:    {:.0}% documented", totals.derived.nebula_ratio * 100.0);
-    println!("  Health Score:    {:.0}/100", totals.derived.health_score * 100.0);
+    println!(
+        "  Stellar Density: {:.1} stars/1k LOC",
+        totals.derived.stellar_density
+    );
+    println!(
+        "  Nebula Ratio:    {:.0}% documented",
+        totals.derived.nebula_ratio * 100.0
+    );
+    println!(
+        "  Health Score:    {:.0}/100",
+        totals.derived.health_score * 100.0
+    );
 }
 
 /// Print health diagnostic report (with temporal data)
@@ -1034,7 +1235,11 @@ fn print_health_report(
     // Overall health
     let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
     let indicator = format_health_indicator(rating);
-    println!("Overall System Health: {} {}", indicator, rating.description());
+    println!(
+        "Overall System Health: {} {}",
+        indicator,
+        rating.description()
+    );
     println!();
 
     // SUPERNOVAS (Extreme recent activity) - Phase 2 Chronos Engine
@@ -1043,7 +1248,9 @@ fn print_health_report(
             if use_emoji() {
                 println!("🔥 SUPERNOVAS (Destabilizing refactors - >30 observations in 30 days):");
             } else {
-                println!("[!!] SUPERNOVAS (Destabilizing refactors - >30 observations in 30 days):");
+                println!(
+                    "[!!] SUPERNOVAS (Destabilizing refactors - >30 observations in 30 days):"
+                );
             }
             for nova in tc.supernovas.iter().take(10) {
                 println!("  - {} ({} observations)", nova.path, nova.observations_30d);
@@ -1085,8 +1292,13 @@ fn print_health_report(
     }
 
     // High Dark Matter constellations
-    let high_dark_matter: Vec<_> = galaxy.constellations.iter()
-        .filter(|(_, c)| c.rating == Some(HealthRating::HighDarkMatter) || c.rating == Some(HealthRating::Critical))
+    let high_dark_matter: Vec<_> = galaxy
+        .constellations
+        .iter()
+        .filter(|(_, c)| {
+            c.rating == Some(HealthRating::HighDarkMatter)
+                || c.rating == Some(HealthRating::Critical)
+        })
         .collect();
 
     if !high_dark_matter.is_empty() {
@@ -1112,15 +1324,19 @@ fn print_health_report(
                 println!("[*] ANCIENT STARS (Core files dormant > 2 years):");
             }
             for ancient in core_ancient.iter().take(10) {
-                println!("  - {} (dormant {} days, {} stars)",
-                    ancient.path, ancient.dormant_days, ancient.star_count);
+                println!(
+                    "  - {} (dormant {} days, {} stars)",
+                    ancient.path, ancient.dormant_days, ancient.star_count
+                );
             }
             println!();
         }
     }
 
     // Stellar Nurseries (high activity areas - based on file count and stars)
-    let mut nurseries: Vec<(&String, usize)> = galaxy.constellations.iter()
+    let mut nurseries: Vec<(&String, usize)> = galaxy
+        .constellations
+        .iter()
         .map(|(path, c)| (path, c.totals.stars.count))
         .filter(|(_, count)| *count > 10)
         .collect();
@@ -1138,11 +1354,26 @@ fn print_health_report(
     println!("─────────────────────────────────────────────────────────────────────────────────");
     println!("Summary Statistics:");
     println!("  Total Stars:          {}", galaxy.totals.stars.count);
-    println!("  Total Nebulae Lines:  {}", galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines);
-    println!("  Unknown Regions:      {}", galaxy.totals.dark_matter.unknown_regions);
-    println!("  Volcanic Depths:      {}", galaxy.totals.dark_matter.volcanic_regions);
-    println!("  Max Nesting Depth:    {}", galaxy.totals.dark_matter.max_nesting_depth);
-    println!("  Documentation Ratio:  {:.0}%", galaxy.totals.derived.nebula_ratio * 100.0);
+    println!(
+        "  Total Nebulae Lines:  {}",
+        galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines
+    );
+    println!(
+        "  Unknown Regions:      {}",
+        galaxy.totals.dark_matter.unknown_regions
+    );
+    println!(
+        "  Volcanic Depths:      {}",
+        galaxy.totals.dark_matter.volcanic_regions
+    );
+    println!(
+        "  Max Nesting Depth:    {}",
+        galaxy.totals.dark_matter.max_nesting_depth
+    );
+    println!(
+        "  Documentation Ratio:  {:.0}%",
+        galaxy.totals.derived.nebula_ratio * 100.0
+    );
 
     // Temporal statistics
     if let Some(tc) = temporal {
@@ -1152,9 +1383,11 @@ fn print_health_report(
         println!("  Total Observations:   {}", tc.total_observations);
         println!("  Unique Observers:     {}", tc.observer_count);
         println!("  Supernovas:           {}", tc.supernovas.len());
-        println!("  Ancient Stars:        {} ({} core)",
+        println!(
+            "  Ancient Stars:        {} ({} core)",
             tc.ancient_stars.len(),
-            tc.ancient_stars.iter().filter(|a| a.is_core).count());
+            tc.ancient_stars.iter().filter(|a| a.is_core).count()
+        );
     }
 }
 
@@ -1174,7 +1407,11 @@ fn print_health_report<T>(
 
     let rating = galaxy.rating.unwrap_or(HealthRating::Stable);
     let indicator = format_health_indicator(rating);
-    println!("Overall System Health: {} {}", indicator, rating.description());
+    println!(
+        "Overall System Health: {} {}",
+        indicator,
+        rating.description()
+    );
     println!();
 
     let mut red_giants: Vec<&str> = Vec::new();
@@ -1195,8 +1432,13 @@ fn print_health_report<T>(
         println!();
     }
 
-    let high_dark_matter: Vec<_> = galaxy.constellations.iter()
-        .filter(|(_, c)| c.rating == Some(HealthRating::HighDarkMatter) || c.rating == Some(HealthRating::Critical))
+    let high_dark_matter: Vec<_> = galaxy
+        .constellations
+        .iter()
+        .filter(|(_, c)| {
+            c.rating == Some(HealthRating::HighDarkMatter)
+                || c.rating == Some(HealthRating::Critical)
+        })
         .collect();
 
     if !high_dark_matter.is_empty() {
@@ -1212,7 +1454,9 @@ fn print_health_report<T>(
         println!();
     }
 
-    let mut nurseries: Vec<(&String, usize)> = galaxy.constellations.iter()
+    let mut nurseries: Vec<(&String, usize)> = galaxy
+        .constellations
+        .iter()
         .map(|(path, c)| (path, c.totals.stars.count))
         .filter(|(_, count)| *count > 10)
         .collect();
@@ -1229,11 +1473,26 @@ fn print_health_report<T>(
     println!("─────────────────────────────────────────────────────────────────────────────────");
     println!("Summary Statistics:");
     println!("  Total Stars:          {}", galaxy.totals.stars.count);
-    println!("  Total Nebulae Lines:  {}", galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines);
-    println!("  Unknown Regions:      {}", galaxy.totals.dark_matter.unknown_regions);
-    println!("  Volcanic Depths:      {}", galaxy.totals.dark_matter.volcanic_regions);
-    println!("  Max Nesting Depth:    {}", galaxy.totals.dark_matter.max_nesting_depth);
-    println!("  Documentation Ratio:  {:.0}%", galaxy.totals.derived.nebula_ratio * 100.0);
+    println!(
+        "  Total Nebulae Lines:  {}",
+        galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines
+    );
+    println!(
+        "  Unknown Regions:      {}",
+        galaxy.totals.dark_matter.unknown_regions
+    );
+    println!(
+        "  Volcanic Depths:      {}",
+        galaxy.totals.dark_matter.volcanic_regions
+    );
+    println!(
+        "  Max Nesting Depth:    {}",
+        galaxy.totals.dark_matter.max_nesting_depth
+    );
+    println!(
+        "  Documentation Ratio:  {:.0}%",
+        galaxy.totals.derived.nebula_ratio * 100.0
+    );
 }
 
 // =============================================================================
@@ -1264,11 +1523,15 @@ fn print_evolution_report(
             format!("{} days", dr.galaxy_age_days)
         };
 
-        let big_bang = dr.big_bang_date.map(|d| d.format("%Y-%m-%d").to_string())
+        let big_bang = dr
+            .big_bang_date
+            .map(|d| d.format("%Y-%m-%d").to_string())
             .unwrap_or_else(|| "Unknown".to_string());
 
         println!("🌌 GALAXY OVERVIEW");
-        println!("─────────────────────────────────────────────────────────────────────────────────");
+        println!(
+            "─────────────────────────────────────────────────────────────────────────────────"
+        );
         println!("  Big Bang (First Commit):   {}", big_bang);
         println!("  Galaxy Age:                {}", age_display);
         println!("  Total Logic Stars:         {}", dr.total_stars);
@@ -1276,27 +1539,51 @@ fn print_evolution_report(
 
         // Stellar drift indicators
         println!("📊 STELLAR DRIFT METRICS");
-        println!("─────────────────────────────────────────────────────────────────────────────────");
-        println!("  Drift Rate (6 months):     {:.1}%", dr.stellar_drift_percent);
-        println!("  Annual Drift Rate:         {:.1}% / year", dr.drift_rate_per_year);
+        println!(
+            "─────────────────────────────────────────────────────────────────────────────────"
+        );
+        println!(
+            "  Drift Rate (6 months):     {:.1}%",
+            dr.stellar_drift_percent
+        );
+        println!(
+            "  Annual Drift Rate:         {:.1}% / year",
+            dr.drift_rate_per_year
+        );
         println!();
 
         // Star distribution
         let ancient_pct = if dr.total_stars > 0 {
             dr.ancient_star_total as f64 / dr.total_stars as f64 * 100.0
-        } else { 0.0 };
+        } else {
+            0.0
+        };
         let new_pct = if dr.total_stars > 0 {
             dr.new_star_total as f64 / dr.total_stars as f64 * 100.0
-        } else { 0.0 };
+        } else {
+            0.0
+        };
 
         if use_emoji() {
-            println!("  🌟 Ancient Stars (>2y):    {} ({:.0}%)", dr.ancient_star_total, ancient_pct);
-            println!("  🌠 New Stars (<90d):       {} ({:.0}%)", dr.new_star_total, new_pct);
+            println!(
+                "  🌟 Ancient Stars (>2y):    {} ({:.0}%)",
+                dr.ancient_star_total, ancient_pct
+            );
+            println!(
+                "  🌠 New Stars (<90d):       {} ({:.0}%)",
+                dr.new_star_total, new_pct
+            );
             println!("  ⭐ Active Stars:           {}", dr.active_star_total);
             println!("  💤 Dormant Stars:          {}", dr.dormant_star_total);
         } else {
-            println!("  [*] Ancient Stars (>2y):   {} ({:.0}%)", dr.ancient_star_total, ancient_pct);
-            println!("  [+] New Stars (<90d):      {} ({:.0}%)", dr.new_star_total, new_pct);
+            println!(
+                "  [*] Ancient Stars (>2y):   {} ({:.0}%)",
+                dr.ancient_star_total, ancient_pct
+            );
+            println!(
+                "  [+] New Stars (<90d):      {} ({:.0}%)",
+                dr.new_star_total, new_pct
+            );
             println!("  [o] Active Stars:          {}", dr.active_star_total);
             println!("  [-] Dormant Stars:         {}", dr.dormant_star_total);
         }
@@ -1338,9 +1625,13 @@ fn print_evolution_report(
             } else {
                 println!("[*] CONSTELLATION LIFE CYCLES");
             }
-            println!("─────────────────────────────────────────────────────────────────────────────────");
-            println!("{:<30} {:>6} {:>6} {:>8} {:>10} {:>12}",
-                "Constellation", "Stars", "New", "Ancient", "Churn", "Drift/yr");
+            println!(
+                "─────────────────────────────────────────────────────────────────────────────────"
+            );
+            println!(
+                "{:<30} {:>6} {:>6} {:>8} {:>10} {:>12}",
+                "Constellation", "Stars", "New", "Ancient", "Churn", "Drift/yr"
+            );
             println!("{}", "─".repeat(80));
 
             for (path, evo) in &dr.constellations {
@@ -1350,8 +1641,10 @@ fn print_evolution_report(
                     path.clone()
                 };
 
-                let total_stars = evo.new_star_count + evo.ancient_star_count
-                    + evo.active_star_count + evo.dormant_star_count;
+                let total_stars = evo.new_star_count
+                    + evo.ancient_star_count
+                    + evo.active_star_count
+                    + evo.dormant_star_count;
 
                 let churn_display = match evo.volcanic_churn {
                     ChurnClassification::Dormant => "Dormant",
@@ -1369,7 +1662,8 @@ fn print_evolution_report(
                     } else if evo.new_star_count > evo.ancient_star_count {
                         "📈"
                     } else if evo.volcanic_churn == ChurnClassification::High
-                           || evo.volcanic_churn == ChurnClassification::Supernova {
+                        || evo.volcanic_churn == ChurnClassification::Supernova
+                    {
                         "🌋"
                     } else {
                         "📊"
@@ -1382,21 +1676,24 @@ fn print_evolution_report(
                     } else if evo.new_star_count > evo.ancient_star_count {
                         "[^]"
                     } else if evo.volcanic_churn == ChurnClassification::High
-                           || evo.volcanic_churn == ChurnClassification::Supernova {
+                        || evo.volcanic_churn == ChurnClassification::Supernova
+                    {
                         "[!]"
                     } else {
                         "[-]"
                     }
                 };
 
-                println!("{} {:<28} {:>6} {:>6} {:>8} {:>10} {:>10.1}%",
+                println!(
+                    "{} {:<28} {:>6} {:>6} {:>8} {:>10} {:>10.1}%",
                     lifecycle,
                     display_path,
                     total_stars,
                     evo.new_star_count,
                     evo.ancient_star_count,
                     churn_display,
-                    evo.drift_rate);
+                    evo.drift_rate
+                );
             }
             println!();
         }
@@ -1408,11 +1705,21 @@ fn print_evolution_report(
             } else {
                 println!("[+] NEW STARS (Recently Added Logic)");
             }
-            println!("─────────────────────────────────────────────────────────────────────────────────");
+            println!(
+                "─────────────────────────────────────────────────────────────────────────────────"
+            );
             for star in dr.new_stars.iter().take(10) {
-                let expansion_marker = if star.is_expansion { "+" } else if use_emoji() { "✦" } else { "*" };
-                println!("  {} {} ({} days old, {} stars)",
-                    expansion_marker, star.path, star.age_days, star.star_count);
+                let expansion_marker = if star.is_expansion {
+                    "+"
+                } else if use_emoji() {
+                    "✦"
+                } else {
+                    "*"
+                };
+                println!(
+                    "  {} {} ({} days old, {} stars)",
+                    expansion_marker, star.path, star.age_days, star.star_count
+                );
             }
             if dr.new_stars.len() > 10 {
                 println!("  ... and {} more new stars", dr.new_stars.len() - 10);
@@ -1422,9 +1729,7 @@ fn print_evolution_report(
 
         // Ancient Stars listing (top 10)
         if !dr.ancient_stars.is_empty() {
-            let core_ancient: Vec<_> = dr.ancient_stars.iter()
-                .filter(|a| a.is_core)
-                .collect();
+            let core_ancient: Vec<_> = dr.ancient_stars.iter().filter(|a| a.is_core).collect();
             if !core_ancient.is_empty() {
                 if use_emoji() {
                     println!("🌟 ANCIENT STARS (Stable Core)");
@@ -1434,11 +1739,16 @@ fn print_evolution_report(
                 println!("─────────────────────────────────────────────────────────────────────────────────");
                 for star in core_ancient.iter().take(10) {
                     let marker = if use_emoji() { "📜" } else { ">" };
-                    println!("  {} {} (dormant {} days, {} stars)",
-                        marker, star.path, star.dormant_days, star.star_count);
+                    println!(
+                        "  {} {} (dormant {} days, {} stars)",
+                        marker, star.path, star.dormant_days, star.star_count
+                    );
                 }
                 if core_ancient.len() > 10 {
-                    println!("  ... and {} more ancient core stars", core_ancient.len() - 10);
+                    println!(
+                        "  ... and {} more ancient core stars",
+                        core_ancient.len() - 10
+                    );
                 }
                 println!();
             }
@@ -1451,11 +1761,15 @@ fn print_evolution_report(
             } else {
                 println!("[!!] SUPERNOVAS (Destabilizing Activity)");
             }
-            println!("─────────────────────────────────────────────────────────────────────────────────");
+            println!(
+                "─────────────────────────────────────────────────────────────────────────────────"
+            );
             for nova in dr.supernovas.iter().take(5) {
                 let marker = if use_emoji() { "💥" } else { "!" };
-                println!("  {} {} ({} observations in 30d)",
-                    marker, nova.path, nova.observations_30d);
+                println!(
+                    "  {} {} ({} observations in 30d)",
+                    marker, nova.path, nova.observations_30d
+                );
             }
             println!();
         }
@@ -1472,14 +1786,18 @@ fn print_evolution_report(
 
     // Summary from temporal census
     if let Some(tc) = temporal {
-        println!("─────────────────────────────────────────────────────────────────────────────────");
+        println!(
+            "─────────────────────────────────────────────────────────────────────────────────"
+        );
         println!("TEMPORAL SUMMARY (Chronos Engine):");
         println!("  Total Observations:   {}", tc.total_observations);
         println!("  Unique Observers:     {}", tc.observer_count);
         println!("  Supernovas Detected:  {}", tc.supernovas.len());
-        println!("  Ancient Stars Found:  {} ({} core)",
+        println!(
+            "  Ancient Stars Found:  {} ({} core)",
             tc.ancient_stars.len(),
-            tc.ancient_stars.iter().filter(|a| a.is_core).count());
+            tc.ancient_stars.iter().filter(|a| a.is_core).count()
+        );
     }
 
     // Galaxy-level summary
@@ -1489,7 +1807,10 @@ fn print_evolution_report(
     println!("  Total Files:          {}", galaxy.total_files);
     println!("  Total Stars:          {}", galaxy.totals.stars.count);
     println!("  Constellations:       {}", galaxy.constellations.len());
-    println!("  Health Score:         {:.0}/100", galaxy.totals.derived.health_score * 100.0);
+    println!(
+        "  Health Score:         {:.0}/100",
+        galaxy.totals.derived.health_score * 100.0
+    );
 }
 
 /// Print evolution report without temporal data (static galaxy fallback)
@@ -1530,8 +1851,10 @@ fn print_evolution_report_static(galaxy: &pm_encoder::core::GalaxyCensus) {
         println!("[*] CONSTELLATION SUMMARY");
     }
     println!("─────────────────────────────────────────────────────────────────────────────────");
-    println!("{:<40} {:>10} {:>10} {:>10}",
-        "Constellation", "Files", "Stars", "Health");
+    println!(
+        "{:<40} {:>10} {:>10} {:>10}",
+        "Constellation", "Files", "Stars", "Health"
+    );
     println!("{}", "─".repeat(70));
 
     let mut sorted_constellations: Vec<_> = galaxy.constellations.iter().collect();
@@ -1544,19 +1867,22 @@ fn print_evolution_report_static(galaxy: &pm_encoder::core::GalaxyCensus) {
             (*path).clone()
         };
 
-        let health = constellation.rating
+        let health = constellation
+            .rating
             .map(|r| r.description())
             .unwrap_or("Unknown");
 
-        println!("{:<40} {:>10} {:>10} {:>10}",
-            display_path,
-            constellation.file_count,
-            constellation.totals.stars.count,
-            health);
+        println!(
+            "{:<40} {:>10} {:>10} {:>10}",
+            display_path, constellation.file_count, constellation.totals.stars.count, health
+        );
     }
 
     if galaxy.constellations.len() > 15 {
-        println!("  ... and {} more constellations", galaxy.constellations.len() - 15);
+        println!(
+            "  ... and {} more constellations",
+            galaxy.constellations.len() - 15
+        );
     }
 
     println!();
@@ -1575,7 +1901,9 @@ fn print_census_markdown(
     println!("# Celestial Census Report");
     println!();
 
-    let rating = galaxy.rating.unwrap_or(pm_encoder::core::HealthRating::Stable);
+    let rating = galaxy
+        .rating
+        .unwrap_or(pm_encoder::core::HealthRating::Stable);
     let has_temporal = temporal.is_some();
 
     match mode {
@@ -1584,15 +1912,21 @@ fn print_census_markdown(
             println!();
 
             if has_temporal {
-                println!("| Constellation | Stars | Nebulae | Dark Matter | Churn (90d) | Health |");
-                println!("|---------------|-------|---------|-------------|-------------|--------|");
+                println!(
+                    "| Constellation | Stars | Nebulae | Dark Matter | Churn (90d) | Health |"
+                );
+                println!(
+                    "|---------------|-------|---------|-------------|-------------|--------|"
+                );
             } else {
                 println!("| Constellation | Stars | Nebulae | Dark Matter | Health |");
                 println!("|---------------|-------|---------|-------------|--------|");
             }
 
             for (path, constellation) in &galaxy.constellations {
-                let health = constellation.rating.unwrap_or(pm_encoder::core::HealthRating::Stable);
+                let health = constellation
+                    .rating
+                    .unwrap_or(pm_encoder::core::HealthRating::Stable);
                 let dm = constellation.totals.dark_matter.unknown_regions
                     + constellation.totals.dark_matter.volcanic_regions;
 
@@ -1600,45 +1934,66 @@ fn print_census_markdown(
                     let churn = temporal
                         .and_then(|t| t.constellations.get(path).map(|c| c.churn_90d))
                         .unwrap_or(0);
-                    println!("| {} | {} | {} | {} | {} | {} |",
+                    println!(
+                        "| {} | {} | {} | {} | {} | {} |",
                         path,
                         constellation.totals.stars.count,
-                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        constellation.totals.nebulae.doc_lines
+                            + constellation.totals.nebulae.comment_lines,
                         dm,
                         churn,
-                        health.description());
+                        health.description()
+                    );
                 } else {
-                    println!("| {} | {} | {} | {} | {} |",
+                    println!(
+                        "| {} | {} | {} | {} | {} |",
                         path,
                         constellation.totals.stars.count,
-                        constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                        constellation.totals.nebulae.doc_lines
+                            + constellation.totals.nebulae.comment_lines,
                         dm,
-                        health.description());
+                        health.description()
+                    );
                 }
             }
 
             let total_churn = temporal.map(|t| t.total_observations).unwrap_or(0);
             if has_temporal {
-                println!("| **TOTAL** | **{}** | **{}** | **{}** | **{}** | **{}** |",
+                println!(
+                    "| **TOTAL** | **{}** | **{}** | **{}** | **{}** | **{}** |",
                     galaxy.totals.stars.count,
                     galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines,
-                    galaxy.totals.dark_matter.unknown_regions + galaxy.totals.dark_matter.volcanic_regions,
+                    galaxy.totals.dark_matter.unknown_regions
+                        + galaxy.totals.dark_matter.volcanic_regions,
                     total_churn,
-                    rating.description());
+                    rating.description()
+                );
             } else {
-                println!("| **TOTAL** | **{}** | **{}** | **{}** | **{}** |",
+                println!(
+                    "| **TOTAL** | **{}** | **{}** | **{}** | **{}** |",
                     galaxy.totals.stars.count,
                     galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines,
-                    galaxy.totals.dark_matter.unknown_regions + galaxy.totals.dark_matter.volcanic_regions,
-                    rating.description());
+                    galaxy.totals.dark_matter.unknown_regions
+                        + galaxy.totals.dark_matter.volcanic_regions,
+                    rating.description()
+                );
             }
 
             println!();
             println!("## Derived Metrics");
             println!();
-            println!("- **Stellar Density**: {:.1} stars/1k LOC", galaxy.totals.derived.stellar_density);
-            println!("- **Nebula Ratio**: {:.0}% documented", galaxy.totals.derived.nebula_ratio * 100.0);
-            println!("- **Health Score**: {:.0}/100", galaxy.totals.derived.health_score * 100.0);
+            println!(
+                "- **Stellar Density**: {:.1} stars/1k LOC",
+                galaxy.totals.derived.stellar_density
+            );
+            println!(
+                "- **Nebula Ratio**: {:.0}% documented",
+                galaxy.totals.derived.nebula_ratio * 100.0
+            );
+            println!(
+                "- **Health Score**: {:.0}/100",
+                galaxy.totals.derived.health_score * 100.0
+            );
 
             // Temporal metrics section
             if let Some(tc) = temporal {
@@ -1659,7 +2014,11 @@ fn print_census_markdown(
             }
         }
         SurveyMode::Health => {
-            println!("## Health Status: {} {}", rating.indicator(), rating.description());
+            println!(
+                "## Health Status: {} {}",
+                rating.indicator(),
+                rating.description()
+            );
             println!();
 
             // Supernovas (extreme recent activity)
@@ -1667,7 +2026,9 @@ fn print_census_markdown(
                 if !tc.supernovas.is_empty() {
                     println!("### 🔥 Supernovas (Destabilizing refactors)");
                     println!();
-                    println!("> Files with >30 observations in 30 days - potential destabilization.");
+                    println!(
+                        "> Files with >30 observations in 30 days - potential destabilization."
+                    );
                     println!();
                     for nova in tc.supernovas.iter().take(10) {
                         println!("- `{}` ({} observations)", nova.path, nova.observations_30d);
@@ -1701,8 +2062,13 @@ fn print_census_markdown(
                     println!("> High churn combined with high dark matter ratio.");
                     println!();
                     for shift in tc.tectonic_shifts.iter().take(10) {
-                        println!("- `{}` (churn: {}, dark matter: {:.0}%, risk: {:.0}%)",
-                            shift.path, shift.churn_90d, shift.dark_matter_ratio * 100.0, shift.risk_score * 100.0);
+                        println!(
+                            "- `{}` (churn: {}, dark matter: {:.0}%, risk: {:.0}%)",
+                            shift.path,
+                            shift.churn_90d,
+                            shift.dark_matter_ratio * 100.0,
+                            shift.risk_score * 100.0
+                        );
                     }
                     println!();
                 }
@@ -1717,8 +2083,10 @@ fn print_census_markdown(
                     println!("> Core files dormant for >2 years - may need archaeological review.");
                     println!();
                     for ancient in core_ancient.iter().take(10) {
-                        println!("- `{}` (dormant {} days, {} stars)",
-                            ancient.path, ancient.dormant_days, ancient.star_count);
+                        println!(
+                            "- `{}` (dormant {} days, {} stars)",
+                            ancient.path, ancient.dormant_days, ancient.star_count
+                        );
                     }
                     println!();
                 }
@@ -1730,9 +2098,18 @@ fn print_census_markdown(
             println!("| Metric | Value |");
             println!("|--------|-------|");
             println!("| Total Stars | {} |", galaxy.totals.stars.count);
-            println!("| Nebulae Lines | {} |", galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines);
-            println!("| Unknown Regions | {} |", galaxy.totals.dark_matter.unknown_regions);
-            println!("| Documentation | {:.0}% |", galaxy.totals.derived.nebula_ratio * 100.0);
+            println!(
+                "| Nebulae Lines | {} |",
+                galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines
+            );
+            println!(
+                "| Unknown Regions | {} |",
+                galaxy.totals.dark_matter.unknown_regions
+            );
+            println!(
+                "| Documentation | {:.0}% |",
+                galaxy.totals.derived.nebula_ratio * 100.0
+            );
 
             // Temporal statistics
             if let Some(tc) = temporal {
@@ -1747,7 +2124,11 @@ fn print_census_markdown(
                 println!("| Supernovas | {} |", tc.supernovas.len());
                 println!("| Tectonic Shifts | {} |", tc.tectonic_shifts.len());
                 let core_count = tc.ancient_stars.iter().filter(|a| a.is_core).count();
-                println!("| Ancient Stars | {} ({} core) |", tc.ancient_stars.len(), core_count);
+                println!(
+                    "| Ancient Stars | {} ({} core) |",
+                    tc.ancient_stars.len(),
+                    core_count
+                );
             }
         }
         SurveyMode::Evolution => {
@@ -1773,7 +2154,10 @@ fn print_census_markdown(
                 println!("| Total Observations | {} |", tc.total_observations);
                 let ancient_count = tc.ancient_stars.len();
                 let core_count = tc.ancient_stars.iter().filter(|a| a.is_core).count();
-                println!("| Ancient Stars | {} ({} core) |", ancient_count, core_count);
+                println!(
+                    "| Ancient Stars | {} ({} core) |",
+                    ancient_count, core_count
+                );
             }
         }
     }
@@ -1781,11 +2165,17 @@ fn print_census_markdown(
 
 /// Print census report in markdown format (non-temporal fallback)
 #[cfg(not(feature = "temporal"))]
-fn print_census_markdown<T>(galaxy: &pm_encoder::core::GalaxyCensus, mode: SurveyMode, _temporal: Option<&T>) {
+fn print_census_markdown<T>(
+    galaxy: &pm_encoder::core::GalaxyCensus,
+    mode: SurveyMode,
+    _temporal: Option<&T>,
+) {
     println!("# Celestial Census Report");
     println!();
 
-    let rating = galaxy.rating.unwrap_or(pm_encoder::core::HealthRating::Stable);
+    let rating = galaxy
+        .rating
+        .unwrap_or(pm_encoder::core::HealthRating::Stable);
 
     match mode {
         SurveyMode::Composition => {
@@ -1795,32 +2185,53 @@ fn print_census_markdown<T>(galaxy: &pm_encoder::core::GalaxyCensus, mode: Surve
             println!("|---------------|-------|---------|-------------|--------|");
 
             for (path, constellation) in &galaxy.constellations {
-                let health = constellation.rating.unwrap_or(pm_encoder::core::HealthRating::Stable);
+                let health = constellation
+                    .rating
+                    .unwrap_or(pm_encoder::core::HealthRating::Stable);
                 let dm = constellation.totals.dark_matter.unknown_regions
                     + constellation.totals.dark_matter.volcanic_regions;
-                println!("| {} | {} | {} | {} | {} |",
+                println!(
+                    "| {} | {} | {} | {} | {} |",
                     path,
                     constellation.totals.stars.count,
-                    constellation.totals.nebulae.doc_lines + constellation.totals.nebulae.comment_lines,
+                    constellation.totals.nebulae.doc_lines
+                        + constellation.totals.nebulae.comment_lines,
                     dm,
-                    health.description());
+                    health.description()
+                );
             }
 
-            println!("| **TOTAL** | **{}** | **{}** | **{}** | **{}** |",
+            println!(
+                "| **TOTAL** | **{}** | **{}** | **{}** | **{}** |",
                 galaxy.totals.stars.count,
                 galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines,
-                galaxy.totals.dark_matter.unknown_regions + galaxy.totals.dark_matter.volcanic_regions,
-                rating.description());
+                galaxy.totals.dark_matter.unknown_regions
+                    + galaxy.totals.dark_matter.volcanic_regions,
+                rating.description()
+            );
 
             println!();
             println!("## Derived Metrics");
             println!();
-            println!("- **Stellar Density**: {:.1} stars/1k LOC", galaxy.totals.derived.stellar_density);
-            println!("- **Nebula Ratio**: {:.0}% documented", galaxy.totals.derived.nebula_ratio * 100.0);
-            println!("- **Health Score**: {:.0}/100", galaxy.totals.derived.health_score * 100.0);
+            println!(
+                "- **Stellar Density**: {:.1} stars/1k LOC",
+                galaxy.totals.derived.stellar_density
+            );
+            println!(
+                "- **Nebula Ratio**: {:.0}% documented",
+                galaxy.totals.derived.nebula_ratio * 100.0
+            );
+            println!(
+                "- **Health Score**: {:.0}/100",
+                galaxy.totals.derived.health_score * 100.0
+            );
         }
         SurveyMode::Health => {
-            println!("## Health Status: {} {}", rating.indicator(), rating.description());
+            println!(
+                "## Health Status: {} {}",
+                rating.indicator(),
+                rating.description()
+            );
             println!();
 
             // Red Giants
@@ -1846,9 +2257,18 @@ fn print_census_markdown<T>(galaxy: &pm_encoder::core::GalaxyCensus, mode: Surve
             println!("| Metric | Value |");
             println!("|--------|-------|");
             println!("| Total Stars | {} |", galaxy.totals.stars.count);
-            println!("| Nebulae Lines | {} |", galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines);
-            println!("| Unknown Regions | {} |", galaxy.totals.dark_matter.unknown_regions);
-            println!("| Documentation | {:.0}% |", galaxy.totals.derived.nebula_ratio * 100.0);
+            println!(
+                "| Nebulae Lines | {} |",
+                galaxy.totals.nebulae.doc_lines + galaxy.totals.nebulae.comment_lines
+            );
+            println!(
+                "| Unknown Regions | {} |",
+                galaxy.totals.dark_matter.unknown_regions
+            );
+            println!(
+                "| Documentation | {:.0}% |",
+                galaxy.totals.derived.nebula_ratio * 100.0
+            );
         }
         SurveyMode::Evolution => {
             // Evolution mode without temporal feature shows static summary
@@ -1869,7 +2289,10 @@ fn print_census_markdown<T>(galaxy: &pm_encoder::core::GalaxyCensus, mode: Surve
             println!("| Total Files | {} |", galaxy.total_files);
             println!("| Total Stars | {} |", galaxy.totals.stars.count);
             println!("| Constellations | {} |", galaxy.constellations.len());
-            println!("| Health Score | {:.0}/100 |", galaxy.totals.derived.health_score * 100.0);
+            println!(
+                "| Health Score | {:.0}/100 |",
+                galaxy.totals.derived.health_score * 100.0
+            );
         }
     }
 }
@@ -1888,8 +2311,11 @@ fn terminal_supports_emoji() -> bool {
     }
     if let Ok(term) = std::env::var("TERM") {
         // xterm-256color, alacritty, kitty, wezterm are modern
-        if term.contains("256color") || term.contains("kitty")
-            || term.contains("alacritty") || term.contains("wezterm") {
+        if term.contains("256color")
+            || term.contains("kitty")
+            || term.contains("alacritty")
+            || term.contains("wezterm")
+        {
             return true;
         }
         // Dumb terminals, basic SSH, screen without 256color support
@@ -1960,7 +2386,11 @@ fn format_hierarchical_path(path: &str, max_len: usize) -> String {
         if max_name_len < 4 {
             truncate_path(path, max_len)
         } else {
-            format!("{}...{}", indent, &last_component[last_component.len().saturating_sub(max_name_len - 3)..])
+            format!(
+                "{}...{}",
+                indent,
+                &last_component[last_component.len().saturating_sub(max_name_len - 3)..]
+            )
         }
     }
 }
@@ -1986,11 +2416,11 @@ fn print_context_health(output: &str, file_count: usize) {
 
     // Estimate content tokens (exclude markers and metadata)
     // Content is roughly the actual file content vs formatting overhead
-    let marker_overhead = output.matches("+++++++++").count() * 20 +
-                         output.matches("---------").count() * 20 +
-                         output.matches("TRUNCATED").count() * 50 +
-                         output.matches("<file").count() * 30 +
-                         output.matches("</file>").count() * 10;
+    let marker_overhead = output.matches("+++++++++").count() * 20
+        + output.matches("---------").count() * 20
+        + output.matches("TRUNCATED").count() * 50
+        + output.matches("<file").count() * 30
+        + output.matches("</file>").count() * 10;
     let content_tokens = total_tokens.saturating_sub(marker_overhead / 4);
 
     // Token efficiency (content / total)
@@ -2023,13 +2453,13 @@ fn print_context_health(output: &str, file_count: usize) {
 /// Used by Microscope Auto-Focus to find the correct project root when given a file path.
 fn find_project_root(start: &PathBuf) -> Option<PathBuf> {
     let markers = [
-        ".git",           // Git repository
-        "Cargo.toml",     // Rust
-        "package.json",   // Node.js
-        "pyproject.toml", // Python
-        "go.mod",         // Go
-        "pom.xml",        // Java Maven
-        "build.gradle",   // Java Gradle
+        ".git",                    // Git repository
+        "Cargo.toml",              // Rust
+        "package.json",            // Node.js
+        "pyproject.toml",          // Python
+        "go.mod",                  // Go
+        "pom.xml",                 // Java Maven
+        "build.gradle",            // Java Gradle
         ".pm_encoder_config.json", // pm_encoder config
     ];
 
@@ -2160,7 +2590,10 @@ pub fn run() {
         };
 
         if !project_root.exists() || !project_root.is_dir() {
-            eprintln!("Error: Project root '{}' must be a valid directory", project_root.display());
+            eprintln!(
+                "Error: Project root '{}' must be a valid directory",
+                project_root.display()
+            );
             std::process::exit(1);
         }
 
@@ -2179,7 +2612,9 @@ pub fn run() {
 
     // Handle --journal (view exploration history)
     if cli.journal {
-        let journal_root = cli.project_root.clone()
+        let journal_root = cli
+            .project_root
+            .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
         let journal = ObserversJournal::load(&journal_root);
@@ -2189,14 +2624,19 @@ pub fn run() {
 
     // Handle --journal-clear (reset journal)
     if cli.journal_clear {
-        let journal_root = cli.project_root.clone()
+        let journal_root = cli
+            .project_root
+            .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
         let journal = ObserversJournal::new();
         match journal.save(&journal_root) {
             Ok(_) => {
                 eprintln!("📓 Journal cleared. A new chapter begins.");
-                eprintln!("   Path: {}", ObserversJournal::default_path(&journal_root).display());
+                eprintln!(
+                    "   Path: {}",
+                    ObserversJournal::default_path(&journal_root).display()
+                );
             }
             Err(e) => {
                 eprintln!("Error clearing journal: {}", e);
@@ -2208,7 +2648,9 @@ pub fn run() {
 
     // Handle --mark PATH (mark a star as important)
     if let Some(path_to_mark) = &cli.mark {
-        let journal_root = cli.project_root.clone()
+        let journal_root = cli
+            .project_root
+            .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
         let mut journal = ObserversJournal::load(&journal_root);
@@ -2244,11 +2686,16 @@ pub fn run() {
 
     // Handle --survey (code health survey)
     if let Some(survey_mode) = cli.survey {
-        let survey_root = cli.project_root.clone()
+        let survey_root = cli
+            .project_root
+            .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
         if !survey_root.exists() || !survey_root.is_dir() {
-            eprintln!("Error: Survey path '{}' must be a valid directory", survey_root.display());
+            eprintln!(
+                "Error: Survey path '{}' must be a valid directory",
+                survey_root.display()
+            );
             std::process::exit(1);
         }
 
@@ -2259,11 +2706,16 @@ pub fn run() {
 
     // Handle --stats (tokei-style LOC statistics)
     if cli.stats {
-        let stats_root = cli.project_root.clone()
+        let stats_root = cli
+            .project_root
+            .clone()
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
         if !stats_root.exists() || !stats_root.is_dir() {
-            eprintln!("Error: Stats path '{}' must be a valid directory", stats_root.display());
+            eprintln!(
+                "Error: Stats path '{}' must be a valid directory",
+                stats_root.display()
+            );
             std::process::exit(1);
         }
 
@@ -2296,11 +2748,13 @@ pub fn run() {
     let (project_root, auto_zoom_target) = if project_root.is_file() {
         // Auto-focus: path is a file, switch to zoom mode
         // Canonicalize to get absolute path for accurate root detection
-        let file_path = project_root.canonicalize()
+        let file_path = project_root
+            .canonicalize()
             .unwrap_or_else(|_| project_root.clone());
 
         // Find project root by looking for common markers or use parent directory
-        let parent = file_path.parent()
+        let parent = file_path
+            .parent()
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
@@ -2308,7 +2762,8 @@ pub fn run() {
         let actual_root = find_project_root(&parent).unwrap_or(parent);
 
         // Calculate relative path from project root to file
-        let relative_path = file_path.strip_prefix(&actual_root)
+        let relative_path = file_path
+            .strip_prefix(&actual_root)
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| file_path.display().to_string());
 
@@ -2323,7 +2778,10 @@ pub fn run() {
     };
 
     if !project_root.is_dir() {
-        eprintln!("Error: Path '{}' is not a directory", project_root.display());
+        eprintln!(
+            "Error: Path '{}' is not a directory",
+            project_root.display()
+        );
         std::process::exit(1);
     }
 
@@ -2366,14 +2824,16 @@ pub fn run() {
 
     // Handle --explore command (Intent-Driven Exploration v2.4.0)
     if let Some(intent_str) = &cli.explore {
-        use pm_encoder::core::{IntentExplorer, ExplorerConfig, ExplorationIntent};
+        use pm_encoder::core::{ExplorationIntent, ExplorerConfig, IntentExplorer};
 
         // Parse intent
         let intent: ExplorationIntent = match intent_str.parse() {
             Ok(i) => i,
             Err(e) => {
                 eprintln!("Error: {}", e);
-                eprintln!("Valid intents: business-logic, debugging, onboarding, security, migration");
+                eprintln!(
+                    "Valid intents: business-logic, debugging, onboarding, security, migration"
+                );
                 std::process::exit(1);
             }
         };
@@ -2400,7 +2860,9 @@ pub fn run() {
                 // Write to file or stdout
                 if let Some(output_path) = &cli.output {
                     match std::fs::write(output_path, &output) {
-                        Ok(_) => eprintln!("Exploration output written to: {}", output_path.display()),
+                        Ok(_) => {
+                            eprintln!("Exploration output written to: {}", output_path.display())
+                        }
                         Err(e) => {
                             eprintln!("Error writing output: {}", e);
                             std::process::exit(1);
@@ -2598,7 +3060,10 @@ pub fn run() {
                                 eprintln!("    - {} ({:?})", target, depth);
                             }
                             if session.history.can_undo() {
-                                eprintln!("  History: {} entries (undo available)", session.history.entries().len());
+                                eprintln!(
+                                    "  History: {} entries (undo available)",
+                                    session.history.entries().len()
+                                );
                             }
                         } else {
                             eprintln!("No active session.");
@@ -2660,9 +3125,16 @@ pub fn run() {
         match ZoomSessionStore::with_persistence(&session_store_path, |store| {
             if let Some(session) = store.active_mut() {
                 if let Some(entry) = session.history.undo() {
-                    eprintln!("Undo: {:?} {} on {}", entry.direction,
-                        if matches!(entry.direction, pm_encoder::core::ZoomDirection::Expand) { "expand" } else { "collapse" },
-                        entry.target);
+                    eprintln!(
+                        "Undo: {:?} {} on {}",
+                        entry.direction,
+                        if matches!(entry.direction, pm_encoder::core::ZoomDirection::Expand) {
+                            "expand"
+                        } else {
+                            "collapse"
+                        },
+                        entry.target
+                    );
                     true
                 } else {
                     eprintln!("Nothing to undo");
@@ -2707,7 +3179,7 @@ pub fn run() {
 
     // Zoom collapse (bidirectional zoom)
     if let Some(collapse_str) = &cli.zoom_collapse {
-        use pm_encoder::core::{ZoomTarget, ZoomSessionStore};
+        use pm_encoder::core::{ZoomSessionStore, ZoomTarget};
         let session_store_path = ZoomSessionStore::default_path(&project_root);
 
         match ZoomTarget::parse(collapse_str) {
@@ -2764,12 +3236,14 @@ pub fn run() {
 
         let resolved_file: Option<String> = match &zoom_config.target {
             ZoomTarget::Function(name) => {
-                let resolver = SymbolResolver::new()
-                    .with_ignore(config.ignore_patterns.clone());
+                let resolver = SymbolResolver::new().with_ignore(config.ignore_patterns.clone());
 
                 match resolver.find_function(name, &project_root) {
                     Ok(loc) => {
-                        eprintln!("Found {} at {}:{}-{}", name, loc.path, loc.start_line, loc.end_line);
+                        eprintln!(
+                            "Found {} at {}:{}-{}",
+                            name, loc.path, loc.start_line, loc.end_line
+                        );
                         eprintln!("  Signature: {}", loc.signature);
 
                         // Convert to file target with resolved lines
@@ -2787,13 +3261,14 @@ pub fn run() {
                 }
             }
             ZoomTarget::Class(name) => {
-                let resolver = SymbolResolver::new()
-                    .with_ignore(config.ignore_patterns.clone());
+                let resolver = SymbolResolver::new().with_ignore(config.ignore_patterns.clone());
 
                 match resolver.find_class(name, &project_root) {
                     Ok(loc) => {
-                        eprintln!("Found {} {} at {}:{}-{}",
-                            loc.symbol_type, name, loc.path, loc.start_line, loc.end_line);
+                        eprintln!(
+                            "Found {} {} at {}:{}-{}",
+                            loc.symbol_type, name, loc.path, loc.start_line, loc.end_line
+                        );
                         eprintln!("  Signature: {}", loc.signature);
 
                         zoom_config.target = ZoomTarget::File {
@@ -2817,7 +3292,10 @@ pub fn run() {
                     format!("{}/mod.rs", name),
                     format!("{}/__init__.py", name),
                 ];
-                eprintln!("Module zoom: Looking for files matching {:?}", module_patterns);
+                eprintln!(
+                    "Module zoom: Looking for files matching {:?}",
+                    module_patterns
+                );
                 None // Keep as-is, engine will handle module zoom
             }
             ZoomTarget::File { path, .. } => Some(path.clone()),
@@ -2876,8 +3354,7 @@ pub fn run() {
                 use pm_encoder::core::{CallGraphAnalyzer, ZoomSuggestion};
 
                 let call_analyzer = CallGraphAnalyzer::new().with_max_results(10);
-                let resolver = SymbolResolver::new()
-                    .with_ignore(config.ignore_patterns.clone());
+                let resolver = SymbolResolver::new().with_ignore(config.ignore_patterns.clone());
 
                 let valid_calls = call_analyzer.get_valid_calls(&output, &resolver, &project_root);
 
@@ -2885,7 +3362,8 @@ pub fn run() {
                 let zoom_menu = if !valid_calls.is_empty() {
                     // Deduplicate by function name and exclude current target
                     let mut seen = std::collections::HashSet::new();
-                    let suggestions: Vec<ZoomSuggestion> = valid_calls.iter()
+                    let suggestions: Vec<ZoomSuggestion> = valid_calls
+                        .iter()
                         .filter(|(call, _)| {
                             // Exclude the current zoom target
                             if let Some(ref orig) = original_symbol_name {
@@ -2898,7 +3376,8 @@ pub fn run() {
                         .map(|(call, loc)| ZoomSuggestion::from_call(call, loc))
                         .collect();
 
-                    let menu_items: Vec<String> = suggestions.iter()
+                    let menu_items: Vec<String> = suggestions
+                        .iter()
                         .map(|s| format!("  {}", s.to_xml()))
                         .collect();
 
@@ -3012,10 +3491,8 @@ pub fn run() {
         };
 
         // Convert to (path, content) tuples
-        let files: Vec<(String, String)> = entries
-            .into_iter()
-            .map(|e| (e.path, e.content))
-            .collect();
+        let files: Vec<(String, String)> =
+            entries.into_iter().map(|e| (e.path, e.content)).collect();
 
         // Apply token budget
         let strategy_str = match cli.budget_strategy {
@@ -3083,10 +3560,13 @@ pub fn run() {
         }
 
         // Print Voyager Mission Log (to stderr)
-        let project_name = project_root.file_name()
+        let project_name = project_root
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("project");
-        let token_budget_parsed = cli.token_budget.as_ref()
+        let token_budget_parsed = cli
+            .token_budget
+            .as_ref()
             .and_then(|b| parse_token_budget(b).ok());
         print_mission_log(
             project_name,
@@ -3130,11 +3610,14 @@ pub fn run() {
             }
 
             // Print Voyager Mission Log (to stderr)
-            let project_name = project_root.file_name()
+            let project_name = project_root
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("project");
             let file_count = output.matches("++++++++++ ").count();
-            let token_budget_parsed = cli.token_budget.as_ref()
+            let token_budget_parsed = cli
+                .token_budget
+                .as_ref()
                 .and_then(|b| parse_token_budget(b).ok());
             print_mission_log(
                 project_name,
@@ -3176,8 +3659,8 @@ fn run_stats(root: &PathBuf) {
     // Walk directory and collect files
     let entries = match pm_encoder::walk_directory(
         root.to_str().unwrap(),
-        &[], // no exclude patterns
-        &[], // no include patterns
+        &[],        // no exclude patterns
+        &[],        // no include patterns
         10_000_000, // 10MB max file size
     ) {
         Ok(e) => e,
@@ -3229,18 +3712,24 @@ fn run_stats(root: &PathBuf) {
 
     // Print formatted table
     println!("═══════════════════════════════════════════════════════════════════════");
-    println!(" {:<15} {:>8} {:>10} {:>10} {:>10} {:>10}",
-        "Language", "Files", "Lines", "Code", "Comments", "Blanks");
+    println!(
+        " {:<15} {:>8} {:>10} {:>10} {:>10} {:>10}",
+        "Language", "Files", "Lines", "Code", "Comments", "Blanks"
+    );
     println!("═══════════════════════════════════════════════════════════════════════");
 
     for (lang, s) in &sorted {
-        println!(" {:<15} {:>8} {:>10} {:>10} {:>10} {:>10}",
-            lang, s.files, s.lines, s.code, s.comments, s.blanks);
+        println!(
+            " {:<15} {:>8} {:>10} {:>10} {:>10} {:>10}",
+            lang, s.files, s.lines, s.code, s.comments, s.blanks
+        );
     }
 
     println!("───────────────────────────────────────────────────────────────────────");
-    println!(" {:<15} {:>8} {:>10} {:>10} {:>10} {:>10}",
-        "Total", total_files, total_lines, total_code, total_comments, total_blanks);
+    println!(
+        " {:<15} {:>8} {:>10} {:>10} {:>10} {:>10}",
+        "Total", total_files, total_lines, total_code, total_comments, total_blanks
+    );
     println!("═══════════════════════════════════════════════════════════════════════");
 
     // Print timing
@@ -3248,7 +3737,7 @@ fn run_stats(root: &PathBuf) {
 }
 
 /// Binary entry point - delegates to run().
-#[allow(dead_code)]  // Used as entry point for vo binary, but appears unused when included as module
+#[allow(dead_code)] // Used as entry point for vo binary, but appears unused when included as module
 fn main() {
     run();
 }

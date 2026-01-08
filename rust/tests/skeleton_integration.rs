@@ -77,7 +77,11 @@ fn test_add() {
 
     // docs/readme.md - Other file
     fs::create_dir(root.join("docs")).unwrap();
-    fs::write(root.join("docs/readme.md"), "# Test Project\n\nA test project.\n").unwrap();
+    fs::write(
+        root.join("docs/readme.md"),
+        "# Test Project\n\nA test project.\n",
+    )
+    .unwrap();
 
     temp
 }
@@ -136,7 +140,9 @@ fn test_skeleton_preserves_signatures() {
     if output.contains("src/main.rs") {
         // fn main() should appear (signature)
         assert!(
-            output.contains("fn main") || output.contains("fn helper") || output.contains("struct Config"),
+            output.contains("fn main")
+                || output.contains("fn helper")
+                || output.contains("struct Config"),
             "Expected function signatures in skeleton output:\n{}",
             output
         );
@@ -252,7 +258,10 @@ fn test_skeleton_xml_format() {
     // XML format should have skeleton attribute
     if output.contains("skeleton=\"true\"") {
         // Good - skeleton attribute present
-        assert!(output.contains("original_tokens="), "Expected original_tokens attribute");
+        assert!(
+            output.contains("original_tokens="),
+            "Expected original_tokens attribute"
+        );
     }
 }
 

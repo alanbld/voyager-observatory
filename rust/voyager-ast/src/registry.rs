@@ -7,7 +7,7 @@ use crate::adapters::{
     LanguageAdapter, PythonTreeSitterAdapter, RustTreeSitterAdapter, TypeScriptTreeSitterAdapter,
 };
 use crate::error::{AstError, Result};
-use crate::ir::{File, LanguageId, Span, UnknownNode};
+use crate::ir::{File, LanguageId, Span};
 use crate::provider::{
     AstProvider, IndexError, IndexOptions, IndexStats, LanguageStats, MicroscopeModel,
     PlanetariumModel, ZoomOptions,
@@ -31,11 +31,11 @@ impl AdapterRegistry {
         // Register built-in adapters - Core Fleet (Phase 1B)
         registry.register(Box::new(RustTreeSitterAdapter::new()));
         registry.register(Box::new(PythonTreeSitterAdapter::new()));
-        registry.register(Box::new(TypeScriptTreeSitterAdapter::new()));      // .ts, .mts, .cts
-        registry.register(Box::new(TypeScriptTreeSitterAdapter::tsx()));       // .tsx
+        registry.register(Box::new(TypeScriptTreeSitterAdapter::new())); // .ts, .mts, .cts
+        registry.register(Box::new(TypeScriptTreeSitterAdapter::tsx())); // .tsx
         registry.register(Box::new(TypeScriptTreeSitterAdapter::javascript())); // .js, .mjs, .cjs
-        // Note: JSX (.jsx) uses same JavaScript grammar but with different LanguageId
-        // For now, JSX files will use JavaScript adapter
+                                                                                // Note: JSX (.jsx) uses same JavaScript grammar but with different LanguageId
+                                                                                // For now, JSX files will use JavaScript adapter
 
         registry
     }
@@ -64,7 +64,7 @@ impl AdapterRegistry {
     pub fn parse(&self, source: &str, language: LanguageId) -> Result<File> {
         let adapter = self
             .get(language)
-            .ok_or_else(|| AstError::UnsupportedLanguage(language))?;
+            .ok_or(AstError::UnsupportedLanguage(language))?;
 
         // Create parser
         let mut parser = tree_sitter::Parser::new();
@@ -111,10 +111,12 @@ impl Default for AdapterRegistry {
 }
 
 /// Tree-sitter based AST provider
+#[allow(dead_code)]
 pub struct TreeSitterProvider {
     registry: AdapterRegistry,
 }
 
+#[allow(dead_code)]
 impl TreeSitterProvider {
     /// Create a new provider with all built-in adapters
     pub fn new() -> Self {
@@ -221,14 +223,11 @@ impl AstProvider for TreeSitterProvider {
         options: &ZoomOptions,
     ) -> Result<MicroscopeModel> {
         // Read the file
-        let source = std::fs::read_to_string(file_path)
-            .map_err(|e| AstError::IoError(e.to_string()))?;
+        let source =
+            std::fs::read_to_string(file_path).map_err(|e| AstError::IoError(e.to_string()))?;
 
         // Detect language
-        let ext = file_path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("");
+        let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
         let language = LanguageId::from_extension(ext);
 
         // Parse the file
@@ -253,9 +252,10 @@ impl AstProvider for TreeSitterProvider {
             })?;
 
         // Get adapter and extract body
-        let adapter = self.registry.get(language).ok_or_else(|| {
-            AstError::UnsupportedLanguage(language)
-        })?;
+        let adapter = self
+            .registry
+            .get(language)
+            .ok_or(AstError::UnsupportedLanguage(language))?;
 
         // Re-parse to get tree for body extraction
         let mut parser = tree_sitter::Parser::new();
@@ -296,9 +296,7 @@ impl AstProvider for TreeSitterProvider {
         };
 
         // Extract source text
-        let source_text = Some(
-            source[declaration.span.start..declaration.span.end].to_string(),
-        );
+        let source_text = Some(source[declaration.span.start..declaration.span.end].to_string());
 
         Ok(MicroscopeModel {
             file_path: file_path.display().to_string(),
@@ -326,9 +324,14 @@ impl AstProvider for TreeSitterProvider {
     }
 }
 
+#[allow(dead_code)]
 impl TreeSitterProvider {
     /// Collect files to process
-    fn collect_files(&self, root: &Path, options: &IndexOptions) -> Result<Vec<std::path::PathBuf>> {
+    fn collect_files(
+        &self,
+        root: &Path,
+        options: &IndexOptions,
+    ) -> Result<Vec<std::path::PathBuf>> {
         use std::fs;
 
         let mut files = Vec::new();
@@ -356,7 +359,10 @@ impl TreeSitterProvider {
                 // Skip common non-source directories
                 if path.is_dir() {
                     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                    if matches!(name, "node_modules" | "target" | "build" | "dist" | "__pycache__" | ".git") {
+                    if matches!(
+                        name,
+                        "node_modules" | "target" | "build" | "dist" | "__pycache__" | ".git"
+                    ) {
                         continue;
                     }
 
@@ -548,7 +554,10 @@ mod tests {
         let registry = AdapterRegistry::new();
         let result = registry.parse("code", LanguageId::Unknown);
 
-        assert!(matches!(result, Err(AstError::UnsupportedLanguage(LanguageId::Unknown))));
+        assert!(matches!(
+            result,
+            Err(AstError::UnsupportedLanguage(LanguageId::Unknown))
+        ));
     }
 
     #[test]
@@ -640,7 +649,11 @@ class Greeter:
         self.default_name = default_name
 "#;
         let file = provider.parse_file(source, LanguageId::Python).unwrap();
-        assert_eq!(file.declarations.len(), 2, "Expected 2 declarations (function + class)");
+        assert_eq!(
+            file.declarations.len(),
+            2,
+            "Expected 2 declarations (function + class)"
+        );
         assert_eq!(file.declarations[0].name, "greet");
         assert_eq!(file.declarations[1].name, "Greeter");
     }
@@ -667,7 +680,10 @@ class UserManager {
 }
 "#;
         let file = provider.parse_file(source, LanguageId::TypeScript).unwrap();
-        assert!(file.declarations.len() >= 3, "Expected at least 3 declarations (interface + function + class)");
+        assert!(
+            file.declarations.len() >= 3,
+            "Expected at least 3 declarations (interface + function + class)"
+        );
     }
 
     #[test]
@@ -687,7 +703,10 @@ class Calculator {
 }
 "#;
         let file = provider.parse_file(source, LanguageId::JavaScript).unwrap();
-        assert!(file.declarations.len() >= 2, "Expected at least 2 declarations");
+        assert!(
+            file.declarations.len() >= 2,
+            "Expected at least 2 declarations"
+        );
     }
 
     #[test]
@@ -743,7 +762,11 @@ function Greeting({ name }: Props): JSX.Element {
         fs::write(temp_dir.path().join("lib.rs"), "pub fn public_fn() {}").unwrap();
 
         // Create Python file
-        fs::write(temp_dir.path().join("script.py"), "def process():\n    pass").unwrap();
+        fs::write(
+            temp_dir.path().join("script.py"),
+            "def process():\n    pass",
+        )
+        .unwrap();
 
         let provider = TreeSitterProvider::new();
         let options = IndexOptions::default();
@@ -951,14 +974,17 @@ function Greeting({ name }: Props): JSX.Element {
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("test.rs");
 
-        let source = "fn foo() {\n    println!(\"foo\");\n}\n\nfn bar() {\n    println!(\"bar\");\n}\n";
+        let source =
+            "fn foo() {\n    println!(\"foo\");\n}\n\nfn bar() {\n    println!(\"bar\");\n}\n";
         fs::write(&file_path, source).unwrap();
 
         let provider = TreeSitterProvider::new();
         let options = ZoomOptions::default();
 
         // id format is "kind:name:start_line"
-        let model = provider.zoom_into(&file_path, "function:foo:1", &options).unwrap();
+        let model = provider
+            .zoom_into(&file_path, "function:foo:1", &options)
+            .unwrap();
 
         assert_eq!(model.symbol.name, "foo");
         assert!(model.source_text.is_some());
@@ -979,7 +1005,9 @@ function Greeting({ name }: Props): JSX.Element {
         };
 
         // target function is at line 4
-        let model = provider.zoom_into(&file_path, "function:target:4", &options).unwrap();
+        let model = provider
+            .zoom_into(&file_path, "function:target:4", &options)
+            .unwrap();
 
         assert!(model.context.is_some());
         let ctx = model.context.unwrap();
@@ -1001,7 +1029,9 @@ function Greeting({ name }: Props): JSX.Element {
         };
 
         // process function is at line 1
-        let model = provider.zoom_into(&file_path, "function:process:1", &options).unwrap();
+        let model = provider
+            .zoom_into(&file_path, "function:process:1", &options)
+            .unwrap();
 
         assert_eq!(model.symbol.name, "process");
         // Body extraction should be attempted
@@ -1070,7 +1100,9 @@ impl Container {
         let options = ZoomOptions::default();
 
         // hello function is at line 1
-        let model = provider.zoom_into(&file_path, "function:hello:1", &options).unwrap();
+        let model = provider
+            .zoom_into(&file_path, "function:hello:1", &options)
+            .unwrap();
 
         assert_eq!(model.symbol.name, "hello");
     }
@@ -1094,7 +1126,8 @@ impl Container {
         let files = provider.collect_files(temp_dir.path(), &options).unwrap();
 
         // Files should be sorted
-        let names: Vec<_> = files.iter()
+        let names: Vec<_> = files
+            .iter()
             .filter_map(|p| p.file_name())
             .filter_map(|n| n.to_str())
             .collect();
@@ -1166,7 +1199,9 @@ impl Container {
     #[test]
     fn test_parse_whitespace_only() {
         let provider = TreeSitterProvider::new();
-        let file = provider.parse_file("   \n\n   \t", LanguageId::Rust).unwrap();
+        let file = provider
+            .parse_file("   \n\n   \t", LanguageId::Rust)
+            .unwrap();
 
         assert!(file.declarations.is_empty());
     }

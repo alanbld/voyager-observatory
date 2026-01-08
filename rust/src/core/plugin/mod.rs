@@ -271,7 +271,8 @@ pub trait PluginHost: Send + Sync {
     fn load_plugin(&mut self, manifest: &PluginManifest) -> Result<(), PluginError>;
 
     /// Execute a plugin with the given context
-    fn execute(&self, plugin_id: &str, context: PluginContext) -> Result<PluginResult, PluginError>;
+    fn execute(&self, plugin_id: &str, context: PluginContext)
+        -> Result<PluginResult, PluginError>;
 
     /// Unload a plugin
     fn unload_plugin(&mut self, plugin_id: &str) -> Result<(), PluginError>;
@@ -316,7 +317,11 @@ impl std::fmt::Display for PluginError {
             PluginError::ExecutionError(msg) => write!(f, "Plugin execution failed: {}", msg),
             PluginError::PermissionDenied(perm) => write!(f, "Permission denied: {}", perm),
             PluginError::VersionMismatch { required, found } => {
-                write!(f, "Version mismatch: requires {}, found {}", required, found)
+                write!(
+                    f,
+                    "Version mismatch: requires {}, found {}",
+                    required, found
+                )
             }
             PluginError::SandboxViolation(msg) => write!(f, "Sandbox violation: {}", msg),
             PluginError::Timeout { limit_ms } => write!(f, "Plugin timed out after {}ms", limit_ms),
@@ -339,7 +344,11 @@ impl PluginHost for PlaceholderPluginHost {
         ))
     }
 
-    fn execute(&self, plugin_id: &str, _context: PluginContext) -> Result<PluginResult, PluginError> {
+    fn execute(
+        &self,
+        plugin_id: &str,
+        _context: PluginContext,
+    ) -> Result<PluginResult, PluginError> {
         Err(PluginError::NotFound(format!(
             "Plugin '{}' not available (Phase 2)",
             plugin_id
@@ -378,7 +387,9 @@ mod tests {
         };
 
         assert_eq!(manifest.id, "voyager-django");
-        assert!(manifest.permissions.contains(&PluginPermission::ModifySymbols));
+        assert!(manifest
+            .permissions
+            .contains(&PluginPermission::ModifySymbols));
     }
 
     #[test]
@@ -453,12 +464,30 @@ mod tests {
 
     #[test]
     fn test_plugin_permissions_equality() {
-        assert_eq!(PluginPermission::ReadProjectFiles, PluginPermission::ReadProjectFiles);
-        assert_ne!(PluginPermission::ReadProjectFiles, PluginPermission::ModifySymbols);
-        assert_eq!(PluginPermission::RegisterLens, PluginPermission::RegisterLens);
-        assert_eq!(PluginPermission::RegisterFormat, PluginPermission::RegisterFormat);
-        assert_eq!(PluginPermission::RegisterIntent, PluginPermission::RegisterIntent);
-        assert_eq!(PluginPermission::AccessJournal, PluginPermission::AccessJournal);
+        assert_eq!(
+            PluginPermission::ReadProjectFiles,
+            PluginPermission::ReadProjectFiles
+        );
+        assert_ne!(
+            PluginPermission::ReadProjectFiles,
+            PluginPermission::ModifySymbols
+        );
+        assert_eq!(
+            PluginPermission::RegisterLens,
+            PluginPermission::RegisterLens
+        );
+        assert_eq!(
+            PluginPermission::RegisterFormat,
+            PluginPermission::RegisterFormat
+        );
+        assert_eq!(
+            PluginPermission::RegisterIntent,
+            PluginPermission::RegisterIntent
+        );
+        assert_eq!(
+            PluginPermission::AccessJournal,
+            PluginPermission::AccessJournal
+        );
     }
 
     #[test]

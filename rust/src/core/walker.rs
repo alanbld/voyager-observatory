@@ -165,10 +165,7 @@ impl FileWalker for DefaultWalker {
 
             let path = entry.path();
             let relative_path = normalize_path_separators(
-                &path
-                    .strip_prefix(root)
-                    .unwrap_or(path)
-                    .to_string_lossy(),
+                &path.strip_prefix(root).unwrap_or(path).to_string_lossy(),
             );
 
             // Skip ignored files
@@ -211,12 +208,14 @@ impl FileWalker for DefaultWalker {
             // Get timestamps and size
             let (mtime, ctime, size) = metadata
                 .map(|m| {
-                    let mtime = m.modified()
+                    let mtime = m
+                        .modified()
                         .ok()
                         .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
                         .map(|d| d.as_secs())
                         .unwrap_or(0);
-                    let ctime = m.created()
+                    let ctime = m
+                        .created()
                         .ok()
                         .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
                         .map(|d| d.as_secs())
@@ -226,7 +225,11 @@ impl FileWalker for DefaultWalker {
                 })
                 .unwrap_or((0, 0, content.len() as u64));
 
-            entries.push(FileEntry::new(&relative_path, content).with_timestamps(mtime, ctime).with_size(size));
+            entries.push(
+                FileEntry::new(&relative_path, content)
+                    .with_timestamps(mtime, ctime)
+                    .with_size(size),
+            );
         }
 
         Ok(entries)
@@ -270,9 +273,9 @@ pub fn read_file_content(bytes: &[u8]) -> Option<String> {
 // SmartWalker - Intelligent file walker with boundary awareness
 // ============================================================================
 
+use crate::core::manifest::ProjectManifest;
 use ignore::{WalkBuilder, WalkState};
 use std::sync::mpsc;
-use crate::core::manifest::ProjectManifest;
 
 /// Hard-coded exclusion patterns (hygiene layer).
 /// These are ALWAYS excluded regardless of .gitignore.
@@ -310,12 +313,7 @@ const HYGIENE_EXCLUSIONS: &[&str] = &[
 ];
 
 /// Wildcard exclusion patterns (matched by suffix).
-const HYGIENE_WILDCARDS: &[&str] = &[
-    ".egg-info",
-    ".swp",
-    ".swo",
-    ".pyc",
-];
+const HYGIENE_WILDCARDS: &[&str] = &[".egg-info", ".swp", ".swo", ".pyc"];
 
 /// Result of walking a directory with SmartWalker.
 #[derive(Debug, Clone)]
@@ -415,7 +413,10 @@ impl SmartWalker {
             }
 
             // Check wildcard patterns (suffix match)
-            if HYGIENE_WILDCARDS.iter().any(|&pattern| name.ends_with(pattern)) {
+            if HYGIENE_WILDCARDS
+                .iter()
+                .any(|&pattern| name.ends_with(pattern))
+            {
                 return true;
             }
 
@@ -461,10 +462,7 @@ impl SmartWalker {
                             }
                         }
 
-                        let relative = path
-                            .strip_prefix(&self.root)
-                            .unwrap_or(path)
-                            .to_path_buf();
+                        let relative = path.strip_prefix(&self.root).unwrap_or(path).to_path_buf();
 
                         entries.push(WalkEntry {
                             path: path.to_path_buf(),
@@ -480,9 +478,8 @@ impl SmartWalker {
                     let error_str = e.to_string();
                     let is_not_found = error_str.contains("No such file or directory")
                         || error_str.contains("cannot access")
-                        || e.io_error().map_or(false, |io| {
-                            io.kind() == std::io::ErrorKind::NotFound
-                        });
+                        || e.io_error()
+                            .map_or(false, |io| io.kind() == std::io::ErrorKind::NotFound);
 
                     // When not following symlinks, silently skip broken symlinks
                     // When following symlinks, report all errors including broken links
@@ -660,7 +657,10 @@ mod tests {
     #[test]
     fn test_normalize_path_separators_unix_unchanged() {
         assert_eq!(normalize_path_separators("src/main.rs"), "src/main.rs");
-        assert_eq!(normalize_path_separators("/home/user/file.txt"), "/home/user/file.txt");
+        assert_eq!(
+            normalize_path_separators("/home/user/file.txt"),
+            "/home/user/file.txt"
+        );
     }
 
     #[test]
@@ -713,7 +713,9 @@ mod tests {
 
         let walker = DefaultWalker::new();
         let config = WalkConfig::default();
-        let entries = walker.walk(temp_dir.path().to_str().unwrap(), &config).unwrap();
+        let entries = walker
+            .walk(temp_dir.path().to_str().unwrap(), &config)
+            .unwrap();
 
         assert_eq!(entries.len(), 1);
         assert!(entries[0].path.ends_with("test.txt"));
@@ -724,7 +726,10 @@ mod tests {
     fn test_should_ignore() {
         let walker = DefaultWalker::new();
         assert!(walker.should_ignore(".git/config", &vec![".git".to_string()]));
-        assert!(walker.should_ignore("node_modules/pkg/index.js", &vec!["node_modules".to_string()]));
+        assert!(walker.should_ignore(
+            "node_modules/pkg/index.js",
+            &vec!["node_modules".to_string()]
+        ));
         assert!(!walker.should_ignore("src/main.rs", &vec![".git".to_string()]));
     }
 
@@ -737,8 +742,14 @@ mod tests {
 
     #[test]
     fn test_matches_patterns_glob() {
-        assert!(DefaultWalker::matches_patterns("test.pyc", &vec!["*.pyc".to_string()]));
-        assert!(!DefaultWalker::matches_patterns("test.py", &vec!["*.pyc".to_string()]));
+        assert!(DefaultWalker::matches_patterns(
+            "test.pyc",
+            &vec!["*.pyc".to_string()]
+        ));
+        assert!(!DefaultWalker::matches_patterns(
+            "test.py",
+            &vec!["*.pyc".to_string()]
+        ));
     }
 
     // ========================================================================
@@ -986,10 +997,14 @@ mod tests {
         let entries = walker.walk().unwrap();
 
         // Should find the normal file
-        assert!(entries.iter().any(|e| e.relative_path.to_string_lossy().contains("main.rs")));
+        assert!(entries
+            .iter()
+            .any(|e| e.relative_path.to_string_lossy().contains("main.rs")));
 
         // Should not include the broken symlink (it's not a valid file)
-        assert!(!entries.iter().any(|e| e.relative_path.to_string_lossy().contains("broken_link")));
+        assert!(!entries
+            .iter()
+            .any(|e| e.relative_path.to_string_lossy().contains("broken_link")));
     }
 
     #[cfg(unix)]
@@ -1020,7 +1035,8 @@ mod tests {
         let entries = walker.walk().unwrap();
 
         // Should find both the target and the symlink
-        let paths: Vec<_> = entries.iter()
+        let paths: Vec<_> = entries
+            .iter()
             .map(|e| e.relative_path.to_string_lossy().to_string())
             .collect();
 
@@ -1052,7 +1068,9 @@ mod tests {
         let entries = result.unwrap();
 
         // Should find the file in the real directory
-        assert!(entries.iter().any(|e| e.relative_path.to_string_lossy().contains("real_dir")));
+        assert!(entries
+            .iter()
+            .any(|e| e.relative_path.to_string_lossy().contains("real_dir")));
     }
 
     // ========================================================================
@@ -1150,7 +1168,8 @@ mod tests {
         let walker = SmartWalker::with_config(tmp.path(), config);
         let entries = walker.walk().unwrap();
 
-        let paths: Vec<_> = entries.iter()
+        let paths: Vec<_> = entries
+            .iter()
             .map(|e| e.relative_path.to_string_lossy().to_string())
             .collect();
 
@@ -1178,7 +1197,8 @@ mod tests {
         let walker = SmartWalker::with_config(tmp.path(), config);
         let entries = walker.walk().unwrap();
 
-        let paths: Vec<_> = entries.iter()
+        let paths: Vec<_> = entries
+            .iter()
             .map(|e| e.relative_path.to_string_lossy().to_string())
             .collect();
 
@@ -1265,7 +1285,10 @@ mod tests {
     #[test]
     fn test_matches_patterns_prefix_match() {
         // Test prefix match (directory)
-        assert!(DefaultWalker::matches_patterns("hidden/file.txt", &vec!["hidden".to_string()]));
+        assert!(DefaultWalker::matches_patterns(
+            "hidden/file.txt",
+            &vec!["hidden".to_string()]
+        ));
     }
 
     #[test]
@@ -1281,7 +1304,9 @@ mod tests {
     #[test]
     fn test_hygiene_wildcard_patterns() {
         // Test .egg-info wildcard
-        assert!(SmartWalker::is_hygiene_excluded(Path::new("mypackage.egg-info/PKG-INFO")));
+        assert!(SmartWalker::is_hygiene_excluded(Path::new(
+            "mypackage.egg-info/PKG-INFO"
+        )));
         // Test .swp wildcard
         assert!(SmartWalker::is_hygiene_excluded(Path::new("file.swp")));
         // Test .swo wildcard

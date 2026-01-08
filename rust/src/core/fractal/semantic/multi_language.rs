@@ -10,8 +10,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ConceptId, CrossLanguageAligner, EquivalenceClass,
-    FeatureNormalizer, Language, UnifiedConcept,
+    ConceptId, CrossLanguageAligner, EquivalenceClass, FeatureNormalizer, Language, UnifiedConcept,
     UnifiedSemanticSubstrate, UniversalConceptType, UserContext,
 };
 use crate::plugins::PluginRegistry;
@@ -246,7 +245,10 @@ impl MultiLanguageExplorationResult {
     pub fn format_summary(&self) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!("🎯 MULTI-LANGUAGE EXPLORATION: {}\n\n", self.intent));
+        output.push_str(&format!(
+            "🎯 MULTI-LANGUAGE EXPLORATION: {}\n\n",
+            self.intent
+        ));
         output.push_str(&format!("{}\n\n", self.project_summary));
 
         // Language breakdown
@@ -433,7 +435,10 @@ impl MultiLanguageExplorer {
 
         for (language, files) in &project.files_by_language {
             // Find plugin for this language
-            let plugin = match self.plugin_registry.find_by_language(&format!("{:?}", language).to_lowercase()) {
+            let plugin = match self
+                .plugin_registry
+                .find_by_language(&format!("{:?}", language).to_lowercase())
+            {
                 Some(p) => p,
                 None => continue,
             };
@@ -464,7 +469,11 @@ impl MultiLanguageExplorer {
 
                     // Set base features
                     embedding[0] = symbol.parameters.len() as f32 * 0.1; // Param count
-                    embedding[1] = if symbol.documentation.is_some() { 0.5 } else { 0.0 };
+                    embedding[1] = if symbol.documentation.is_some() {
+                        0.5
+                    } else {
+                        0.0
+                    };
 
                     // Apply language-specific features
                     for (idx, value) in features {
@@ -673,9 +682,7 @@ impl MultiLanguageExplorer {
 
         // Sort by score
         let mut sorted_scored: Vec<_> = scored.to_vec();
-        sorted_scored.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        sorted_scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         for (concept, score) in sorted_scored.iter().take(30) {
             let language = concept.language();
@@ -703,14 +710,8 @@ impl MultiLanguageExplorer {
             let familiarity = context.get_familiarity(language);
             let decision = if *score > 0.8 {
                 ReadingDecision::ReadDeeply {
-                    reason: format!(
-                        "Highly relevant {:?} concept",
-                        concept.universal_type
-                    ),
-                    focus_points: vec![
-                        "Core logic".to_string(),
-                        "Dependencies".to_string(),
-                    ],
+                    reason: format!("Highly relevant {:?} concept", concept.universal_type),
+                    focus_points: vec!["Core logic".to_string(), "Dependencies".to_string()],
                 }
             } else if *score > 0.5 && familiarity < 0.5 {
                 ReadingDecision::ReadWithContext {
@@ -739,7 +740,9 @@ impl MultiLanguageExplorer {
             let base_time = match &decision {
                 ReadingDecision::ReadDeeply { .. } => 5,
                 ReadingDecision::ReadWithContext { .. } => 4,
-                ReadingDecision::Skim { time_limit_minutes, .. } => *time_limit_minutes,
+                ReadingDecision::Skim {
+                    time_limit_minutes, ..
+                } => *time_limit_minutes,
                 ReadingDecision::Skip { .. } => 0,
             };
 
@@ -946,11 +949,19 @@ export function validateOrder(order: Order): boolean {
             .with_familiarity(Language::Python, 0.9)
             .with_familiarity(Language::TypeScript, 0.7);
 
-        let result = explorer.explore(&project, "business-logic", &context).unwrap();
+        let result = explorer
+            .explore(&project, "business-logic", &context)
+            .unwrap();
 
         // Should have results
-        assert!(!result.exploration_path.is_empty(), "Should have exploration steps");
-        assert!(result.language_breakdown.languages.len() >= 2, "Should analyze multiple languages");
+        assert!(
+            !result.exploration_path.is_empty(),
+            "Should have exploration steps"
+        );
+        assert!(
+            result.language_breakdown.languages.len() >= 2,
+            "Should analyze multiple languages"
+        );
 
         // Summary should mention both languages
         let summary = result.format_summary();

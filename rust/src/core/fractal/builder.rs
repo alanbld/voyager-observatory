@@ -84,7 +84,9 @@ impl ExtractionDepth {
             ExtractionDepth::Minimal => false,
             ExtractionDepth::Standard => true,
             ExtractionDepth::Full => true,
-            ExtractionDepth::Custom { include_symbols, .. } => *include_symbols,
+            ExtractionDepth::Custom {
+                include_symbols, ..
+            } => *include_symbols,
         }
     }
 
@@ -205,34 +207,29 @@ fn extract_rust_symbols(content: &str) -> Vec<ExtractedSymbol> {
     ).unwrap();
 
     // Rust struct pattern
-    let struct_pattern = Regex::new(
-        r"(?m)^[ \t]*(pub(?:\([^)]+\))?\s+)?struct\s+(\w+)(?:<[^>]+>)?"
-    ).unwrap();
+    let struct_pattern =
+        Regex::new(r"(?m)^[ \t]*(pub(?:\([^)]+\))?\s+)?struct\s+(\w+)(?:<[^>]+>)?").unwrap();
 
     // Rust enum pattern
-    let enum_pattern = Regex::new(
-        r"(?m)^[ \t]*(pub(?:\([^)]+\))?\s+)?enum\s+(\w+)(?:<[^>]+>)?"
-    ).unwrap();
+    let enum_pattern =
+        Regex::new(r"(?m)^[ \t]*(pub(?:\([^)]+\))?\s+)?enum\s+(\w+)(?:<[^>]+>)?").unwrap();
 
     // Rust trait pattern
-    let trait_pattern = Regex::new(
-        r"(?m)^[ \t]*(pub(?:\([^)]+\))?\s+)?trait\s+(\w+)(?:<[^>]+>)?"
-    ).unwrap();
+    let trait_pattern =
+        Regex::new(r"(?m)^[ \t]*(pub(?:\([^)]+\))?\s+)?trait\s+(\w+)(?:<[^>]+>)?").unwrap();
 
     // Rust impl pattern
-    let impl_pattern = Regex::new(
-        r"(?m)^[ \t]*impl(?:<[^>]+>)?\s+(?:(\w+)\s+for\s+)?(\w+)"
-    ).unwrap();
+    let impl_pattern =
+        Regex::new(r"(?m)^[ \t]*impl(?:<[^>]+>)?\s+(?:(\w+)\s+for\s+)?(\w+)").unwrap();
 
     // Rust const/static pattern
-    let const_pattern = Regex::new(
-        r"(?m)^[ \t]*(pub(?:\([^)]+\))?\s+)?(const|static)\s+(\w+)\s*:\s*([^=]+)"
-    ).unwrap();
+    let const_pattern =
+        Regex::new(r"(?m)^[ \t]*(pub(?:\([^)]+\))?\s+)?(const|static)\s+(\w+)\s*:\s*([^=]+)")
+            .unwrap();
 
     // Rust macro pattern
-    let macro_pattern = Regex::new(
-        r"(?m)^[ \t]*(pub(?:\([^)]+\))?\s+)?macro_rules!\s+(\w+)"
-    ).unwrap();
+    let macro_pattern =
+        Regex::new(r"(?m)^[ \t]*(pub(?:\([^)]+\))?\s+)?macro_rules!\s+(\w+)").unwrap();
 
     let lines: Vec<&str> = content.lines().collect();
 
@@ -300,11 +297,7 @@ fn extract_rust_symbols(content: &str) -> Vec<ExtractedSymbol> {
         symbols.push(ExtractedSymbol {
             name: name.to_string(),
             kind: SymbolKind::Struct,
-            signature: format!(
-                "{}struct {}",
-                if is_pub { "pub " } else { "" },
-                name
-            ),
+            signature: format!("{}struct {}", if is_pub { "pub " } else { "" }, name),
             return_type: None,
             parameters: Vec::new(),
             documentation: extract_doc_comment(&lines, start_line),
@@ -352,11 +345,7 @@ fn extract_rust_symbols(content: &str) -> Vec<ExtractedSymbol> {
         symbols.push(ExtractedSymbol {
             name: name.to_string(),
             kind: SymbolKind::Trait,
-            signature: format!(
-                "{}trait {}",
-                if is_pub { "pub " } else { "" },
-                name
-            ),
+            signature: format!("{}trait {}", if is_pub { "pub " } else { "" }, name),
             return_type: None,
             parameters: Vec::new(),
             documentation: extract_doc_comment(&lines, start_line),
@@ -419,11 +408,7 @@ fn extract_rust_symbols(content: &str) -> Vec<ExtractedSymbol> {
         symbols.push(ExtractedSymbol {
             name: name.to_string(),
             kind: SymbolKind::Macro,
-            signature: format!(
-                "{}macro_rules! {}",
-                if is_pub { "pub " } else { "" },
-                name
-            ),
+            signature: format!("{}macro_rules! {}", if is_pub { "pub " } else { "" }, name),
             return_type: None,
             parameters: Vec::new(),
             documentation: extract_doc_comment(&lines, start_line),
@@ -444,9 +429,9 @@ fn extract_python_symbols(content: &str) -> Vec<ExtractedSymbol> {
     let mut symbols = Vec::new();
 
     // Python function pattern
-    let fn_pattern = Regex::new(
-        r"(?m)^[ \t]*(async\s+)?def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^\s:]+))?\s*:"
-    ).unwrap();
+    let fn_pattern =
+        Regex::new(r"(?m)^[ \t]*(async\s+)?def\s+(\w+)\s*\(([^)]*)\)(?:\s*->\s*([^\s:]+))?\s*:")
+            .unwrap();
 
     // Python class pattern
     let class_pattern = Regex::new(r"(?m)^[ \t]*class\s+(\w+)(?:\([^)]*\))?\s*:").unwrap();
@@ -633,11 +618,7 @@ fn extract_js_ts_symbols(content: &str) -> Vec<ExtractedSymbol> {
         symbols.push(ExtractedSymbol {
             name: name.to_string(),
             kind: SymbolKind::Class,
-            signature: format!(
-                "{}class {}",
-                if is_export { "export " } else { "" },
-                name
-            ),
+            signature: format!("{}class {}", if is_export { "export " } else { "" }, name),
             return_type: None,
             parameters: Vec::new(),
             documentation: extract_jsdoc(&lines, start_line),
@@ -687,8 +668,9 @@ fn extract_go_symbols(content: &str) -> Vec<ExtractedSymbol> {
 
     // Go function pattern
     let fn_pattern = Regex::new(
-        r"(?m)^func\s+(?:\([^)]+\)\s+)?(\w+)\s*\(([^)]*)\)(?:\s*\(([^)]+)\)|\s+([^\s{]+))?"
-    ).unwrap();
+        r"(?m)^func\s+(?:\([^)]+\)\s+)?(\w+)\s*\(([^)]*)\)(?:\s*\(([^)]+)\)|\s+([^\s{]+))?",
+    )
+    .unwrap();
 
     // Go type pattern (struct/interface)
     let type_pattern = Regex::new(r"(?m)^type\s+(\w+)\s+(struct|interface)").unwrap();
@@ -701,10 +683,7 @@ fn extract_go_symbols(content: &str) -> Vec<ExtractedSymbol> {
         let start_line = content[..full_match.start()].lines().count();
         let name = cap.get(1).map(|m| m.as_str()).unwrap_or("");
         let params = cap.get(2).map(|m| m.as_str()).unwrap_or("");
-        let return_type = cap
-            .get(3)
-            .or(cap.get(4))
-            .map(|m| m.as_str().to_string());
+        let return_type = cap.get(3).or(cap.get(4)).map(|m| m.as_str().to_string());
 
         symbols.push(ExtractedSymbol {
             name: name.to_string(),
@@ -713,7 +692,12 @@ fn extract_go_symbols(content: &str) -> Vec<ExtractedSymbol> {
             return_type,
             parameters: Vec::new(),
             documentation: extract_go_comment(&lines, start_line),
-            visibility: if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            visibility: if name
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+            {
                 Visibility::Public
             } else {
                 Visibility::Private
@@ -743,7 +727,12 @@ fn extract_go_symbols(content: &str) -> Vec<ExtractedSymbol> {
             return_type: None,
             parameters: Vec::new(),
             documentation: extract_go_comment(&lines, start_line),
-            visibility: if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            visibility: if name
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+            {
                 Visibility::Public
             } else {
                 Visibility::Private
@@ -767,11 +756,7 @@ fn extract_shell_symbols(content: &str) -> Vec<ExtractedSymbol> {
     for cap in fn_pattern.captures_iter(content) {
         let full_match = cap.get(0).unwrap();
         let start_line = content[..full_match.start()].lines().count();
-        let name = cap
-            .get(1)
-            .or(cap.get(2))
-            .map(|m| m.as_str())
-            .unwrap_or("");
+        let name = cap.get(1).or(cap.get(2)).map(|m| m.as_str()).unwrap_or("");
 
         symbols.push(ExtractedSymbol {
             name: name.to_string(),
@@ -839,10 +824,7 @@ fn parse_python_params(params: &str) -> Vec<Parameter> {
 
             // Handle default values
             let (param, default) = if let Some(eq_pos) = p.find('=') {
-                (
-                    &p[..eq_pos],
-                    Some(p[eq_pos + 1..].trim().to_string()),
-                )
+                (&p[..eq_pos], Some(p[eq_pos + 1..].trim().to_string()))
             } else {
                 (p, None)
             };
@@ -927,7 +909,10 @@ fn extract_jsdoc(lines: &[&str], start_line: usize) -> Option<String> {
 
         if trimmed.ends_with("*/") {
             in_jsdoc = true;
-            let content = trimmed.trim_end_matches("*/").trim_start_matches("/**").trim();
+            let content = trimmed
+                .trim_end_matches("*/")
+                .trim_start_matches("/**")
+                .trim();
             if !content.is_empty() {
                 docs.push(content);
             }
@@ -1071,7 +1056,8 @@ fn extract_python_imports(content: &str) -> Vec<Import> {
 
 fn extract_js_imports(content: &str) -> Vec<Import> {
     let mut imports = Vec::new();
-    let import_pattern = Regex::new(r#"(?m)^import\s+(?:\{([^}]+)\}|(\w+))\s+from\s+['"]([^'"]+)['"]"#).unwrap();
+    let import_pattern =
+        Regex::new(r#"(?m)^import\s+(?:\{([^}]+)\}|(\w+))\s+from\s+['"]([^'"]+)['"]"#).unwrap();
 
     for (line_num, line) in content.lines().enumerate() {
         if let Some(cap) = import_pattern.captures(line) {
@@ -1215,13 +1201,14 @@ impl FractalContextBuilder {
         }
 
         let content = fs::read_to_string(&path)?;
-        let language = detect_language(&path)
-            .ok_or_else(|| BuilderError::UnsupportedLanguage(
+        let language = detect_language(&path).ok_or_else(|| {
+            BuilderError::UnsupportedLanguage(
                 path.extension()
                     .and_then(|e| e.to_str())
                     .unwrap_or("unknown")
-                    .to_string()
-            ))?;
+                    .to_string(),
+            )
+        })?;
 
         let metadata = fs::metadata(&path)?;
         let line_count = content.lines().count();
@@ -1709,7 +1696,9 @@ pub trait Drawable {
 }
 "#;
         let symbols = extract_rust_symbols(code);
-        assert!(symbols.iter().any(|s| s.name == "Drawable" && s.kind == SymbolKind::Trait));
+        assert!(symbols
+            .iter()
+            .any(|s| s.name == "Drawable" && s.kind == SymbolKind::Trait));
     }
 
     #[test]
@@ -1747,7 +1736,11 @@ pub fn documented_fn() {}
         let symbols = extract_rust_symbols(code);
         assert_eq!(symbols.len(), 1);
         assert!(symbols[0].documentation.is_some());
-        assert!(symbols[0].documentation.as_ref().unwrap().contains("documented function"));
+        assert!(symbols[0]
+            .documentation
+            .as_ref()
+            .unwrap()
+            .contains("documented function"));
     }
 
     #[test]
@@ -1812,7 +1805,9 @@ class MyClass:
 "#;
         let symbols = extract_python_symbols(code);
         // Class + method
-        assert!(symbols.iter().any(|s| s.name == "method" && s.kind == SymbolKind::Method));
+        assert!(symbols
+            .iter()
+            .any(|s| s.name == "method" && s.kind == SymbolKind::Method));
     }
 
     #[test]
@@ -1874,7 +1869,9 @@ class MyComponent {
 }
 "#;
         let symbols = extract_js_ts_symbols(code);
-        assert!(symbols.iter().any(|s| s.name == "MyComponent" && s.kind == SymbolKind::Class));
+        assert!(symbols
+            .iter()
+            .any(|s| s.name == "MyComponent" && s.kind == SymbolKind::Class));
     }
 
     #[test]
@@ -1986,7 +1983,9 @@ use std::collections::HashMap;
         let imports = extract_rust_imports(code);
         assert_eq!(imports.len(), 2);
         assert!(imports.iter().any(|i| i.module == "std::io"));
-        assert!(imports.iter().any(|i| i.module == "std::collections::HashMap"));
+        assert!(imports
+            .iter()
+            .any(|i| i.module == "std::collections::HashMap"));
     }
 
     #[test]

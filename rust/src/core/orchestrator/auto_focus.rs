@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use super::smart_defaults::{SmartDefaults, SemanticDepth, DetailLevel};
+use super::smart_defaults::{DetailLevel, SemanticDepth, SmartDefaults};
 
 // =============================================================================
 // Input Type Detection
@@ -131,7 +131,7 @@ impl AutoFocus {
         match input_type {
             InputType::SingleFile => SmartDefaults {
                 // Microscope mode: show everything
-                truncate_lines: Some(0),  // No truncation
+                truncate_lines: Some(0), // No truncation
                 lens: Some("architecture".to_string()),
                 semantic_depth: SemanticDepth::Deep,
                 detail_level: DetailLevel::Detailed,

@@ -27,16 +27,16 @@
 //! - 64-dimension feature vector extraction
 //! - Intent-based relevance scoring
 
-pub mod shell;
 pub mod abl;
 pub mod python;
+pub mod shell;
 pub mod typescript;
 
 use std::path::Path;
 
 use thiserror::Error;
 
-use crate::core::fractal::{ExtractedSymbol, Import, ConceptType};
+use crate::core::fractal::{ConceptType, ExtractedSymbol, Import};
 
 // =============================================================================
 // Error Types
@@ -75,7 +75,11 @@ pub trait LanguagePlugin: Send + Sync {
     fn supports_file(&self, path: &Path) -> bool {
         path.extension()
             .and_then(|ext| ext.to_str())
-            .map(|ext| self.extensions().iter().any(|e| e.eq_ignore_ascii_case(ext)))
+            .map(|ext| {
+                self.extensions()
+                    .iter()
+                    .any(|e| e.eq_ignore_ascii_case(ext))
+            })
             .unwrap_or(false)
     }
 
@@ -611,7 +615,7 @@ mod tests {
     // ==================== Semantic Method Tests ====================
 
     fn make_test_symbol(name: &str) -> crate::core::fractal::ExtractedSymbol {
-        use crate::core::fractal::{ExtractedSymbol, SymbolKind, Visibility, Range};
+        use crate::core::fractal::{ExtractedSymbol, Range, SymbolKind, Visibility};
         ExtractedSymbol {
             name: name.to_string(),
             kind: SymbolKind::Function,
@@ -708,7 +712,7 @@ mod tests {
 
     #[test]
     fn test_infer_concept_from_symbol_public() {
-        use crate::core::fractal::{ExtractedSymbol, SymbolKind, Visibility, Range};
+        use crate::core::fractal::{ExtractedSymbol, Range, SymbolKind, Visibility};
         let symbol = ExtractedSymbol {
             name: "public_function".to_string(),
             kind: SymbolKind::Function,

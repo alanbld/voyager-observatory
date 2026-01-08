@@ -42,7 +42,7 @@ impl SemanticDepth {
         match self {
             Self::Quick => 10,
             Self::Balanced => 500,
-            Self::Deep => 30000,  // 30 seconds for deep analysis
+            Self::Deep => 30000, // 30 seconds for deep analysis
         }
     }
 }
@@ -62,7 +62,10 @@ impl std::str::FromStr for SemanticDepth {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::parse(s).ok_or_else(|| {
-            format!("Invalid semantic depth: '{}'. Use: quick, balanced, or deep", s)
+            format!(
+                "Invalid semantic depth: '{}'. Use: quick, balanced, or deep",
+                s
+            )
         })
     }
 }
@@ -115,7 +118,10 @@ impl std::str::FromStr for DetailLevel {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::parse(s).ok_or_else(|| {
-            format!("Invalid detail level: '{}'. Use: summary, smart, or detailed", s)
+            format!(
+                "Invalid detail level: '{}'. Use: summary, smart, or detailed",
+                s
+            )
         })
     }
 }
@@ -155,7 +161,7 @@ impl SmartDefaults {
     /// Create defaults for a single file (microscope mode).
     pub fn for_file() -> Self {
         Self {
-            truncate_lines: Some(0),  // No truncation
+            truncate_lines: Some(0), // No truncation
             lens: Some("architecture".to_string()),
             semantic_depth: SemanticDepth::Deep,
             detail_level: DetailLevel::Detailed,
@@ -201,7 +207,10 @@ mod tests {
     #[test]
     fn test_semantic_depth_parse() {
         assert_eq!(SemanticDepth::parse("quick"), Some(SemanticDepth::Quick));
-        assert_eq!(SemanticDepth::parse("balanced"), Some(SemanticDepth::Balanced));
+        assert_eq!(
+            SemanticDepth::parse("balanced"),
+            Some(SemanticDepth::Balanced)
+        );
         assert_eq!(SemanticDepth::parse("deep"), Some(SemanticDepth::Deep));
         assert_eq!(SemanticDepth::parse("invalid"), None);
     }
@@ -212,7 +221,10 @@ mod tests {
         assert_eq!(SemanticDepth::parse("fast"), Some(SemanticDepth::Quick));
         assert_eq!(SemanticDepth::parse("q"), Some(SemanticDepth::Quick));
         // Balanced aliases
-        assert_eq!(SemanticDepth::parse("normal"), Some(SemanticDepth::Balanced));
+        assert_eq!(
+            SemanticDepth::parse("normal"),
+            Some(SemanticDepth::Balanced)
+        );
         assert_eq!(SemanticDepth::parse("b"), Some(SemanticDepth::Balanced));
         // Deep aliases
         assert_eq!(SemanticDepth::parse("full"), Some(SemanticDepth::Deep));
@@ -222,7 +234,10 @@ mod tests {
     #[test]
     fn test_semantic_depth_parse_case_insensitive() {
         assert_eq!(SemanticDepth::parse("QUICK"), Some(SemanticDepth::Quick));
-        assert_eq!(SemanticDepth::parse("Balanced"), Some(SemanticDepth::Balanced));
+        assert_eq!(
+            SemanticDepth::parse("Balanced"),
+            Some(SemanticDepth::Balanced)
+        );
         assert_eq!(SemanticDepth::parse("DEEP"), Some(SemanticDepth::Deep));
     }
 
@@ -248,9 +263,18 @@ mod tests {
 
     #[test]
     fn test_semantic_depth_from_str() {
-        assert_eq!("quick".parse::<SemanticDepth>().unwrap(), SemanticDepth::Quick);
-        assert_eq!("balanced".parse::<SemanticDepth>().unwrap(), SemanticDepth::Balanced);
-        assert_eq!("deep".parse::<SemanticDepth>().unwrap(), SemanticDepth::Deep);
+        assert_eq!(
+            "quick".parse::<SemanticDepth>().unwrap(),
+            SemanticDepth::Quick
+        );
+        assert_eq!(
+            "balanced".parse::<SemanticDepth>().unwrap(),
+            SemanticDepth::Balanced
+        );
+        assert_eq!(
+            "deep".parse::<SemanticDepth>().unwrap(),
+            SemanticDepth::Deep
+        );
     }
 
     #[test]
@@ -323,9 +347,15 @@ mod tests {
 
     #[test]
     fn test_detail_level_from_str() {
-        assert_eq!("summary".parse::<DetailLevel>().unwrap(), DetailLevel::Summary);
+        assert_eq!(
+            "summary".parse::<DetailLevel>().unwrap(),
+            DetailLevel::Summary
+        );
         assert_eq!("smart".parse::<DetailLevel>().unwrap(), DetailLevel::Smart);
-        assert_eq!("detailed".parse::<DetailLevel>().unwrap(), DetailLevel::Detailed);
+        assert_eq!(
+            "detailed".parse::<DetailLevel>().unwrap(),
+            DetailLevel::Detailed
+        );
     }
 
     #[test]

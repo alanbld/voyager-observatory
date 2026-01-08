@@ -5,13 +5,15 @@
 
 use crate::core::error::{EncoderError, Result};
 use crate::core::manifest::{ProjectManifest, ProjectType};
-use crate::core::models::{CompressionLevel, EncoderConfig, FileEntry, OutputFormat, ProcessedFile};
+use crate::core::models::{
+    CompressionLevel, EncoderConfig, FileEntry, OutputFormat, ProcessedFile,
+};
 use crate::core::serialization::{get_serializer, Serializer};
 use crate::core::skeleton::{AdaptiveAllocator, FileAllocation, Language, Skeletonizer};
 use crate::core::walker::{DefaultWalker, FileWalker, WalkConfig};
-use crate::core::zoom::{ZoomAction, ZoomConfig, ZoomTarget};
 #[cfg(test)]
 use crate::core::zoom::ZoomDepth;
+use crate::core::zoom::{ZoomAction, ZoomConfig, ZoomTarget};
 
 /// File tier for prioritized budgeting
 /// Core domain files get budget first, then config, tests last
@@ -81,9 +83,17 @@ impl FileTier {
     fn is_config_file(path: &str) -> bool {
         // Manifest files
         let config_names = [
-            "cargo.toml", "package.json", "pyproject.toml", "setup.py",
-            "go.mod", "pom.xml", "build.gradle", "composer.json",
-            "gemfile", "requirements.txt", "pipfile",
+            "cargo.toml",
+            "package.json",
+            "pyproject.toml",
+            "setup.py",
+            "go.mod",
+            "pom.xml",
+            "build.gradle",
+            "composer.json",
+            "gemfile",
+            "requirements.txt",
+            "pipfile",
         ];
 
         // Check if the filename matches a config file
@@ -94,39 +104,41 @@ impl FileTier {
         }
 
         // Config directories and extensions
-        path.contains("/config/") ||
-        path.contains("/configs/") ||
-        path.ends_with(".toml") ||
-        path.ends_with(".yaml") ||
-        path.ends_with(".yml") ||
-        path.ends_with(".json") && !path.contains("/test")
+        path.contains("/config/")
+            || path.contains("/configs/")
+            || path.ends_with(".toml")
+            || path.ends_with(".yaml")
+            || path.ends_with(".yml")
+            || path.ends_with(".json") && !path.contains("/test")
     }
 
     /// Check if path is a test file
     fn is_test_file(path: &str) -> bool {
         // Test directories
-        if path.starts_with("tests/") ||
-           path.starts_with("test/") ||
-           path.contains("/tests/") ||
-           path.contains("/test/") ||
-           path.starts_with("examples/") ||
-           path.contains("/examples/") ||
-           path.starts_with("benches/") ||
-           path.contains("/benches/") {
+        if path.starts_with("tests/")
+            || path.starts_with("test/")
+            || path.contains("/tests/")
+            || path.contains("/test/")
+            || path.starts_with("examples/")
+            || path.contains("/examples/")
+            || path.starts_with("benches/")
+            || path.contains("/benches/")
+        {
             return true;
         }
 
         // Test file patterns
         if let Some(filename) = path.rsplit('/').next() {
             let fname_lower = filename.to_lowercase();
-            if fname_lower.starts_with("test_") ||
-               fname_lower.ends_with("_test.py") ||
-               fname_lower.ends_with("_test.rs") ||
-               fname_lower.ends_with("_test.go") ||
-               fname_lower.ends_with(".test.js") ||
-               fname_lower.ends_with(".test.ts") ||
-               fname_lower.ends_with(".spec.js") ||
-               fname_lower.ends_with(".spec.ts") {
+            if fname_lower.starts_with("test_")
+                || fname_lower.ends_with("_test.py")
+                || fname_lower.ends_with("_test.rs")
+                || fname_lower.ends_with("_test.go")
+                || fname_lower.ends_with(".test.js")
+                || fname_lower.ends_with(".test.ts")
+                || fname_lower.ends_with(".spec.js")
+                || fname_lower.ends_with(".spec.ts")
+            {
                 return true;
             }
         }
@@ -263,18 +275,14 @@ impl ContextEngine {
 
         // Find matching content based on zoom target
         let filtered = match &config.target {
-            ZoomTarget::Function(name) => {
-                self.find_function(&entries, name)
-            }
-            ZoomTarget::Class(name) => {
-                self.find_class(&entries, name)
-            }
-            ZoomTarget::Module(name) => {
-                self.find_module(&entries, name)
-            }
-            ZoomTarget::File { path, start_line, end_line } => {
-                self.find_file(&entries, path, *start_line, *end_line)
-            }
+            ZoomTarget::Function(name) => self.find_function(&entries, name),
+            ZoomTarget::Class(name) => self.find_class(&entries, name),
+            ZoomTarget::Module(name) => self.find_module(&entries, name),
+            ZoomTarget::File {
+                path,
+                start_line,
+                end_line,
+            } => self.find_file(&entries, path, *start_line, *end_line),
         };
 
         if filtered.is_empty() {
@@ -326,40 +334,43 @@ impl ContextEngine {
     fn process_files(&self, entries: &[FileEntry]) -> Vec<ProcessedFile> {
         use crate::core::serialization::truncation_marker;
 
-        entries.iter().map(|entry| {
-            let language = detect_language(&entry.path);
-            let priority = 50; // TODO: Get from lens manager
+        entries
+            .iter()
+            .map(|entry| {
+                let language = detect_language(&entry.path);
+                let priority = 50; // TODO: Get from lens manager
 
-            let mut processed = ProcessedFile::from_entry(entry, &language, priority);
+                let mut processed = ProcessedFile::from_entry(entry, &language, priority);
 
-            // Apply truncation if configured
-            if self.config.truncate_lines > 0 {
-                let lines: Vec<&str> = entry.content.lines().collect();
-                if lines.len() > self.config.truncate_lines {
-                    let kept_lines = self.config.truncate_lines;
-                    let original_lines = lines.len();
-                    let original_tokens = entry.token_estimate();
+                // Apply truncation if configured
+                if self.config.truncate_lines > 0 {
+                    let lines: Vec<&str> = entry.content.lines().collect();
+                    if lines.len() > self.config.truncate_lines {
+                        let kept_lines = self.config.truncate_lines;
+                        let original_lines = lines.len();
+                        let original_tokens = entry.token_estimate();
 
-                    // Create zoom action for this truncated file
-                    let zoom_action = ZoomAction::for_file(&entry.path, original_tokens);
+                        // Create zoom action for this truncated file
+                        let zoom_action = ZoomAction::for_file(&entry.path, original_tokens);
 
-                    // Build truncated content with zoom affordance
-                    let mut truncated: String = lines[..kept_lines].join("\n");
-                    if self.config.truncate_summary {
-                        truncated.push('\n');
-                        truncated.push_str(&truncation_marker(
-                            original_lines,
-                            kept_lines,
-                            Some(&zoom_action),
-                        ));
+                        // Build truncated content with zoom affordance
+                        let mut truncated: String = lines[..kept_lines].join("\n");
+                        if self.config.truncate_summary {
+                            truncated.push('\n');
+                            truncated.push_str(&truncation_marker(
+                                original_lines,
+                                kept_lines,
+                                Some(&zoom_action),
+                            ));
+                        }
+
+                        processed = processed.with_truncation(truncated, original_tokens);
                     }
-
-                    processed = processed.with_truncation(truncated, original_tokens);
                 }
-            }
 
-            processed
-        }).collect()
+                processed
+            })
+            .collect()
     }
 
     /// Apply token budget with tiered allocation strategy
@@ -411,9 +422,9 @@ impl ContextEngine {
                 let full_tokens = file.tokens;
 
                 // Calculate skeleton token cost
-                let skeleton_tokens = if let Some(lang) = Language::from_extension(
-                    file.path.rsplit('.').next().unwrap_or("")
-                ) {
+                let skeleton_tokens = if let Some(lang) =
+                    Language::from_extension(file.path.rsplit('.').next().unwrap_or(""))
+                {
                     let result = skeletonizer.skeletonize(&file.content, lang);
                     result.skeleton_tokens.max(1) // At least 1 token
                 } else {
@@ -433,7 +444,10 @@ impl ContextEngine {
 
         // Build a map of path -> compression level
         let level_map: std::collections::HashMap<String, crate::core::skeleton::CompressionLevel> =
-            allocated.iter().map(|a| (a.path.clone(), a.level)).collect();
+            allocated
+                .iter()
+                .map(|a| (a.path.clone(), a.level))
+                .collect();
 
         // Apply compression levels to files
         allocations
@@ -449,9 +463,9 @@ impl ContextEngine {
                     }
                     crate::core::skeleton::CompressionLevel::Skeleton => {
                         // Apply skeletonization
-                        if let Some(lang) = Language::from_extension(
-                            file.path.rsplit('.').next().unwrap_or("")
-                        ) {
+                        if let Some(lang) =
+                            Language::from_extension(file.path.rsplit('.').next().unwrap_or(""))
+                        {
                             let original_tokens = file.tokens;
                             let result = skeletonizer.skeletonize(&file.content, lang);
                             Some(file.with_skeleton(result.content, original_tokens))
@@ -498,7 +512,8 @@ impl ContextEngine {
         let mut used = 0;
 
         // Fill in tier order: Core -> Config -> Tests -> Other
-        for file in core_files.into_iter()
+        for file in core_files
+            .into_iter()
             .chain(config_files)
             .chain(test_files)
             .chain(other_files)
@@ -513,7 +528,11 @@ impl ContextEngine {
     }
 
     /// Get budget allocation statistics (for debugging/UI)
-    pub fn budget_stats(&self, files: &[ProcessedFile], manifest: Option<&ProjectManifest>) -> BudgetStats {
+    pub fn budget_stats(
+        &self,
+        files: &[ProcessedFile],
+        manifest: Option<&ProjectManifest>,
+    ) -> BudgetStats {
         let mut stats = BudgetStats::default();
 
         for file in files {
@@ -542,7 +561,7 @@ impl ContextEngine {
 
     /// Serialize to Claude-XML format
     fn serialize_claude_xml(&self, files: &[ProcessedFile]) -> Result<String> {
-        use crate::formats::{XmlWriter, XmlConfig, AttentionEntry};
+        use crate::formats::{AttentionEntry, XmlConfig, XmlWriter};
 
         let mut buffer = Vec::new();
 
@@ -564,20 +583,27 @@ impl ContextEngine {
         let mut writer = XmlWriter::new(&mut buffer, xml_config);
 
         // Build attention entries
-        let attention_entries: Vec<AttentionEntry> = files.iter().map(|f| {
-            AttentionEntry {
+        let attention_entries: Vec<AttentionEntry> = files
+            .iter()
+            .map(|f| AttentionEntry {
                 path: f.path.clone(),
                 priority: f.priority,
                 tokens: f.tokens,
                 truncated: f.truncated,
                 dropped: false,
                 utility_score: None,
-            }
-        }).collect();
+            })
+            .collect();
 
-        writer.write_context_start().map_err(|e| EncoderError::xml_error(e.to_string()))?;
-        writer.write_metadata(&attention_entries).map_err(|e| EncoderError::xml_error(e.to_string()))?;
-        writer.write_files_start().map_err(|e| EncoderError::xml_error(e.to_string()))?;
+        writer
+            .write_context_start()
+            .map_err(|e| EncoderError::xml_error(e.to_string()))?;
+        writer
+            .write_metadata(&attention_entries)
+            .map_err(|e| EncoderError::xml_error(e.to_string()))?;
+        writer
+            .write_files_start()
+            .map_err(|e| EncoderError::xml_error(e.to_string()))?;
 
         for file in files {
             let zoom_cmd = if file.truncated {
@@ -586,20 +612,26 @@ impl ContextEngine {
                 None
             };
 
-            writer.write_file(
-                &file.path,
-                &file.language,
-                &file.md5,
-                file.priority,
-                &file.content,
-                file.truncated,
-                file.original_tokens,
-                zoom_cmd.as_deref(),
-            ).map_err(|e| EncoderError::xml_error(e.to_string()))?;
+            writer
+                .write_file(
+                    &file.path,
+                    &file.language,
+                    &file.md5,
+                    file.priority,
+                    &file.content,
+                    file.truncated,
+                    file.original_tokens,
+                    zoom_cmd.as_deref(),
+                )
+                .map_err(|e| EncoderError::xml_error(e.to_string()))?;
         }
 
-        writer.write_files_end().map_err(|e| EncoderError::xml_error(e.to_string()))?;
-        writer.write_context_end().map_err(|e| EncoderError::xml_error(e.to_string()))?;
+        writer
+            .write_files_end()
+            .map_err(|e| EncoderError::xml_error(e.to_string()))?;
+        writer
+            .write_context_end()
+            .map_err(|e| EncoderError::xml_error(e.to_string()))?;
 
         String::from_utf8(buffer).map_err(EncoderError::from)
     }
@@ -608,34 +640,50 @@ impl ContextEngine {
 
     fn find_function(&self, entries: &[FileEntry], name: &str) -> Vec<FileEntry> {
         let _pattern = format!("fn {}|def {}|function {}", name, name, name);
-        entries.iter()
-            .filter(|e| e.content.contains(&format!("fn {}", name)) ||
-                       e.content.contains(&format!("def {}", name)) ||
-                       e.content.contains(&format!("function {}", name)))
+        entries
+            .iter()
+            .filter(|e| {
+                e.content.contains(&format!("fn {}", name))
+                    || e.content.contains(&format!("def {}", name))
+                    || e.content.contains(&format!("function {}", name))
+            })
             .cloned()
             .collect()
     }
 
     fn find_class(&self, entries: &[FileEntry], name: &str) -> Vec<FileEntry> {
-        entries.iter()
-            .filter(|e| e.content.contains(&format!("class {}", name)) ||
-                       e.content.contains(&format!("struct {}", name)))
+        entries
+            .iter()
+            .filter(|e| {
+                e.content.contains(&format!("class {}", name))
+                    || e.content.contains(&format!("struct {}", name))
+            })
             .cloned()
             .collect()
     }
 
     fn find_module(&self, entries: &[FileEntry], name: &str) -> Vec<FileEntry> {
-        entries.iter()
-            .filter(|e| e.path.contains(name) ||
-                       e.path.ends_with(&format!("{}.py", name)) ||
-                       e.path.ends_with(&format!("{}.rs", name)) ||
-                       e.path.ends_with(&format!("{}/mod.rs", name)))
+        entries
+            .iter()
+            .filter(|e| {
+                e.path.contains(name)
+                    || e.path.ends_with(&format!("{}.py", name))
+                    || e.path.ends_with(&format!("{}.rs", name))
+                    || e.path.ends_with(&format!("{}/mod.rs", name))
+            })
             .cloned()
             .collect()
     }
 
-    fn find_file(&self, entries: &[FileEntry], path: &str, start: Option<usize>, end: Option<usize>) -> Vec<FileEntry> {
-        entries.iter()
+    fn find_file(
+        &self,
+        entries: &[FileEntry],
+        path: &str,
+        start: Option<usize>,
+        end: Option<usize>,
+    ) -> Vec<FileEntry> {
+        entries
+            .iter()
             .filter(|e| e.path == path || e.path.ends_with(path))
             .map(|e| {
                 if start.is_some() || end.is_some() {
@@ -691,14 +739,15 @@ pub fn detect_language(path: &str) -> String {
         "rb" => "ruby",
         "php" => "php",
         _ => "text",
-    }.to_string()
+    }
+    .to_string()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_engine_new() {
@@ -820,11 +869,20 @@ mod tests {
     fn test_file_tier_classify_core() {
         assert_eq!(FileTier::classify("src/main.rs", None), FileTier::Core);
         assert_eq!(FileTier::classify("src/lib.rs", None), FileTier::Core);
-        assert_eq!(FileTier::classify("src/core/engine.rs", None), FileTier::Core);
+        assert_eq!(
+            FileTier::classify("src/core/engine.rs", None),
+            FileTier::Core
+        );
         assert_eq!(FileTier::classify("lib/utils.py", None), FileTier::Core);
         assert_eq!(FileTier::classify("pkg/handler.go", None), FileTier::Core);
-        assert_eq!(FileTier::classify("internal/service.go", None), FileTier::Core);
-        assert_eq!(FileTier::classify("app/models/user.rb", None), FileTier::Core);
+        assert_eq!(
+            FileTier::classify("internal/service.go", None),
+            FileTier::Core
+        );
+        assert_eq!(
+            FileTier::classify("app/models/user.rb", None),
+            FileTier::Core
+        );
     }
 
     #[test]
@@ -832,27 +890,54 @@ mod tests {
         assert_eq!(FileTier::classify("Cargo.toml", None), FileTier::Config);
         assert_eq!(FileTier::classify("package.json", None), FileTier::Config);
         assert_eq!(FileTier::classify("pyproject.toml", None), FileTier::Config);
-        assert_eq!(FileTier::classify("config/settings.yaml", None), FileTier::Config);
-        assert_eq!(FileTier::classify("configs/prod.yml", None), FileTier::Config);
+        assert_eq!(
+            FileTier::classify("config/settings.yaml", None),
+            FileTier::Config
+        );
+        assert_eq!(
+            FileTier::classify("configs/prod.yml", None),
+            FileTier::Config
+        );
     }
 
     #[test]
     fn test_file_tier_classify_tests() {
-        assert_eq!(FileTier::classify("tests/test_main.py", None), FileTier::Tests);
-        assert_eq!(FileTier::classify("test/unit_test.rs", None), FileTier::Tests);
-        assert_eq!(FileTier::classify("src/tests/integration.rs", None), FileTier::Tests);
-        assert_eq!(FileTier::classify("examples/demo.py", None), FileTier::Tests);
-        assert_eq!(FileTier::classify("benches/bench_main.rs", None), FileTier::Tests);
+        assert_eq!(
+            FileTier::classify("tests/test_main.py", None),
+            FileTier::Tests
+        );
+        assert_eq!(
+            FileTier::classify("test/unit_test.rs", None),
+            FileTier::Tests
+        );
+        assert_eq!(
+            FileTier::classify("src/tests/integration.rs", None),
+            FileTier::Tests
+        );
+        assert_eq!(
+            FileTier::classify("examples/demo.py", None),
+            FileTier::Tests
+        );
+        assert_eq!(
+            FileTier::classify("benches/bench_main.rs", None),
+            FileTier::Tests
+        );
         assert_eq!(FileTier::classify("test_utils.py", None), FileTier::Tests);
         assert_eq!(FileTier::classify("handler_test.go", None), FileTier::Tests);
-        assert_eq!(FileTier::classify("component.spec.ts", None), FileTier::Tests);
+        assert_eq!(
+            FileTier::classify("component.spec.ts", None),
+            FileTier::Tests
+        );
     }
 
     #[test]
     fn test_file_tier_classify_other() {
         assert_eq!(FileTier::classify("README.md", None), FileTier::Other);
         assert_eq!(FileTier::classify("docs/guide.md", None), FileTier::Other);
-        assert_eq!(FileTier::classify("scripts/deploy.sh", None), FileTier::Other);
+        assert_eq!(
+            FileTier::classify("scripts/deploy.sh", None),
+            FileTier::Other
+        );
         assert_eq!(FileTier::classify("Makefile", None), FileTier::Other);
     }
 
@@ -921,7 +1006,7 @@ mod tests {
         // Create one file from each tier
         let files = vec![
             ProcessedFile {
-                path: "docs/guide.md".to_string(),  // Other
+                path: "docs/guide.md".to_string(), // Other
                 content: "guide".to_string(),
                 md5: "guide".to_string(),
                 language: "markdown".to_string(),
@@ -933,7 +1018,7 @@ mod tests {
                 utility: None,
             },
             ProcessedFile {
-                path: "tests/test.py".to_string(),  // Tests
+                path: "tests/test.py".to_string(), // Tests
                 content: "test".to_string(),
                 md5: "test".to_string(),
                 language: "python".to_string(),
@@ -945,7 +1030,7 @@ mod tests {
                 utility: None,
             },
             ProcessedFile {
-                path: "Cargo.toml".to_string(),  // Config
+                path: "Cargo.toml".to_string(), // Config
                 content: "[package]".to_string(),
                 md5: "cargo".to_string(),
                 language: "toml".to_string(),
@@ -957,7 +1042,7 @@ mod tests {
                 utility: None,
             },
             ProcessedFile {
-                path: "src/lib.rs".to_string(),  // Core
+                path: "src/lib.rs".to_string(), // Core
                 content: "pub fn".to_string(),
                 md5: "lib".to_string(),
                 language: "rust".to_string(),
@@ -975,9 +1060,9 @@ mod tests {
         assert_eq!(result.len(), 3);
 
         // Verify order: Core -> Config -> Tests
-        assert_eq!(result[0].path, "src/lib.rs");      // Core
-        assert_eq!(result[1].path, "Cargo.toml");       // Config
-        assert_eq!(result[2].path, "tests/test.py");    // Tests
+        assert_eq!(result[0].path, "src/lib.rs"); // Core
+        assert_eq!(result[1].path, "Cargo.toml"); // Config
+        assert_eq!(result[2].path, "tests/test.py"); // Tests
     }
 
     #[test]
@@ -1106,8 +1191,14 @@ mod tests {
         };
 
         // Root lib.rs should be Core for Rust projects
-        assert_eq!(FileTier::classify("lib.rs", Some(&manifest)), FileTier::Core);
-        assert_eq!(FileTier::classify("main.rs", Some(&manifest)), FileTier::Core);
+        assert_eq!(
+            FileTier::classify("lib.rs", Some(&manifest)),
+            FileTier::Core
+        );
+        assert_eq!(
+            FileTier::classify("main.rs", Some(&manifest)),
+            FileTier::Core
+        );
     }
 
     #[test]
@@ -1123,11 +1214,20 @@ mod tests {
         };
 
         // Any .py file not in tests should be Core for Python projects
-        assert_eq!(FileTier::classify("utils.py", Some(&manifest)), FileTier::Core);
-        assert_eq!(FileTier::classify("module/handler.py", Some(&manifest)), FileTier::Core);
+        assert_eq!(
+            FileTier::classify("utils.py", Some(&manifest)),
+            FileTier::Core
+        );
+        assert_eq!(
+            FileTier::classify("module/handler.py", Some(&manifest)),
+            FileTier::Core
+        );
 
         // But test files are still Tests
-        assert_eq!(FileTier::classify("test_utils.py", Some(&manifest)), FileTier::Tests);
+        assert_eq!(
+            FileTier::classify("test_utils.py", Some(&manifest)),
+            FileTier::Tests
+        );
     }
 
     // ========================================================================
@@ -1154,9 +1254,30 @@ mod tests {
         let engine = ContextEngine::with_config(config);
 
         let entries = vec![
-            FileEntry { path: "a.txt".to_string(), content: "a".to_string(), md5: "a".to_string(), mtime: 300, ctime: 0, size: 1 },
-            FileEntry { path: "b.txt".to_string(), content: "b".to_string(), md5: "b".to_string(), mtime: 100, ctime: 0, size: 1 },
-            FileEntry { path: "c.txt".to_string(), content: "c".to_string(), md5: "c".to_string(), mtime: 200, ctime: 0, size: 1 },
+            FileEntry {
+                path: "a.txt".to_string(),
+                content: "a".to_string(),
+                md5: "a".to_string(),
+                mtime: 300,
+                ctime: 0,
+                size: 1,
+            },
+            FileEntry {
+                path: "b.txt".to_string(),
+                content: "b".to_string(),
+                md5: "b".to_string(),
+                mtime: 100,
+                ctime: 0,
+                size: 1,
+            },
+            FileEntry {
+                path: "c.txt".to_string(),
+                content: "c".to_string(),
+                md5: "c".to_string(),
+                mtime: 200,
+                ctime: 0,
+                size: 1,
+            },
         ];
 
         let sorted = engine.sort_entries(entries);
@@ -1173,8 +1294,22 @@ mod tests {
         let engine = ContextEngine::with_config(config);
 
         let entries = vec![
-            FileEntry { path: "a.txt".to_string(), content: "a".to_string(), md5: "a".to_string(), mtime: 100, ctime: 0, size: 1 },
-            FileEntry { path: "b.txt".to_string(), content: "b".to_string(), md5: "b".to_string(), mtime: 300, ctime: 0, size: 1 },
+            FileEntry {
+                path: "a.txt".to_string(),
+                content: "a".to_string(),
+                md5: "a".to_string(),
+                mtime: 100,
+                ctime: 0,
+                size: 1,
+            },
+            FileEntry {
+                path: "b.txt".to_string(),
+                content: "b".to_string(),
+                md5: "b".to_string(),
+                mtime: 300,
+                ctime: 0,
+                size: 1,
+            },
         ];
 
         let sorted = engine.sort_entries(entries);
@@ -1190,8 +1325,22 @@ mod tests {
         let engine = ContextEngine::with_config(config);
 
         let entries = vec![
-            FileEntry { path: "a.txt".to_string(), content: "a".to_string(), md5: "a".to_string(), mtime: 0, ctime: 300, size: 1 },
-            FileEntry { path: "b.txt".to_string(), content: "b".to_string(), md5: "b".to_string(), mtime: 0, ctime: 100, size: 1 },
+            FileEntry {
+                path: "a.txt".to_string(),
+                content: "a".to_string(),
+                md5: "a".to_string(),
+                mtime: 0,
+                ctime: 300,
+                size: 1,
+            },
+            FileEntry {
+                path: "b.txt".to_string(),
+                content: "b".to_string(),
+                md5: "b".to_string(),
+                mtime: 0,
+                ctime: 100,
+                size: 1,
+            },
         ];
 
         let sorted = engine.sort_entries(entries);
@@ -1207,8 +1356,22 @@ mod tests {
         let engine = ContextEngine::with_config(config);
 
         let entries = vec![
-            FileEntry { path: "a.txt".to_string(), content: "a".to_string(), md5: "a".to_string(), mtime: 0, ctime: 100, size: 1 },
-            FileEntry { path: "b.txt".to_string(), content: "b".to_string(), md5: "b".to_string(), mtime: 0, ctime: 300, size: 1 },
+            FileEntry {
+                path: "a.txt".to_string(),
+                content: "a".to_string(),
+                md5: "a".to_string(),
+                mtime: 0,
+                ctime: 100,
+                size: 1,
+            },
+            FileEntry {
+                path: "b.txt".to_string(),
+                content: "b".to_string(),
+                md5: "b".to_string(),
+                mtime: 0,
+                ctime: 300,
+                size: 1,
+            },
         ];
 
         let sorted = engine.sort_entries(entries);
@@ -1240,10 +1403,7 @@ mod tests {
         config.sort_by = "unknown".to_string();
         let engine = ContextEngine::with_config(config);
 
-        let entries = vec![
-            FileEntry::new("b.txt", "b"),
-            FileEntry::new("a.txt", "a"),
-        ];
+        let entries = vec![FileEntry::new("b.txt", "b"), FileEntry::new("a.txt", "a")];
 
         // Should fall back to name sorting
         let sorted = engine.sort_entries(entries);
@@ -1285,8 +1445,9 @@ mod tests {
         fs::create_dir_all(temp_dir.path().join("src")).unwrap();
         fs::write(
             temp_dir.path().join("src/lib.rs"),
-            "fn target_func() {\n    println!(\"hello\");\n}\n"
-        ).unwrap();
+            "fn target_func() {\n    println!(\"hello\");\n}\n",
+        )
+        .unwrap();
 
         let engine = ContextEngine::new();
         let zoom_config = ZoomConfig {
@@ -1309,8 +1470,9 @@ mod tests {
         fs::create_dir_all(temp_dir.path().join("src")).unwrap();
         fs::write(
             temp_dir.path().join("src/lib.rs"),
-            "struct MyClass {\n    field: i32,\n}\n"
-        ).unwrap();
+            "struct MyClass {\n    field: i32,\n}\n",
+        )
+        .unwrap();
 
         let engine = ContextEngine::new();
         let zoom_config = ZoomConfig {
@@ -1331,10 +1493,7 @@ mod tests {
     fn test_zoom_module_target() {
         let temp_dir = TempDir::new().unwrap();
         fs::create_dir_all(temp_dir.path().join("src")).unwrap();
-        fs::write(
-            temp_dir.path().join("src/utils.rs"),
-            "pub fn helper() {}\n"
-        ).unwrap();
+        fs::write(temp_dir.path().join("src/utils.rs"), "pub fn helper() {}\n").unwrap();
 
         let engine = ContextEngine::new();
         let zoom_config = ZoomConfig {
@@ -1356,8 +1515,9 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         fs::write(
             temp_dir.path().join("test.rs"),
-            "line1\nline2\nline3\nline4\nline5\n"
-        ).unwrap();
+            "line1\nline2\nline3\nline4\nline5\n",
+        )
+        .unwrap();
 
         let engine = ContextEngine::new();
         let zoom_config = ZoomConfig {
@@ -1426,20 +1586,19 @@ mod tests {
         config.skeleton_mode = crate::core::models::SkeletonMode::Enabled;
         let engine = ContextEngine::with_config(config);
 
-        let files = vec![
-            ProcessedFile {
-                path: "src/lib.rs".to_string(),
-                content: "pub fn process() {\n    let x = 1;\n    let y = 2;\n    x + y\n}\n".to_string(),
-                md5: "abc".to_string(),
-                language: "rust".to_string(),
-                priority: 50,
-                tokens: 50,
-                truncated: false,
-                original_tokens: None,
-                compression_level: CompressionLevel::Full,
-                utility: None,
-            },
-        ];
+        let files = vec![ProcessedFile {
+            path: "src/lib.rs".to_string(),
+            content: "pub fn process() {\n    let x = 1;\n    let y = 2;\n    x + y\n}\n"
+                .to_string(),
+            md5: "abc".to_string(),
+            language: "rust".to_string(),
+            priority: 50,
+            tokens: 50,
+            truncated: false,
+            original_tokens: None,
+            compression_level: CompressionLevel::Full,
+            utility: None,
+        }];
 
         // With skeleton mode enabled, files should be compressed
         let result = engine.apply_budget(files, 100);
@@ -1459,8 +1618,14 @@ mod tests {
         };
 
         // index.js/ts should be Core for Node projects
-        assert_eq!(FileTier::classify("index.js", Some(&manifest)), FileTier::Core);
-        assert_eq!(FileTier::classify("index.ts", Some(&manifest)), FileTier::Core);
+        assert_eq!(
+            FileTier::classify("index.js", Some(&manifest)),
+            FileTier::Core
+        );
+        assert_eq!(
+            FileTier::classify("index.ts", Some(&manifest)),
+            FileTier::Core
+        );
     }
 
     #[test]
@@ -1476,8 +1641,14 @@ mod tests {
         };
 
         // Unknown project type should still classify based on paths
-        assert_eq!(FileTier::classify("src/lib.rs", Some(&manifest)), FileTier::Core);
-        assert_eq!(FileTier::classify("README.md", Some(&manifest)), FileTier::Other);
+        assert_eq!(
+            FileTier::classify("src/lib.rs", Some(&manifest)),
+            FileTier::Core
+        );
+        assert_eq!(
+            FileTier::classify("README.md", Some(&manifest)),
+            FileTier::Other
+        );
     }
 
     #[test]
@@ -1515,7 +1686,10 @@ mod tests {
         assert_eq!(FileTier::classify("build.gradle", None), FileTier::Config);
         assert_eq!(FileTier::classify("composer.json", None), FileTier::Config);
         assert_eq!(FileTier::classify("Gemfile", None), FileTier::Config);
-        assert_eq!(FileTier::classify("requirements.txt", None), FileTier::Config);
+        assert_eq!(
+            FileTier::classify("requirements.txt", None),
+            FileTier::Config
+        );
         assert_eq!(FileTier::classify("Pipfile", None), FileTier::Config);
     }
 

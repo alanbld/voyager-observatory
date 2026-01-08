@@ -1,294 +1,467 @@
-**Context:** We are initiating the "First Light" phase of the Voyager Observatory (VO). We are moving from regex heuristics to AST-level optics. You are tasked with creating the `voyager-ast` crate—a language-agnostic structural indexer—and integrating it into the VO flagship.
+# 🚀 FINAL OPTIMIZED PROMPT: VO Phase 3 – The Iron Sandbox & Plugin Ecosystem
 
-## 🧪 PHASE 0: THE OPTICS MANIFESTO (DOCUMENTATION)
-Create the following documents in the repository to lock in the "Iron Mold":
+**Context:** Voyager Observatory (VO) v2.3.0 is stable. We are now implementing the **Plugin Ecosystem** based on the **Three-Layer Sovereignty Model**. This enables community-driven optics via a secure, high-performance Lua bridge. We are moving from a "Tool" to a "Programmable Platform."
 
-1.  **`docs/specs/VOYAGER_AST_PRD.md`**:
-    *   **Content:** 
-[---
+## 🎯 CRITICAL IMPROVEMENTS FROM PREVIOUS FEEDBACK
 
-# Product Requirements Document (PRD)  
-**voyager-ast v1 – The Structural Optics Layer for Voyager Observatory**
+### **1. CONCRETE EXECUTION SEQUENCE**
+Previous phases showed that **parallel execution** leads to dependency issues. This prompt structures a **linear, dependency-aware** build order:
 
-## 1. Problem Statement
+```
+Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5
+```
 
-Voyager Observatory needs a fast, resilient, multi-language structural indexer to power its Fractal Protocol, Planetarium View, and Microscope View. Current regex-based parsing is brittle, shallow, and hard to extend beyond a handful of languages. VO requires a dedicated “optics” subsystem that:
+### **2. SPECIFIC INTEGRATION POINTS**
+Rather than vague "integrate with X," we specify **exact files and methods**:
+- Update `src/core/lens_manager.rs:apply_plugin_filters()`
+- Extend `src/core/metric_registry.rs:register_lua_metric()`
+- Hook into `src/presenter/intelligent_presenter.rs:plugin_summary()`
 
-- Provides a **file-based structural model** (functions, blocks, imports, control flow, comments) across 60–100 languages.
-- Recovers gracefully from syntax errors and incomplete code.
-- Integrates cleanly with Tree-sitter while exposing a **language-agnostic IR** that higher layers can rely on.
-
-Without this, VO cannot scale to large, polyglot repositories or deliver reliable, intent-driven exploration to LLMs and users.
-
-***
-
-## 2. Goals and Objectives
-
-**Primary goals**
-
-- Deliver a **Rust crate, `voyager-ast`**, that:
-  - Parses source files via Tree-sitter.
-  - Normalizes them into a stable, language-agnostic IR.
-  - Supports two operating modes: **Index (Planetarium)** and **Zoom (Microscope)**.
-
-- Achieve “**telescope, not compiler**” behavior:
-  - ~90% structural correctness for targeted constructs.
-  - Best-effort recovery with explicit “unknown” regions.
-
-**Quantitative objectives**
-
-- Support **≥15 languages** in v1, including the Core Fleet: Rust, Python, TypeScript, ABL.
-- Index mode:
-  - Handle **100k LOC** polyglot repos in **≤ 3 seconds** on a typical developer machine.
-- Zoom mode:
-  - Per-file zoom (core fleet) in **≤ 50 ms** median, **≤ 200 ms** p95.
-- Error resilience:
-  - For intentionally corrupted test corpora, return a non-empty IR tree for **≥ 98%** of files, with Unknown/Unparsed nodes as needed.
-
-***
-
-## 3. User Personas
-
-**1. VO Engine Developer (Internal)**  
-- Motivation: Stable, predictable optics layer to build VO’s Fractal Protocol and lenses.  
-- Pain points: Regex hacks, inconsistent structures across languages, difficulty scaling language support.
-
-**2. Tool Builder / OSS Contributor (External)**  
-- Motivation: Use voyager-ast as a drop-in structural indexer for their own CLIs, LSP servers, analyzers.  
-- Pain points: Existing parsers are language-specific, hard to integrate, or require deep compiler knowledge.
-
-**3. AI-augmented Developer (Indirect)**  
-- Motivation: Reliable, structured “mission logs” and navigation for LLM-based tools.  
-- Pain points: Ad-hoc file concatenation, shallow context, brittle manual selection.
-
-***
-
-## 4. Use Cases
-
-1. **Planetarium Scan (Index Project)**
-   - VO or a third-party tool calls `index_project(root, options)`.
-   - voyager-ast:
-     - Detects file languages.
-     - Parses each file lazily in Index mode.
-     - Returns a **PlanetariumModel** with:
-       - Files, top-level declarations, imports, comments.
-
-2. **Fractal Zoom on a Function**
-   - User or LLM requests deeper understanding of a specific function.
-   - VO translates that to `zoom_into(file_id, symbol_id, options)`.
-   - voyager-ast:
-     - Re-parses or deepens the parse for that file.
-     - Returns a **MicroscopeModel**:
-       - Full Block, ControlFlow, Calls, detailed comments for that region.
-
-3. **Resilient Parsing of Broken Code**
-   - VO indexes a WIP branch with syntax errors.
-   - voyager-ast:
-     - Still returns a tree.
-     - Flags uncertain regions as `UnknownNode` or `UnparsedBlock`.
-   - VO can surface this “dark matter” to the LLM instead of silently dropping content.
-
-4. **Third-party Language Adapter Contribution**
-   - Contributor adds support for a new language with a Tree-sitter grammar.
-   - Implements mapping trait for:
-     - Declarations, imports, comments (Index mode).
-     - Blocks, control flow, calls (Zoom mode).
-   - Runs visualization/debugging tools to validate mapping.
-
-***
-
-## 5. Key Features
-
-1. **File-based Structural IR**
-
-   - Primary unit: **File tree**.  
-   - Core IR types (v1, stable):
-     - `File`
-     - `Region` (span, language id)
-     - `Declaration` (function, method, class, type, constant)
-     - `Block`
-     - `ControlFlow` (if/else, loop, switch/match)
-     - `Call` (name, callee text; best-effort)
-     - `ImportLike` (import/require/include/using/module ref)
-     - `Comment` (line/block, with best-effort attachment to nearby nodes)
-     - `UnknownNode`, `UnparsedBlock` for fuzzy regions.
-
-2. **Two Operating Modes: Index & Zoom**
-
-   - `index_project(root, options) -> PlanetariumModel`
-     - Top-level declarations, imports, file-level comments per file.
-     - No intra-function control-flow by default.
-   - `zoom_into(file_id, symbol_id, options) -> MicroscopeModel`
-     - Full body of target symbol: nested blocks, control flow, calls, comments.
-
-3. **Tree-sitter Integration (Lazy, Chunked)**
-
-   - Use Tree-sitter for parsing each file.  
-   - Lazy parsing strategy:
-     - Only parse a file when needed (first Index or Zoom access).
-     - Cache parse trees where appropriate in the process lifetime.
-   - “Chunked” approach to avoid unnecessary deep walking in Index mode.
-
-4. **Error-tolerant, Explicit Fuzziness**
-
-   - Always attempt to return a tree:
-     - On syntax errors, insert `UnknownNode` / `UnparsedBlock` with spans.  
-   - No “silent drop” of malformed regions.
-   - VO can use this to signal uncertainty to LLMs.
-
-5. **Language Adapters via Plugin Registry**
-
-   - Single crate in v1 with a **registry of adapters**:
-     - Core Fleet: grammar-level mapping.
-     - Long tail: pattern-based mapping on node types / Tree-sitter queries.
-   - Designed so adapters can later be extracted to `voyager-ast-lang-*` crates.
-
-6. **Deterministic, Syntactic-only Core**
-
-   - voyager-ast:
-     - No semantic overlays.
-     - No learning or heuristic changes based on LLM feedback.
-   - Semantic tags (domains, “Bright Stars”) live adjacent to IR, not inside it.
-
-***
-
-## 6. Success Metrics
-
-- **Adoption & Stability**
-  - Used as the **sole structural backend** for VO in production (no regex fallbacks).
-  - Zero “showstopper” parsing regressions in VO across 3 consecutive releases.
-
-- **Performance**
-  - Meet the latency targets in Goals & Objectives for Index and Zoom.
-  - Memory profile remains stable and bounded per file (no unbounded parse forests).
-
-- **Coverage**
-  - Core Fleet: Rust, Python, TypeScript, ABL at “high-resolution” (Zoom fully supported).
-  - At least 10 additional languages in Index mode (C, C++, Java, Go, PHP, Ruby, etc.).
-
-- **Contributor Ergonomics**
-  - Documented “Add a Language in N Steps” guide.
-  - At least 2 external PRs adding or improving language support within 3–6 months of open sourcing.
-
-***
-
-## 7. Assumptions
-
-- Tree-sitter grammars exist and are mature enough for the core target languages.
-- VO’s current and near-term use is **read-only** over repo checkouts (no live buffer edits).
-- LLMs consume **narrative summaries** generated from voyager-ast output, not raw ASTs.
-- Cross-file relations (imports → definitions, calls → targets) can remain best-effort/name-based in v1; no full symbol resolution required.
-
-***
-
-## 8. Timeline
-
-**Phase 1A – Core Skeleton (2–3 weeks)**  
-- Define IR types and traits.  
-- Integrate Tree-sitter runtime.  
-- Implement Index/Zoom API surfaces and basic Rust adapter.
-
-**Phase 1B – Core Fleet Support (4–6 weeks)**  
-- Implement adapters for Rust, Python, TypeScript, ABL.  
-- Add Unknown/Unparsed behavior and fuzziness handling.  
-- Benchmarks and perf tuning for CLI/MCP workloads.
-
-**Phase 1C – Long-tail Languages + Ergonomics (4 weeks)**  
-- Add 5–10 additional languages in Index mode.  
-- Build visualization/debugging utilities (e.g., dump IR to JSON, AST overlay viewer).  
-- Author contribution guides and internal docs.
-
-**Phase 2 – Extraction & Hardening (post-v1)**  
-- Optionally split language adapters into `voyager-ast-lang-*` crates.  
-- Add incremental parsing hooks for future live-edit scenarios.  
-- Integrate versioning contracts for VO and external consumers.
-
-***
-
-## 9. Stakeholders
-
-- **Product / Architecture**
-  - Chief Architect, Voyager Observatory (decision owner for IR and APIs).
-- **Engineering**
-  - Core Rust team (voyager-ast implementation).
-  - VO engine team (integration & Fractal Protocol).
-- **Developer Relations / Community**
-  - Maintains documentation, guides, and handles external contributions.
-- **Research / AI**
-  - Defines how IR is transformed into narratives and Fractal context for LLMs.
+### **3. COMPLETE ERROR HANDLING SCHEMA**
+Define a proper error hierarchy:
+```rust
+enum PluginError {
+    SandboxViolation(String),  // Security breach attempt
+    TimeoutExceeded,           // >100ms execution
+    MemoryQuotaExceeded,       // >10MB allocation
+    ApiVersionMismatch,        // vo_api_version mismatch
+    // ...
+}
+```
 
 ---
 
-## 10. Known Constraints or Dependencies
+## 🚀 REFINED & EXECUTION-READY PROMPT
 
-- Dependence on **Tree-sitter grammar quality**; some languages may be noisy or incomplete.
-- Performance constraints on very large monorepos; may require future caching/indexing strategies.
-- Need to maintain **deterministic output**, as VO depends on repeatable behavior for mission logs and tests.
-- ABL and other niche languages may require custom or immature grammars, increasing adapter complexity.
+```bash
+claude "task: Implement Phase 3 - The Plugin Ecosystem (The Iron Sandbox)
 
-***
+## CONTEXT
+VO v2.3.0 with Chronos Engine is operational. Now build the Lua plugin system using the Three-Layer Sovereignty Model.
 
-## Open Questions
+## ARCHITECTURAL PRINCIPLES
+1. **Sovereignty Model**: Plugins can only APPEND, never mutate core data
+2. **Iron Sandbox**: 100ms timeout, 10MB memory limit, stripped Lua libs
+3. **Deterministic Output**: Plugin data merged via BTreeMap for byte-parity
+4. **Graceful Degradation**: Plugins disabled = zero performance impact
 
-- How should **PlanetariumModel** and **MicroscopeModel** be serialized for external consumers?  
-  - JSON only, or also binary (e.g., MessagePack) for performance?
-- Do we need an **experiment flag** system in voyager-ast (for new heuristics) that VO can toggle per deployment?
-- What is the minimum level of **comment-to-node attachment** required (nearest node, enclosing node, custom strategies)?
+## TASK 0: DOCUMENTATION & FEATURE FLAGS
+**Objective:** Update docs and configure build system.
 
-***
+1. **Update Fractal Protocol Spec:**
+```bash
+sed -i 's/Phase 3: Plugin Ecosystem \[PLANNED\]/Phase 3: Plugin Ecosystem \[IMPLEMENTING\]/g' docs/specs/v2.0_FRACTAL_PROTOCOL_SPEC.md
+echo '- Added Three-Layer Sovereignty Model' >> docs/specs/v2.0_FRACTAL_PROTOCOL_SPEC.md
+echo '- Lua sandbox with 100ms/10MB limits' >> docs/specs/v2.0_FRACTAL_PROTOCOL_SPEC.md
+```
 
-## Risks and Mitigations
+2. **Create Plugin Architecture Document:**
+```bash
+mkdir -p docs/arch/
+cat > docs/arch/PLUGIN_ARCHITECTURE.md << 'EOF'
+# Plugin Architecture: Three-Layer Sovereignty
 
-- **Risk: Over-complex IR in v1.**  
-  - Mitigation: Freeze the small v1 IR (File, Region, Declaration, Block, ControlFlow, Call, ImportLike, Comment, Unknown/Unparsed). Defer richer semantics to later versions.
+## MODEL OVERVIEW
+┌─────────────────────────────────────────┐
+│          LAYER 3: LUA PLUGINS           │
+│  • Append-only contributions            │
+│  • 100ms CPU / 10MB RAM limits          │
+│  • vo.* API bridge                      │
+├─────────────────────────────────────────┤
+│         LAYER 2: SYNTAX PROVIDERS       │
+│  • Rust-native heuristic adapters       │
+│  • Tree-sitter parsers                  │
+│  • Regex engine (cached)                │
+├─────────────────────────────────────────┤
+│          LAYER 1: FRACTAL CORE          │
+│  • Memory-mapped AST storage            │
+│  • Normalized representation            │
+│  • Immutable data structures            │
+└─────────────────────────────────────────┘
 
-- **Risk: Tree-sitter inconsistencies across languages.**  
-  - Mitigation: For long-tail languages, restrict to Index mode; treat Zoom as “experimental” until coverage is validated.
+## SOVEREIGNTY RULE
+Plugins can ONLY:
+- Register new metrics for Celestial Census
+- Contribute tags to existing nodes
+- Append log entries to Mission Log
 
-- **Risk: Performance regressions as languages are added.**  
-  - Mitigation: Continuous benchmarks on representative repos; enforce budget per file and per-project in CI.
+Plugins CANNOT:
+- Mutate or delete core-discovered data
+- Access filesystem, network, or processes
+- Bypass timeout or memory limits
+EOF
+```
 
-- **Risk: External users depend on unstable APIs.**  
-  - Mitigation: Version APIs clearly (e.g., `v1` module), document stability guarantees, mark experimental parts.
+3. **Add Feature Gate to Cargo.toml:**
+```toml
+[dependencies]
+mlua = { version = "0.9", features = ["lua54", "vendored"], optional = true }
 
----]
-    *   **Mandate:** Explicitly state the "Telescope, not Compiler" philosophy: prioritize **best-effort recovery** over formal correctness. Return `UnknownNode` for syntax errors instead of failing.
-2.  **`docs/arch/VOYAGER_AST_CONTRACT.md`**:
-    *   **IR v1 Schema:** `File`, `Region`, `Declaration`, `Block`, `ControlFlow`, `Call`, `ImportLike`, `Comment`, `UnknownNode`.
-    *   **API Split:** `index_file` (Planetarium/High-level) vs. `zoom_symbol` (Microscope/Intra-function).
+[features]
+default = []
+plugins = ["dep:mlua"]  # Explicit feature gate
+```
 
-## 🏗️ PHASE 1: CRATE INITIALIZATION (THE WORKSPACE)
-- **Action:** Create a new library crate `voyager-ast` inside the `rust/` directory.
-- **Workspace:** Update the root `rust/Cargo.toml` to include `voyager-ast` in the `[workspace]`.
-- **Dependencies:** Add `tree-sitter`, `tree-sitter-rust`, `serde`, and `serde_json`.
+## TASK 1: PLUGIN KERNEL & IRON SANDBOX
+**Objective:** Create secure Lua runtime with hard limits.
 
-## 🔬 PHASE 2: THE IRON MOLD (CORE IR & TRAITS)
-Implement the foundational structures in `voyager-ast/src/lib.rs`:
-- **Deterministic Data:** Use `BTreeMap` and `BTreeSet` for all collections to ensure 100% byte-identical output across platforms.
-- **The IR Model:** Implement the v1 Schema types. Ensure `Declaration` handles functions, classes, and types.
-- **The Provider Trait:** Define `pub trait SyntaxProvider` with:
-    - `fn index_file(&self, path: &Path, source: &str) -> Result<PlanetariumModel>;`
-    - `fn zoom_symbol(&self, path: &Path, symbol_id: &str) -> Result<MicroscopeModel>;`
-- **Comment Logic:** Implement the "Nearest Preceding Node" heuristic for comment-to-node attachment.
+1. **Module Structure:**
+```bash
+mkdir -p src/core/plugins/{bridges,errors}
+touch src/core/plugins/{mod.rs,engine.rs,sandbox.rs,loader.rs}
+touch src/core/plugins/errors.rs
+touch src/core/plugins/bridges/{mod.rs,vo_table.rs,patterns.rs}
+```
 
-## 🔭 PHASE 3: THE RUST ADAPTER (FIRST LIGHT)
-- **Action:** Implement the `RustTreeSitterAdapter`.
-- **Requirement:** It must successfully extract functions, structs, and impl blocks from a `.rs` file.
-- **Error Recovery:** If the parser encounters a syntax error, it must return an `UnknownNode` for that region instead of failing.
+2. **Implement `Sandbox` in `sandbox.rs`:**
+```rust
+use mlua::{Lua, Result};
+use std::time::{Duration, Instant};
 
-## 🔗 PHASE 4: FLAGSHIP INTEGRATION
-- **Action:** Update the `pm_encoder` (VO) crate to depend on `voyager-ast`.
-- **Logic:** Refactor `ContextEngine` to attempt an AST-based scan via `voyager-ast` for Rust files. If it fails or the language is unsupported, fallback silently to the existing regex heuristics.
+pub struct IronSandbox {
+    lua: Lua,
+    timeout: Duration,
+    memory_limit: usize,
+}
 
-## 🧪 PHASE 5: TDD VERIFICATION
-- **Action:** Create `tests/test_ast_optics.rs`.
-- **Requirement:** Verify that `vo .` correctly identifies the `ContextEngine` struct and its methods using the new AST optics.
-- **Requirement:** Verify that the output remains jargon-free (no "AST" or "Tree-sitter" in the Mission Log).
+impl IronSandbox {
+    pub fn new() -> Result<Self> {
+        let lua = Lua::new();
+        
+        // STRIP DANGEROUS LIBRARIES
+        let globals = lua.globals();
+        globals.set("io", mlua::Value::Nil)?;
+        globals.set("os", mlua::Value::Nil)?;
+        globals.set("debug", mlua::Value::Nil)?;
+        globals.set("package", mlua::Value::Nil)?;
+        
+        // Remove load/dofile functions
+        globals.set("load", mlua::Value::Nil)?;
+        globals.set("loadfile", mlua::Value::Nil)?;
+        globals.set("dofile", mlua::Value::Nil)?;
+        
+        // SET RESOURCE LIMITS
+        lua.set_memory_limit(10 * 1024 * 1024)?; // 10MB
+        
+        Ok(Self {
+            lua,
+            timeout: Duration::from_millis(100),
+            memory_limit: 10 * 1024 * 1024,
+        })
+    }
+    
+    pub fn execute_with_timeout<F, R>(&self, f: F) -> Result<R>
+    where
+        F: FnOnce(&Lua) -> Result<R>,
+    {
+        let start = Instant::now();
+        
+        // Set interrupt handler for timeout
+        self.lua.set_interrupt_handler(Some(Box::new(|| {
+            if start.elapsed() > self.timeout {
+                Err(mlua::Error::RuntimeError("Timeout exceeded".to_string()))
+            } else {
+                Ok(())
+            }
+        })))?;
+        
+        let result = f(&self.lua);
+        
+        // Clear interrupt handler
+        self.lua.set_interrupt_handler(None)?;
+        
+        result
+    }
+}
+```
 
-## 🛡️ CRITICAL CONSTRAINTS
-- **Memory:** Maintain near $O(1)$ memory overhead relative to file count. Process files sequentially; do not load the entire project AST into memory at once.
-- **WASM:** The `voyager-ast` crate must be `wasm32-unknown-unknown` compatible. All I/O (file reading) must be external to the crate, provided by the caller.
-- **Zero Jargon:** The human-facing Mission Log must use the Observatory metaphor. The internal `voyager-ast` API can use technical terms, but the VO presentation layer must translate them.
-- **Incremental Build:** The architecture must allow for incremental indexing. The `PlanetariumModel` should be serializable to allow future caching and partial updates.
+## TASK 2: THE `vo.*` BRIDGE API
+**Objective:** Expose curated Observatory capabilities.
 
-**"The optics are ready to be cast. Open the Observatory."**
+1. **Create `vo` global table in `vo_table.rs`:**
+```rust
+use mlua::{Lua, Table, Value};
+use crate::core::regex_engine::RegexEngine;
+
+pub fn create_vo_table(lua: &Lua) -> mlua::Result<Table> {
+    let vo = lua.create_table()?;
+    
+    // API version
+    vo.set("api_version", "3.0")?;
+    
+    // Regex bridge (from Phase 1B)
+    vo.set("regex", lua.create_function(|lua, pattern: String| {
+        let engine = RegexEngine::global();
+        let compiled = engine.compile(&pattern)
+            .map_err(|e| mlua::Error::RuntimeError(format!("Regex error: {}", e)))?;
+        
+        // Return as Lua function that takes text
+        lua.create_function(move |_, text: String| {
+            let matches = compiled.find_iter(&text).collect::<Vec<_>>();
+            Ok(matches.len())
+        })
+    })?)?;
+    
+    // AST proxy (immutable)
+    vo.set("ast", lua.create_function(|_, path: String| {
+        // TODO: Hook into existing AST bridge
+        // Return read-only proxy table
+        Ok(lua.create_table()?)
+    })?)?;
+    
+    // Pre-compiled patterns
+    let patterns = lua.create_table()?;
+    patterns.set("rust_fn", r"fn\s+(\w+)")?;
+    patterns.set("python_def", r"def\s+(\w+)")?;
+    vo.set("patterns", patterns)?;
+    
+    // Logging bridge
+    vo.set("log", lua.create_function(|_, (level, msg): (String, String)| {
+        // TODO: Hook into IntelligentPresenter
+        println!("[{}] {}", level, msg);
+        Ok(())
+    })?)?;
+    
+    // Metric registration
+    vo.set("register_metric", lua.create_function(|lua, (name, callback): (String, mlua::Function)| {
+        // TODO: Register with MetricRegistry
+        Ok(())
+    })?)?;
+    
+    // Tag contribution
+    vo.set("contribute_tag", lua.create_function(|_, (node_id, tag): (String, String)| {
+        // TODO: Append to tag registry
+        Ok(())
+    })?)?;
+    
+    Ok(vo)
+}
+```
+
+## TASK 3: DISCOVERY & MANIFEST SYSTEM
+**Objective:** Load plugins from standard paths.
+
+1. **Implement `PluginLoader` in `loader.rs`:**
+```rust
+use serde::Deserialize;
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Deserialize)]
+pub struct PluginManifest {
+    pub vo_api_version: String,
+    pub plugins: Vec<PluginEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PluginEntry {
+    pub name: String,
+    pub file: String,
+    pub enabled: bool,
+    pub priority: i32,
+}
+
+pub struct PluginLoader {
+    search_paths: Vec<PathBuf>,
+}
+
+impl PluginLoader {
+    pub fn new() -> Self {
+        let mut paths = Vec::new();
+        
+        // Local project plugins
+        if let Ok(cwd) = std::env::current_dir() {
+            paths.push(cwd.join(".vo/plugins"));
+        }
+        
+        // User-global plugins
+        if let Some(home) = dirs::home_dir() {
+            paths.push(home.join(".config/vo/plugins"));
+        }
+        
+        Self { search_paths: paths }
+    }
+    
+    pub fn discover_plugins(&self) -> Vec<PluginEntry> {
+        let mut plugins = Vec::new();
+        
+        for path in &self.search_paths {
+            let manifest_path = path.join("manifest.json");
+            if manifest_path.exists() {
+                if let Ok(contents) = std::fs::read_to_string(&manifest_path) {
+                    if let Ok(manifest) = serde_json::from_str::<PluginManifest>(&contents) {
+                        // Check API version compatibility
+                        if manifest.vo_api_version == "3.0" {
+                            plugins.extend(manifest.plugins.into_iter().filter(|p| p.enabled));
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Sort by priority (higher first)
+        plugins.sort_by(|a, b| b.priority.cmp(&a.priority));
+        plugins
+    }
+}
+```
+
+## TASK 4: INTEGRATION POINTS
+**Objective:** Connect plugins to existing systems.
+
+1. **Extend `MetricRegistry` (from Phase 1C):**
+```rust
+// In src/core/metric_registry.rs
+#[cfg(feature = "plugins")]
+use crate::core::plugins::LuaMetricCollector;
+
+pub struct MetricRegistry {
+    rust_collectors: Vec<Box<dyn MetricCollector>>,
+    #[cfg(feature = "plugins")]
+    lua_collectors: Vec<LuaMetricCollector>,
+}
+
+impl MetricRegistry {
+    #[cfg(feature = "plugins")]
+    pub fn register_lua_metric(&mut self, name: String, lua_fn: mlua::Function) {
+        self.lua_collectors.push(LuaMetricCollector::new(name, lua_fn));
+    }
+}
+```
+
+2. **Update `IntelligentPresenter`:**
+```rust
+// In src/presenter/intelligent_presenter.rs
+pub fn generate_plugin_summary(&self, plugin_count: usize, loaded_plugins: &[String]) -> String {
+    if plugin_count == 0 {
+        return String::from("🔌 No external optics detected.");
+    }
+    
+    let mut output = format!("🔌 External Optics: {} community plugins loaded\n", plugin_count);
+    for plugin in loaded_plugins {
+        output.push_str(&format!("   ├─ {}\n", plugin));
+    }
+    output.push_str("🛡️ Plugin sandbox: Active (10MB memory, 100ms timeout)\n");
+    output
+}
+```
+
+## TASK 5: COMPREHENSIVE TDD SUITE
+**Objective:** Prove security and functionality.
+
+1. **Create test file:**
+```bash
+touch tests/test_plugin_ecosystem.rs
+```
+
+2. **Implement adversarial tests:**
+```rust
+// tests/test_plugin_ecosystem.rs
+#[cfg(feature = "plugins")]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_sandbox_escape() {
+        let sandbox = IronSandbox::new().unwrap();
+        
+        // Test os.execute is disabled
+        let result = sandbox.execute_with_timeout(|lua| {
+            lua.load("return os.execute('echo hacked')").eval::<()>()
+        });
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("nil"));
+    }
+    
+    #[test]
+    fn test_resource_exhaustion() {
+        let sandbox = IronSandbox::new().unwrap();
+        
+        let start = std::time::Instant::now();
+        let result = sandbox.execute_with_timeout(|lua| {
+            lua.load("while true do end").eval::<()>()
+        });
+        
+        assert!(result.is_err());
+        assert!(start.elapsed() < std::time::Duration::from_millis(150)); // Within tolerance
+    }
+    
+    #[test]
+    fn test_vo_api_bridge() {
+        let sandbox = IronSandbox::new().unwrap();
+        
+        let result = sandbox.execute_with_timeout(|lua| {
+            // Create vo table
+            let vo = crate::core::plugins::bridges::vo_table::create_vo_table(lua)?;
+            lua.globals().set("vo", vo)?;
+            
+            // Test regex bridge
+            lua.load(r#"
+                local pattern = vo.regex("test")
+                local count = pattern("this is a test")
+                return count
+            "#).eval::<i32>()
+        });
+        
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1); // "test" appears once
+    }
+    
+    #[test]
+    fn test_custom_metric_integration() {
+        // Test that Lua metric appears in census
+        let test_lua = r#"
+            vo.register_metric("todo_counter", function(ast)
+                -- Count TODO comments
+                local count = 0
+                for _, comment in ipairs(ast.comments or {}) do
+                    if string.find(comment.text, "TODO") then
+                        count = count + 1
+                    end
+                end
+                return {
+                    value = count,
+                    confidence = 0.8,
+                    explanation = "Found " .. count .. " TODO comments"
+                }
+            end)
+        "#;
+        
+        // TODO: Load plugin and verify metric appears in --survey composition
+    }
+}
+```
+
+## CRITICAL SUCCESS METRICS
+
+1. **Security:** All 6 adversarial tests pass
+2. **Performance:** Plugin overhead <5ms when disabled, <50ms when enabled
+3. **Integration:** `vo . --plugins list` shows loaded plugins
+4. **Determinism:** Same input → same output byte-for-byte
+5. **Graceful Degradation:** `cargo build --no-default-features` produces working binary
+
+## EXECUTION ORDER
+
+1. **Run Phase 0 immediately** (documentation updates)
+2. **Then Phase 1** (mlua dependency + sandbox)
+3. **Then Phase 2** (vo.* API bridge)
+4. **Then Phase 3** (discovery system)
+5. **Then Phase 4** (integration points)
+6. **Then Phase 5** (TDD verification)
+
+## RISK MITIGATION
+
+**Risk:** mlua compilation issues
+**Mitigation:** Use vendored Lua, test on clean environment
+
+**Risk:** Performance regression
+**Mitigation:** Feature gate all plugin code, benchmark before/after
+
+**Risk:** Security vulnerability
+**Mitigation:** Adversarial tests, stripped libraries, resource limits
+
+---
+
+**READY TO EXECUTE.** This prompt contains every detail needed for Claude Code CLI to build the complete Plugin Ecosystem from scratch.
+
+Launch Phase 3 now. The gates await. 🌌✨🔌"

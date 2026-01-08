@@ -9,8 +9,8 @@
 
 use std::collections::HashMap;
 
-use crate::core::regex_engine::{CompiledRegex, global_engine};
 use crate::core::fractal::{ExtractedSymbol, Import, Range, SymbolKind, Visibility};
+use crate::core::regex_engine::{global_engine, CompiledRegex};
 
 use super::{FileInfo, LanguagePlugin, PluginResult};
 
@@ -315,9 +315,8 @@ impl LanguagePlugin for ShellPlugin {
             || content.contains("test_");
 
         // Check for executable patterns
-        let is_executable = content.starts_with("#!")
-            || content.contains("main()")
-            || content.contains("#!/");
+        let is_executable =
+            content.starts_with("#!") || content.contains("main()") || content.contains("#!/");
 
         let mut metadata = HashMap::new();
 
@@ -598,13 +597,22 @@ test_deployment() {
     #[test]
     fn test_shell_dialect_from_shebang_ksh() {
         assert_eq!(ShellDialect::from_shebang("#!/bin/ksh"), ShellDialect::Ksh);
-        assert_eq!(ShellDialect::from_shebang("#!/usr/bin/env ksh"), ShellDialect::Ksh);
+        assert_eq!(
+            ShellDialect::from_shebang("#!/usr/bin/env ksh"),
+            ShellDialect::Ksh
+        );
     }
 
     #[test]
     fn test_shell_dialect_from_shebang_fish() {
-        assert_eq!(ShellDialect::from_shebang("#!/usr/bin/fish"), ShellDialect::Fish);
-        assert_eq!(ShellDialect::from_shebang("#!/usr/bin/env fish"), ShellDialect::Fish);
+        assert_eq!(
+            ShellDialect::from_shebang("#!/usr/bin/fish"),
+            ShellDialect::Fish
+        );
+        assert_eq!(
+            ShellDialect::from_shebang("#!/usr/bin/env fish"),
+            ShellDialect::Fish
+        );
     }
 
     #[test]

@@ -7,11 +7,11 @@
 //! The core pattern definitions live in `core::spectrograph`, and this
 //! module just provides the Lua bridge when the `plugins` feature is enabled.
 
-use mlua::{Lua, Table, Result as LuaResult};
+use mlua::{Lua, Result as LuaResult, Table};
 
 // Re-export core types for backwards compatibility
 pub use crate::core::spectrograph::{
-    SpectralSignature, Hemisphere, StellarLibrary, STELLAR_LIBRARY,
+    Hemisphere, SpectralSignature, StellarLibrary, STELLAR_LIBRARY,
 };
 
 /// Create the patterns table with all spectral signatures for Lua plugins
@@ -26,7 +26,10 @@ pub fn create_patterns_table(lua: &Lua) -> LuaResult<Table> {
     patterns.set("rust_fn", r#"(?:pub\s+)?(?:async\s+)?fn\s+(\w+)"#)?;
     patterns.set("rust_struct", r#"(?:pub\s+)?struct\s+(\w+)"#)?;
     patterns.set("rust_enum", r#"(?:pub\s+)?enum\s+(\w+)"#)?;
-    patterns.set("rust_impl", r#"impl(?:<[^>]+>)?\s+(?:(\w+)\s+for\s+)?(\w+)"#)?;
+    patterns.set(
+        "rust_impl",
+        r#"impl(?:<[^>]+>)?\s+(?:(\w+)\s+for\s+)?(\w+)"#,
+    )?;
     patterns.set("rust_trait", r#"(?:pub\s+)?trait\s+(\w+)"#)?;
     patterns.set("rust_mod", r#"(?:pub\s+)?mod\s+(\w+)"#)?;
     patterns.set("rust_use", r#"use\s+([^;]+)"#)?;
@@ -46,9 +49,18 @@ pub fn create_patterns_table(lua: &Lua) -> LuaResult<Table> {
     patterns.set("js_const", r#"const\s+(\w+)"#)?;
     patterns.set("js_let", r#"let\s+(\w+)"#)?;
     patterns.set("js_class", r#"class\s+(\w+)"#)?;
-    patterns.set("js_arrow", r#"(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>"#)?;
-    patterns.set("js_import", r#"import\s+(?:\{[^}]+\}|\*\s+as\s+\w+|\w+)\s+from\s+["']([^"']+)["']"#)?;
-    patterns.set("js_export", r#"export\s+(?:default\s+)?(?:function|class|const|let|var)\s+(\w+)"#)?;
+    patterns.set(
+        "js_arrow",
+        r#"(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>"#,
+    )?;
+    patterns.set(
+        "js_import",
+        r#"import\s+(?:\{[^}]+\}|\*\s+as\s+\w+|\w+)\s+from\s+["']([^"']+)["']"#,
+    )?;
+    patterns.set(
+        "js_export",
+        r#"export\s+(?:default\s+)?(?:function|class|const|let|var)\s+(\w+)"#,
+    )?;
 
     // TypeScript patterns
     patterns.set("ts_interface", r#"(?:export\s+)?interface\s+(\w+)"#)?;
@@ -56,23 +68,47 @@ pub fn create_patterns_table(lua: &Lua) -> LuaResult<Table> {
     patterns.set("ts_enum", r#"(?:export\s+)?enum\s+(\w+)"#)?;
 
     // Java patterns
-    patterns.set("java_class", r#"(?:public|private|protected)?\s*(?:abstract\s+)?class\s+(\w+)"#)?;
-    patterns.set("java_interface", r#"(?:public|private|protected)?\s*interface\s+(\w+)"#)?;
-    patterns.set("java_method", r#"(?:public|private|protected)?\s*(?:static\s+)?(?:\w+\s+)+(\w+)\s*\("#)?;
+    patterns.set(
+        "java_class",
+        r#"(?:public|private|protected)?\s*(?:abstract\s+)?class\s+(\w+)"#,
+    )?;
+    patterns.set(
+        "java_interface",
+        r#"(?:public|private|protected)?\s*interface\s+(\w+)"#,
+    )?;
+    patterns.set(
+        "java_method",
+        r#"(?:public|private|protected)?\s*(?:static\s+)?(?:\w+\s+)+(\w+)\s*\("#,
+    )?;
     patterns.set("java_import", r#"import\s+([^;]+)"#)?;
     patterns.set("java_package", r#"package\s+([^;]+)"#)?;
 
     // C# patterns
-    patterns.set("csharp_class", r#"(?:public|private|protected|internal)?\s*(?:partial\s+)?class\s+(\w+)"#)?;
-    patterns.set("csharp_interface", r#"(?:public|private|protected|internal)?\s*interface\s+(\w+)"#)?;
+    patterns.set(
+        "csharp_class",
+        r#"(?:public|private|protected|internal)?\s*(?:partial\s+)?class\s+(\w+)"#,
+    )?;
+    patterns.set(
+        "csharp_interface",
+        r#"(?:public|private|protected|internal)?\s*interface\s+(\w+)"#,
+    )?;
     patterns.set("csharp_method", r#"(?:public|private|protected|internal)?\s*(?:static\s+)?(?:async\s+)?(?:\w+\s+)+(\w+)\s*\("#)?;
-    patterns.set("csharp_struct", r#"(?:public|private|protected|internal)?\s*struct\s+(\w+)"#)?;
-    patterns.set("csharp_enum", r#"(?:public|private|protected|internal)?\s*enum\s+(\w+)"#)?;
+    patterns.set(
+        "csharp_struct",
+        r#"(?:public|private|protected|internal)?\s*struct\s+(\w+)"#,
+    )?;
+    patterns.set(
+        "csharp_enum",
+        r#"(?:public|private|protected|internal)?\s*enum\s+(\w+)"#,
+    )?;
 
     // C++ patterns
     patterns.set("cpp_class", r#"class\s+(\w+)"#)?;
     patterns.set("cpp_struct", r#"struct\s+(\w+)"#)?;
-    patterns.set("cpp_function", r#"(?:\w+\s+)+(\w+)\s*\([^)]*\)\s*(?:const\s*)?(?:override\s*)?(?:final\s*)?\{"#)?;
+    patterns.set(
+        "cpp_function",
+        r#"(?:\w+\s+)+(\w+)\s*\([^)]*\)\s*(?:const\s*)?(?:override\s*)?(?:final\s*)?\{"#,
+    )?;
     patterns.set("cpp_namespace", r#"namespace\s+(\w+)"#)?;
     patterns.set("cpp_template", r#"template\s*<[^>]+>"#)?;
 
@@ -91,7 +127,10 @@ pub fn create_patterns_table(lua: &Lua) -> LuaResult<Table> {
     patterns.set("go_import", r#"import\s+(?:\(\s*)?["']([^"']+)["']"#)?;
 
     // PHP patterns
-    patterns.set("php_function", r#"(?:public|private|protected)?\s*(?:static\s+)?function\s+(\w+)"#)?;
+    patterns.set(
+        "php_function",
+        r#"(?:public|private|protected)?\s*(?:static\s+)?function\s+(\w+)"#,
+    )?;
     patterns.set("php_class", r#"class\s+(\w+)"#)?;
     patterns.set("php_interface", r#"interface\s+(\w+)"#)?;
     patterns.set("php_trait", r#"trait\s+(\w+)"#)?;
@@ -137,10 +176,16 @@ pub fn create_patterns_table(lua: &Lua) -> LuaResult<Table> {
     patterns.set("makefile_target", r#"^(\w+)\s*:"#)?;
 
     // Docker patterns
-    patterns.set("dockerfile_instruction", r#"^(FROM|RUN|CMD|ENTRYPOINT|COPY|ADD|ENV|EXPOSE|WORKDIR|LABEL)"#)?;
+    patterns.set(
+        "dockerfile_instruction",
+        r#"^(FROM|RUN|CMD|ENTRYPOINT|COPY|ADD|ENV|EXPOSE|WORKDIR|LABEL)"#,
+    )?;
 
     // Terraform/HCL patterns
-    patterns.set("hcl_resource", r#"(?:resource|data|variable|output|module|provider)\s+"(\w+)""#)?;
+    patterns.set(
+        "hcl_resource",
+        r#"(?:resource|data|variable|output|module|provider)\s+"(\w+)""#,
+    )?;
 
     // Nix patterns
     patterns.set("nix_binding", r#"(\w+)\s*=\s*(?:\{|let|rec)"#)?;
@@ -150,7 +195,10 @@ pub fn create_patterns_table(lua: &Lua) -> LuaResult<Table> {
     // -------------------------------------------------------------------------
 
     // COBOL patterns
-    patterns.set("cobol_procedure", r#"(?:PROCEDURE|SECTION|PARAGRAPH)\s+(\w+(?:-\w+)*)"#)?;
+    patterns.set(
+        "cobol_procedure",
+        r#"(?:PROCEDURE|SECTION|PARAGRAPH)\s+(\w+(?:-\w+)*)"#,
+    )?;
     patterns.set("cobol_division", r#"(\w+(?:-\w+)*)\s+DIVISION"#)?;
 
     // Simula patterns (The OO Pioneer!)
@@ -308,7 +356,10 @@ pub fn create_patterns_table(lua: &Lua) -> LuaResult<Table> {
     patterns.set("julia_macro", r#"macro\s+(\w+)"#)?;
 
     // MATLAB patterns
-    patterns.set("matlab_function", r#"function\s+(?:\[?[^\]]*\]?\s*=\s*)?(\w+)"#)?;
+    patterns.set(
+        "matlab_function",
+        r#"function\s+(?:\[?[^\]]*\]?\s*=\s*)?(\w+)"#,
+    )?;
     patterns.set("matlab_classdef", r#"classdef\s+(\w+)"#)?;
 
     // Groovy patterns
@@ -326,9 +377,15 @@ pub fn create_patterns_table(lua: &Lua) -> LuaResult<Table> {
     patterns.set("bug_comment", r#"(?://|#|/\*|--|;)\s*BUG[:\s]"#)?;
     patterns.set("xxx_comment", r#"(?://|#|/\*|--|;)\s*XXX[:\s]"#)?;
     patterns.set("url", r#"https?://[^\s<>"{}|\\^`\[\]]+"#)?;
-    patterns.set("email", r#"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"#)?;
+    patterns.set(
+        "email",
+        r#"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"#,
+    )?;
     patterns.set("semver", r#"\d+\.\d+\.\d+(?:-[\w.]+)?(?:\+[\w.]+)?"#)?;
-    patterns.set("uuid", r#"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"#)?;
+    patterns.set(
+        "uuid",
+        r#"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"#,
+    )?;
 
     Ok(patterns)
 }

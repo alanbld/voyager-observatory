@@ -378,11 +378,11 @@ impl ProcessedFile {
     /// Get the brightness indicator for output
     pub fn brightness_indicator(&self) -> &'static str {
         match self.utility {
-            Some(u) if u >= 0.9 => "🌟 ",  // Very bright
-            Some(u) if u >= 0.8 => "⭐ ",  // Bright
-            Some(u) if u >= 0.5 => "✨ ",  // Notable
-            Some(_) => "",                 // Dim
-            None => "",                    // Unknown
+            Some(u) if u >= 0.9 => "🌟 ", // Very bright
+            Some(u) if u >= 0.8 => "⭐ ", // Bright
+            Some(u) if u >= 0.5 => "✨ ", // Notable
+            Some(_) => "",                // Dim
+            None => "",                   // Unknown
         }
     }
 
@@ -452,8 +452,14 @@ mod tests {
 
     #[test]
     fn test_output_format_from_str() {
-        assert_eq!(OutputFormat::parse("plus-minus"), Some(OutputFormat::PlusMinus));
-        assert_eq!(OutputFormat::parse("claude-xml"), Some(OutputFormat::ClaudeXml));
+        assert_eq!(
+            OutputFormat::parse("plus-minus"),
+            Some(OutputFormat::PlusMinus)
+        );
+        assert_eq!(
+            OutputFormat::parse("claude-xml"),
+            Some(OutputFormat::ClaudeXml)
+        );
         assert_eq!(OutputFormat::parse("invalid"), None);
     }
 
@@ -496,8 +502,8 @@ mod tests {
 
     #[test]
     fn test_file_entry_with_timestamps() {
-        let entry = FileEntry::new("test.rs", "fn main() {}")
-            .with_timestamps(1234567890, 1234567800);
+        let entry =
+            FileEntry::new("test.rs", "fn main() {}").with_timestamps(1234567890, 1234567800);
 
         assert_eq!(entry.mtime, 1234567890);
         assert_eq!(entry.ctime, 1234567800);
@@ -505,8 +511,7 @@ mod tests {
 
     #[test]
     fn test_file_entry_with_size() {
-        let entry = FileEntry::new("test.rs", "fn main() {}")
-            .with_size(9999);
+        let entry = FileEntry::new("test.rs", "fn main() {}").with_size(9999);
 
         assert_eq!(entry.size, 9999);
     }
@@ -529,17 +534,26 @@ mod tests {
     fn test_output_format_parse_variants() {
         // PlusMinus variants
         assert_eq!(OutputFormat::parse("pm"), Some(OutputFormat::PlusMinus));
-        assert_eq!(OutputFormat::parse("plus_minus"), Some(OutputFormat::PlusMinus));
+        assert_eq!(
+            OutputFormat::parse("plus_minus"),
+            Some(OutputFormat::PlusMinus)
+        );
 
         // XML
         assert_eq!(OutputFormat::parse("xml"), Some(OutputFormat::Xml));
 
         // Markdown variants
-        assert_eq!(OutputFormat::parse("markdown"), Some(OutputFormat::Markdown));
+        assert_eq!(
+            OutputFormat::parse("markdown"),
+            Some(OutputFormat::Markdown)
+        );
         assert_eq!(OutputFormat::parse("md"), Some(OutputFormat::Markdown));
 
         // ClaudeXml variants
-        assert_eq!(OutputFormat::parse("claude_xml"), Some(OutputFormat::ClaudeXml));
+        assert_eq!(
+            OutputFormat::parse("claude_xml"),
+            Some(OutputFormat::ClaudeXml)
+        );
     }
 
     #[test]
@@ -556,7 +570,10 @@ mod tests {
         assert_eq!(SkeletonMode::parse("on"), Some(SkeletonMode::Enabled));
         assert_eq!(SkeletonMode::parse("yes"), Some(SkeletonMode::Enabled));
         assert_eq!(SkeletonMode::parse("false"), Some(SkeletonMode::Disabled));
-        assert_eq!(SkeletonMode::parse("disabled"), Some(SkeletonMode::Disabled));
+        assert_eq!(
+            SkeletonMode::parse("disabled"),
+            Some(SkeletonMode::Disabled)
+        );
         assert_eq!(SkeletonMode::parse("off"), Some(SkeletonMode::Disabled));
         assert_eq!(SkeletonMode::parse("no"), Some(SkeletonMode::Disabled));
         assert_eq!(SkeletonMode::parse("invalid"), None);
@@ -583,9 +600,18 @@ mod tests {
         assert_eq!(MetadataMode::parse("auto"), Some(MetadataMode::Auto));
         assert_eq!(MetadataMode::parse("all"), Some(MetadataMode::All));
         assert_eq!(MetadataMode::parse("none"), Some(MetadataMode::None));
-        assert_eq!(MetadataMode::parse("size-only"), Some(MetadataMode::SizeOnly));
-        assert_eq!(MetadataMode::parse("size_only"), Some(MetadataMode::SizeOnly));
-        assert_eq!(MetadataMode::parse("sizeonly"), Some(MetadataMode::SizeOnly));
+        assert_eq!(
+            MetadataMode::parse("size-only"),
+            Some(MetadataMode::SizeOnly)
+        );
+        assert_eq!(
+            MetadataMode::parse("size_only"),
+            Some(MetadataMode::SizeOnly)
+        );
+        assert_eq!(
+            MetadataMode::parse("sizeonly"),
+            Some(MetadataMode::SizeOnly)
+        );
         assert_eq!(MetadataMode::parse("invalid"), None);
     }
 
@@ -597,16 +623,14 @@ mod tests {
 
     #[test]
     fn test_encoder_config_with_skeleton_mode() {
-        let config = EncoderConfig::new()
-            .with_skeleton_mode(SkeletonMode::Enabled);
+        let config = EncoderConfig::new().with_skeleton_mode(SkeletonMode::Enabled);
 
         assert_eq!(config.skeleton_mode, SkeletonMode::Enabled);
     }
 
     #[test]
     fn test_encoder_config_with_metadata_mode() {
-        let config = EncoderConfig::new()
-            .with_metadata_mode(MetadataMode::All);
+        let config = EncoderConfig::new().with_metadata_mode(MetadataMode::All);
 
         assert_eq!(config.metadata_mode, MetadataMode::All);
     }
@@ -631,8 +655,7 @@ mod tests {
     #[test]
     fn test_processed_file_with_utility() {
         let entry = FileEntry::new("test.rs", "fn main() {}");
-        let processed = ProcessedFile::from_entry(&entry, "rust", 100)
-            .with_utility(0.95);
+        let processed = ProcessedFile::from_entry(&entry, "rust", 100).with_utility(0.95);
 
         assert_eq!(processed.utility, Some(0.95));
     }
@@ -646,17 +669,14 @@ mod tests {
         assert!(!processed.is_bright_star());
 
         // Low utility
-        let processed = ProcessedFile::from_entry(&entry, "rust", 100)
-            .with_utility(0.5);
+        let processed = ProcessedFile::from_entry(&entry, "rust", 100).with_utility(0.5);
         assert!(!processed.is_bright_star());
 
         // High utility
-        let processed = ProcessedFile::from_entry(&entry, "rust", 100)
-            .with_utility(0.8);
+        let processed = ProcessedFile::from_entry(&entry, "rust", 100).with_utility(0.8);
         assert!(processed.is_bright_star());
 
-        let processed = ProcessedFile::from_entry(&entry, "rust", 100)
-            .with_utility(0.95);
+        let processed = ProcessedFile::from_entry(&entry, "rust", 100).with_utility(0.95);
         assert!(processed.is_bright_star());
     }
 

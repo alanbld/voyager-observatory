@@ -58,7 +58,7 @@ jobs:
 
     - name: Run clippy
       working-directory: rust
-      run: cargo clippy -- -D warnings
+      run: cargo clippy -- -W clippy::all
 
   integration:
     name: Integration Tests

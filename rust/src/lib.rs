@@ -15,11 +15,11 @@
 //! This separation allows the core logic to be reusable across different
 //! interfaces without coupling to any specific runtime environment.
 
+use globset::Glob;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::time::SystemTime;
-use serde::{Deserialize, Serialize};
-use globset::Glob;
 use walkdir::WalkDir;
 
 pub mod analyzers;
@@ -31,23 +31,42 @@ pub mod lenses;
 pub mod plugins;
 pub mod server;
 
-pub use lenses::{LensManager, LensConfig, AppliedLens};
-pub use budgeting::{TokenEstimator, BudgetReport, parse_token_budget, apply_token_budget, FileData};
-pub use formats::{XmlWriter, XmlConfig, XmlError, AttentionEntry, escape_cdata};
+pub use budgeting::{
+    apply_token_budget, parse_token_budget, BudgetReport, FileData, TokenEstimator,
+};
+pub use formats::{escape_cdata, AttentionEntry, XmlConfig, XmlError, XmlWriter};
+pub use lenses::{AppliedLens, LensConfig, LensManager};
 
 // Re-export core types for backwards compatibility
 pub use core::{
+    CelestialMap,
+    ConstellationMapper,
+    EmojiFormatter,
     EncoderError,
-    ZoomAction, ZoomTarget, ZoomConfig, ZoomDepth,
-    // SmartWalker with boundary intelligence
-    SmartWalker, SmartWalkConfig, WalkEntry,
-    ProjectManifest, ProjectType,
-    // Celestial Navigation (Spectral Synthesis)
-    NebulaNamer, NebulaName, NamingStrategy,
-    ConstellationMapper, Nebula, CelestialMap, Star, FileInfo,
-    NavigationCompass, NavigationSuggestion, ExplorationHint, SuggestionAction,
+    ExplorationHint,
+    FileInfo,
     // Voyager Observatory Presenter
-    IntelligentPresenter, EmojiFormatter, Theme,
+    IntelligentPresenter,
+    NamingStrategy,
+    NavigationCompass,
+    NavigationSuggestion,
+    Nebula,
+    NebulaName,
+    // Celestial Navigation (Spectral Synthesis)
+    NebulaNamer,
+    ProjectManifest,
+    ProjectType,
+    SmartWalkConfig,
+    // SmartWalker with boundary intelligence
+    SmartWalker,
+    Star,
+    SuggestionAction,
+    Theme,
+    WalkEntry,
+    ZoomAction,
+    ZoomConfig,
+    ZoomDepth,
+    ZoomTarget,
 };
 
 /// A file entry with its content and metadata
@@ -68,8 +87,7 @@ pub struct FileEntry {
 }
 
 /// Configuration loaded from .pm_encoder_config.json
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
     /// Patterns to ignore (e.g., ["*.pyc", ".git"])
     #[serde(default)]
@@ -78,7 +96,6 @@ pub struct Config {
     #[serde(default)]
     pub include_patterns: Vec<String>,
 }
-
 
 /// Output format for serialization
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -102,13 +119,16 @@ impl OutputFormat {
             "xml" => Ok(Self::Xml),
             "markdown" | "md" => Ok(Self::Markdown),
             "claude-xml" | "claude_xml" | "claudexml" => Ok(Self::ClaudeXml),
-            _ => Err(format!("Unknown format '{}'. Valid options: plus_minus, xml, markdown, claude-xml", s)),
+            _ => Err(format!(
+                "Unknown format '{}'. Valid options: plus_minus, xml, markdown, claude-xml",
+                s
+            )),
         }
     }
 }
 
-pub use core::SkeletonMode;
 pub use core::models::MetadataMode;
+pub use core::SkeletonMode;
 
 /// Configuration for the encoder (expanded for CLI parity)
 #[derive(Debug, Clone)]
@@ -170,16 +190,16 @@ impl Default for EncoderConfig {
             sort_order: "asc".to_string(),
             truncate_lines: 0,
             truncate_mode: "simple".to_string(),
-            max_file_size: 5 * 1024 * 1024, // 5MB
-            stream: false, // Default to batch mode for backward compatibility
+            max_file_size: 5 * 1024 * 1024,         // 5MB
+            stream: false,          // Default to batch mode for backward compatibility
             truncate_summary: true, // Include summary markers by default
             truncate_exclude: vec![], // No files excluded by default
-            truncate_stats: false, // Don't show stats report by default
+            truncate_stats: false,  // Don't show stats report by default
             output_format: OutputFormat::PlusMinus, // Default to Plus/Minus format
-            frozen: false, // Default to dynamic mode with context store
+            frozen: false,          // Default to dynamic mode with context store
             allow_sensitive: false, // Default to privacy-safe mode
-            active_lens: None, // No lens by default
-            token_budget: None, // No budget by default
+            active_lens: None,      // No lens by default
+            token_budget: None,     // No budget by default
             skeleton_mode: SkeletonMode::Auto, // Auto-enable if budget is set
             metadata_mode: MetadataMode::Auto, // Smart metadata display (v2.3.0)
             follow_symlinks: false, // Skip broken symlinks silently by default
@@ -190,8 +210,8 @@ impl Default for EncoderConfig {
 impl EncoderConfig {
     /// Load configuration from a JSON file
     pub fn from_file(path: &std::path::Path) -> Result<Self, String> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read config file: {}", e))?;
+        let content =
+            fs::read_to_string(path).map_err(|e| format!("Failed to read config file: {}", e))?;
 
         let config: Config = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse config file: {}", e))?;
@@ -290,33 +310,32 @@ impl ContextEngine {
         let md5 = calculate_md5(content);
 
         // Apply truncation if configured
-        let (processed_content, was_truncated) = if self.config.truncate_lines > 0
-            || self.config.truncate_mode == "structure"
-        {
-            match self.config.truncate_mode.as_str() {
-                "simple" => truncate_simple_with_options(
-                    content,
-                    self.config.truncate_lines,
-                    path,
-                    self.config.truncate_summary,
-                ),
-                "smart" => truncate_smart_with_options(
-                    content,
-                    self.config.truncate_lines,
-                    path,
-                    self.config.truncate_summary,
-                ),
-                "structure" => truncate_structure_with_fallback(
-                    content,
-                    path,
-                    self.config.truncate_summary,
-                    self.config.truncate_lines,
-                ),
-                _ => (content.to_string(), false),
-            }
-        } else {
-            (content.to_string(), false)
-        };
+        let (processed_content, was_truncated) =
+            if self.config.truncate_lines > 0 || self.config.truncate_mode == "structure" {
+                match self.config.truncate_mode.as_str() {
+                    "simple" => truncate_simple_with_options(
+                        content,
+                        self.config.truncate_lines,
+                        path,
+                        self.config.truncate_summary,
+                    ),
+                    "smart" => truncate_smart_with_options(
+                        content,
+                        self.config.truncate_lines,
+                        path,
+                        self.config.truncate_summary,
+                    ),
+                    "structure" => truncate_structure_with_fallback(
+                        content,
+                        path,
+                        self.config.truncate_summary,
+                        self.config.truncate_lines,
+                    ),
+                    _ => (content.to_string(), false),
+                }
+            } else {
+                (content.to_string(), false)
+            };
 
         ProcessedFile {
             path: path.to_string(),
@@ -396,7 +415,8 @@ impl ContextEngine {
         } else {
             output.push_str(&format!(
                 "<file path=\"{}\" md5=\"{}\">\n",
-                escape_xml_attr(&file.path), file.md5
+                escape_xml_attr(&file.path),
+                file.md5
             ));
         }
 
@@ -526,7 +546,8 @@ impl ContextEngine {
         }
 
         if let Some(budget) = self.config.token_budget {
-            let utilized: usize = files.iter()
+            let utilized: usize = files
+                .iter()
                 .map(|f| f.content.len() / 4) // Rough token estimate
                 .sum();
             header.push_str(&format!("  token_budget=\"{}\"\n", budget));
@@ -542,8 +563,10 @@ impl ContextEngine {
 
         if !self.config.frozen {
             // Only include timestamp in non-frozen mode
-            header.push_str(&format!("    <timestamp>{}</timestamp>\n",
-                chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ")));
+            header.push_str(&format!(
+                "    <timestamp>{}</timestamp>\n",
+                chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ")
+            ));
         }
 
         if let Some(ref lens) = self.config.active_lens {
@@ -566,7 +589,9 @@ impl ContextEngine {
                 } else {
                     header.push_str(&format!(
                         "      <hotspot path=\"{}\" priority=\"{}\" tokens=\"{}\" />\n",
-                        escape_xml_attr(&file.path), priority, tokens
+                        escape_xml_attr(&file.path),
+                        priority,
+                        tokens
                     ));
                 }
             }
@@ -664,9 +689,7 @@ fn escape_xml(s: &str) -> String {
 
 /// Escape special XML characters in attribute values
 fn escape_xml_attr(s: &str) -> String {
-    escape_xml(s)
-        .replace('"', "&quot;")
-        .replace('\'', "&apos;")
+    escape_xml(s).replace('"', "&quot;").replace('\'', "&apos;")
 }
 
 /// Detect programming language from file extension
@@ -838,7 +861,7 @@ fn should_include_file(
     // Check ignore patterns FIRST (they take precedence over includes)
     // This matches Python behavior where directory-level ignores can't be overridden
     if matches_patterns(path, ignore_patterns) {
-        return false;  // Ignored paths are always excluded
+        return false; // Ignored paths are always excluded
     }
 
     // Pure whitelist mode: only when include_patterns exist AND no ignore_patterns
@@ -932,9 +955,8 @@ pub fn walk_directory_iter(
                     let error_str = e.to_string();
                     let is_not_found = error_str.contains("No such file or directory")
                         || error_str.contains("cannot access")
-                        || e.io_error().map_or(false, |io| {
-                            io.kind() == std::io::ErrorKind::NotFound
-                        });
+                        || e.io_error()
+                            .map_or(false, |io| io.kind() == std::io::ErrorKind::NotFound);
 
                     // Only warn about real errors (not broken symlinks)
                     if !is_not_found {
@@ -972,14 +994,16 @@ pub fn walk_directory_iter(
             }
 
             // Extract timestamps
-            let mtime = metadata.modified()
+            let mtime = metadata
+                .modified()
                 .ok()
                 .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
 
             // ctime: On Unix, use created(). Falls back to mtime if unavailable.
-            let ctime = metadata.created()
+            let ctime = metadata
+                .created()
                 .ok()
                 .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
                 .map(|d| d.as_secs())
@@ -1041,7 +1065,8 @@ pub fn walk_directory(
         ignore_patterns.to_vec(),
         include_patterns.to_vec(),
         max_size,
-    ).collect();
+    )
+    .collect();
 
     Ok(entries)
 }
@@ -1162,7 +1187,10 @@ fn truncate_with_gap_markers(
     // Calculate range boundaries (1-indexed like Python)
     let first_end = keep_first.min(total_lines);
     // Use saturating subtraction to avoid overflow
-    let last_start = total_lines.saturating_sub(keep_last).saturating_add(1).max(first_end + 1);
+    let last_start = total_lines
+        .saturating_sub(keep_last)
+        .saturating_add(1)
+        .max(first_end + 1);
 
     let mut result = String::new();
 
@@ -1372,8 +1400,16 @@ pub fn truncate_smart_with_options(
 
         // If we have more important lines than max_lines, or found very few important lines
         // (non-code file), use Python's default truncation strategy: keep first 40%, gap, keep last 10%
-        if important_lines.len() > max_lines || (important_lines.len() < 50 && total_lines > max_lines) {
-            return truncate_with_gap_markers(content, max_lines, file_path, include_summary, Some(&analysis.language));
+        if important_lines.len() > max_lines
+            || (important_lines.len() < 50 && total_lines > max_lines)
+        {
+            return truncate_with_gap_markers(
+                content,
+                max_lines,
+                file_path,
+                include_summary,
+                Some(&analysis.language),
+            );
         }
 
         // If file is smaller than max_lines after finding important sections,
@@ -1679,7 +1715,12 @@ pub fn serialize_file_with_truncation(
     truncate_mode: &str,
 ) -> String {
     // Default to Plus/Minus format for backward compatibility
-    serialize_file_with_format(entry, truncate_lines, truncate_mode, OutputFormat::PlusMinus)
+    serialize_file_with_format(
+        entry,
+        truncate_lines,
+        truncate_mode,
+        OutputFormat::PlusMinus,
+    )
 }
 
 /// Serialize a file entry with format support
@@ -1690,7 +1731,13 @@ pub fn serialize_file_with_format(
     format: OutputFormat,
 ) -> String {
     // Use default metadata mode (None for backwards compatibility)
-    serialize_file_with_format_and_metadata(entry, truncate_lines, truncate_mode, format, MetadataMode::None)
+    serialize_file_with_format_and_metadata(
+        entry,
+        truncate_lines,
+        truncate_mode,
+        format,
+        MetadataMode::None,
+    )
 }
 
 /// Serialize a file entry with format and metadata support (Chronos v2.3)
@@ -1706,12 +1753,8 @@ pub fn serialize_file_with_format_and_metadata(
     // Apply truncation and track if file was truncated
     let (content, was_truncated) = if truncate_lines > 0 || truncate_mode == "structure" {
         match truncate_mode {
-            "simple" => {
-                truncate_simple(&entry.content, truncate_lines, &entry.path)
-            }
-            "smart" => {
-                truncate_smart(&entry.content, truncate_lines, &entry.path)
-            }
+            "simple" => truncate_simple(&entry.content, truncate_lines, &entry.path),
+            "smart" => truncate_smart(&entry.content, truncate_lines, &entry.path),
             "structure" => {
                 // Use fallback version that falls back to smart mode when no signatures (Python behavior)
                 truncate_structure_with_fallback(&entry.content, &entry.path, true, truncate_lines)
@@ -1725,15 +1768,65 @@ pub fn serialize_file_with_format_and_metadata(
     let final_lines = count_lines_python_style(&content);
 
     match format {
-        OutputFormat::PlusMinus => serialize_plus_minus_entry(&entry.path, &content, &entry.md5, entry.size, entry.mtime, was_truncated, original_lines, final_lines, metadata_mode),
-        OutputFormat::Xml => serialize_xml_entry(&entry.path, &content, &entry.md5, entry.size, entry.mtime, was_truncated, original_lines, final_lines, metadata_mode),
-        OutputFormat::Markdown => serialize_markdown_entry(&entry.path, &content, &entry.md5, entry.size, entry.mtime, was_truncated, original_lines, final_lines, metadata_mode),
-        OutputFormat::ClaudeXml => serialize_claude_xml_entry(&entry.path, &content, &entry.md5, entry.size, entry.mtime, was_truncated, original_lines, final_lines, metadata_mode),
+        OutputFormat::PlusMinus => serialize_plus_minus_entry(
+            &entry.path,
+            &content,
+            &entry.md5,
+            entry.size,
+            entry.mtime,
+            was_truncated,
+            original_lines,
+            final_lines,
+            metadata_mode,
+        ),
+        OutputFormat::Xml => serialize_xml_entry(
+            &entry.path,
+            &content,
+            &entry.md5,
+            entry.size,
+            entry.mtime,
+            was_truncated,
+            original_lines,
+            final_lines,
+            metadata_mode,
+        ),
+        OutputFormat::Markdown => serialize_markdown_entry(
+            &entry.path,
+            &content,
+            &entry.md5,
+            entry.size,
+            entry.mtime,
+            was_truncated,
+            original_lines,
+            final_lines,
+            metadata_mode,
+        ),
+        OutputFormat::ClaudeXml => serialize_claude_xml_entry(
+            &entry.path,
+            &content,
+            &entry.md5,
+            entry.size,
+            entry.mtime,
+            was_truncated,
+            original_lines,
+            final_lines,
+            metadata_mode,
+        ),
     }
 }
 
 /// Serialize to Plus/Minus format (with Chronos metadata support)
-fn serialize_plus_minus_entry(path: &str, content: &str, md5: &str, size: u64, mtime: u64, was_truncated: bool, original_lines: usize, final_lines: usize, metadata_mode: MetadataMode) -> String {
+fn serialize_plus_minus_entry(
+    path: &str,
+    content: &str,
+    md5: &str,
+    size: u64,
+    mtime: u64,
+    was_truncated: bool,
+    original_lines: usize,
+    final_lines: usize,
+    metadata_mode: MetadataMode,
+) -> String {
     use core::serialization::format_metadata_suffix;
     let mut output = String::new();
 
@@ -1742,9 +1835,15 @@ fn serialize_plus_minus_entry(path: &str, content: &str, md5: &str, size: u64, m
 
     // Header: ++++++++++ filename [metadata] [TRUNCATED: N lines] ++++++++++
     if was_truncated {
-        output.push_str(&format!("++++++++++ {}{} [TRUNCATED: {} lines] ++++++++++\n", path, metadata_suffix, original_lines));
+        output.push_str(&format!(
+            "++++++++++ {}{} [TRUNCATED: {} lines] ++++++++++\n",
+            path, metadata_suffix, original_lines
+        ));
     } else {
-        output.push_str(&format!("++++++++++ {}{} ++++++++++\n", path, metadata_suffix));
+        output.push_str(&format!(
+            "++++++++++ {}{} ++++++++++\n",
+            path, metadata_suffix
+        ));
     }
 
     // Content
@@ -1772,7 +1871,17 @@ fn serialize_plus_minus_entry(path: &str, content: &str, md5: &str, size: u64, m
 }
 
 /// Serialize to XML format (with Chronos metadata support)
-fn serialize_xml_entry(path: &str, content: &str, md5: &str, size: u64, mtime: u64, was_truncated: bool, original_lines: usize, final_lines: usize, metadata_mode: MetadataMode) -> String {
+fn serialize_xml_entry(
+    path: &str,
+    content: &str,
+    md5: &str,
+    size: u64,
+    mtime: u64,
+    was_truncated: bool,
+    original_lines: usize,
+    final_lines: usize,
+    metadata_mode: MetadataMode,
+) -> String {
     use core::serialization::format_xml_header_attrs;
     let mut output = String::new();
     let escaped_content = escape_xml(content);
@@ -1788,7 +1897,9 @@ fn serialize_xml_entry(path: &str, content: &str, md5: &str, size: u64, mtime: u
     } else {
         output.push_str(&format!(
             "<file path=\"{}\" md5=\"{}\"{}>\n",
-            escape_xml_attr(path), md5, metadata_attrs
+            escape_xml_attr(path),
+            md5,
+            metadata_attrs
         ));
     }
 
@@ -1803,7 +1914,17 @@ fn serialize_xml_entry(path: &str, content: &str, md5: &str, size: u64, mtime: u
 }
 
 /// Serialize to Markdown format (with Chronos metadata support)
-fn serialize_markdown_entry(path: &str, content: &str, md5: &str, size: u64, mtime: u64, was_truncated: bool, original_lines: usize, final_lines: usize, metadata_mode: MetadataMode) -> String {
+fn serialize_markdown_entry(
+    path: &str,
+    content: &str,
+    md5: &str,
+    size: u64,
+    mtime: u64,
+    was_truncated: bool,
+    original_lines: usize,
+    final_lines: usize,
+    metadata_mode: MetadataMode,
+) -> String {
     use core::serialization::format_metadata_suffix;
     let mut output = String::new();
     let lang = detect_language(path);
@@ -1839,7 +1960,17 @@ fn serialize_markdown_entry(path: &str, content: &str, md5: &str, size: u64, mti
 
 /// Serialize to Claude-optimized XML format (with Chronos metadata support)
 /// Uses CDATA sections for code content with semantic attributes
-fn serialize_claude_xml_entry(path: &str, content: &str, md5: &str, size: u64, mtime: u64, was_truncated: bool, original_lines: usize, final_lines: usize, metadata_mode: MetadataMode) -> String {
+fn serialize_claude_xml_entry(
+    path: &str,
+    content: &str,
+    md5: &str,
+    size: u64,
+    mtime: u64,
+    was_truncated: bool,
+    original_lines: usize,
+    final_lines: usize,
+    metadata_mode: MetadataMode,
+) -> String {
     let mut output = String::new();
     let lang = detect_language(path);
 
@@ -1951,10 +2082,7 @@ pub fn serialize_project(root: &str) -> Result<String, String> {
 ///
 /// * `Ok(String)` - The serialized output (empty string in streaming mode)
 /// * `Err(String)` - Error message if serialization fails
-pub fn serialize_project_with_config(
-    root: &str,
-    config: &EncoderConfig,
-) -> Result<String, String> {
+pub fn serialize_project_with_config(root: &str, config: &EncoderConfig) -> Result<String, String> {
     // Streaming mode: use iterator, write directly, return empty string
     if config.stream {
         return serialize_project_streaming(root, config);
@@ -2039,7 +2167,7 @@ pub fn serialize_entries_claude_xml(
     config: &EncoderConfig,
     files: &[FileEntry],
 ) -> Result<String, String> {
-    use crate::formats::{XmlWriter, XmlConfig, AttentionEntry};
+    use crate::formats::{AttentionEntry, XmlConfig, XmlWriter};
 
     let mut buffer = Vec::new();
 
@@ -2052,7 +2180,11 @@ pub fn serialize_entries_claude_xml(
         utilized_tokens: Some(files.iter().map(|f| f.content.len() / 4).sum()),
         frozen: config.frozen,
         allow_sensitive: config.allow_sensitive,
-        snapshot_id: if config.frozen { Some("FROZEN_SNAPSHOT".to_string()) } else { None },
+        snapshot_id: if config.frozen {
+            Some("FROZEN_SNAPSHOT".to_string())
+        } else {
+            None
+        },
     };
 
     let mut writer = XmlWriter::new(&mut buffer, xml_config);
@@ -2064,23 +2196,29 @@ pub fn serialize_entries_claude_xml(
         let _ = lens_manager.apply_lens(lens_name);
     }
 
-    let attention_entries: Vec<AttentionEntry> = files.iter().map(|f| {
-        let priority = lens_manager.get_file_priority(std::path::Path::new(&f.path));
-        let tokens = f.content.len() / 4;
-        let truncated = config.truncate_lines > 0 && f.content.lines().count() > config.truncate_lines;
-        AttentionEntry {
-            path: f.path.clone(),
-            priority,
-            tokens,
-            truncated,
-            dropped: false,
-            utility_score: None,
-        }
-    }).collect();
+    let attention_entries: Vec<AttentionEntry> = files
+        .iter()
+        .map(|f| {
+            let priority = lens_manager.get_file_priority(std::path::Path::new(&f.path));
+            let tokens = f.content.len() / 4;
+            let truncated =
+                config.truncate_lines > 0 && f.content.lines().count() > config.truncate_lines;
+            AttentionEntry {
+                path: f.path.clone(),
+                priority,
+                tokens,
+                truncated,
+                dropped: false,
+                utility_score: None,
+            }
+        })
+        .collect();
 
     // Write XML structure
     writer.write_context_start().map_err(|e| e.to_string())?;
-    writer.write_metadata(&attention_entries).map_err(|e| e.to_string())?;
+    writer
+        .write_metadata(&attention_entries)
+        .map_err(|e| e.to_string())?;
     writer.write_files_start().map_err(|e| e.to_string())?;
 
     for entry in files {
@@ -2107,16 +2245,18 @@ pub fn serialize_entries_claude_xml(
             None
         };
 
-        writer.write_file(
-            &entry.path,
-            language,
-            &entry.md5,
-            priority,
-            &content,
-            truncated,
-            original_tokens,
-            zoom_cmd.as_deref(),
-        ).map_err(|e| e.to_string())?;
+        writer
+            .write_file(
+                &entry.path,
+                language,
+                &entry.md5,
+                priority,
+                &content,
+                truncated,
+                original_tokens,
+                zoom_cmd.as_deref(),
+            )
+            .map_err(|e| e.to_string())?;
     }
 
     writer.write_files_end().map_err(|e| e.to_string())?;
@@ -2146,7 +2286,7 @@ pub fn serialize_entries_claude_xml_with_report(
     files: &[FileEntry],
     report: &crate::budgeting::BudgetReport,
 ) -> Result<String, String> {
-    use crate::formats::{XmlWriter, XmlConfig, AttentionEntry};
+    use crate::formats::{AttentionEntry, XmlConfig, XmlWriter};
 
     let mut buffer = Vec::new();
 
@@ -2159,23 +2299,31 @@ pub fn serialize_entries_claude_xml_with_report(
         utilized_tokens: Some(report.used),
         frozen: config.frozen,
         allow_sensitive: config.allow_sensitive,
-        snapshot_id: if config.frozen { Some("FROZEN_SNAPSHOT".to_string()) } else { None },
+        snapshot_id: if config.frozen {
+            Some("FROZEN_SNAPSHOT".to_string())
+        } else {
+            None
+        },
     };
 
     let mut writer = XmlWriter::new(&mut buffer, xml_config);
 
     // Build attention entries from included files
     // TODO: Integrate with ContextStore for utility scores
-    let mut attention_entries: Vec<AttentionEntry> = report.included_files.iter().map(|(path, priority, tokens, method)| {
-        AttentionEntry {
-            path: path.clone(),
-            priority: *priority,
-            tokens: *tokens,
-            truncated: method == "truncated",
-            dropped: false,
-            utility_score: None, // Will be populated from ContextStore when available
-        }
-    }).collect();
+    let mut attention_entries: Vec<AttentionEntry> = report
+        .included_files
+        .iter()
+        .map(|(path, priority, tokens, method)| {
+            AttentionEntry {
+                path: path.clone(),
+                priority: *priority,
+                tokens: *tokens,
+                truncated: method == "truncated",
+                dropped: false,
+                utility_score: None, // Will be populated from ContextStore when available
+            }
+        })
+        .collect();
 
     // Add dropped files as coldspots
     for (path, priority, tokens) in &report.dropped_files {
@@ -2200,7 +2348,9 @@ pub fn serialize_entries_claude_xml_with_report(
 
     // Write XML structure
     writer.write_context_start().map_err(|e| e.to_string())?;
-    writer.write_metadata(&attention_entries).map_err(|e| e.to_string())?;
+    writer
+        .write_metadata(&attention_entries)
+        .map_err(|e| e.to_string())?;
     writer.write_files_start().map_err(|e| e.to_string())?;
 
     for entry in files {
@@ -2208,7 +2358,9 @@ pub fn serialize_entries_claude_xml_with_report(
         let priority = lens_manager.get_static_priority(std::path::Path::new(&entry.path));
 
         // Check if this file was truncated by the budget strategy
-        let was_truncated = report.included_files.iter()
+        let was_truncated = report
+            .included_files
+            .iter()
             .any(|(p, _, _, m)| p == &entry.path && m == "truncated");
 
         // Apply truncation if configured or if budget strategy truncated it
@@ -2235,16 +2387,18 @@ pub fn serialize_entries_claude_xml_with_report(
             None
         };
 
-        writer.write_file(
-            &entry.path,
-            language,
-            &entry.md5,
-            priority,
-            &content,
-            truncated,
-            original_tokens,
-            zoom_cmd.as_deref(),
-        ).map_err(|e| e.to_string())?;
+        writer
+            .write_file(
+                &entry.path,
+                language,
+                &entry.md5,
+                priority,
+                &content,
+                truncated,
+                original_tokens,
+                zoom_cmd.as_deref(),
+            )
+            .map_err(|e| e.to_string())?;
     }
 
     writer.write_files_end().map_err(|e| e.to_string())?;
@@ -2306,7 +2460,8 @@ pub fn generate_claude_xml_header(config: &EncoderConfig, files: &[FileEntry]) -
     }
 
     if let Some(budget) = config.token_budget {
-        let utilized: usize = files.iter()
+        let utilized: usize = files
+            .iter()
             .map(|f| f.content.len() / 4) // Rough token estimate
             .sum();
         header.push_str(&format!("  token_budget=\"{}\"\n", budget));
@@ -2320,8 +2475,10 @@ pub fn generate_claude_xml_header(config: &EncoderConfig, files: &[FileEntry]) -
 
     if !config.frozen {
         // Only include timestamp in non-frozen mode
-        header.push_str(&format!("    <timestamp>{}</timestamp>\n",
-            chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ")));
+        header.push_str(&format!(
+            "    <timestamp>{}</timestamp>\n",
+            chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ")
+        ));
     }
 
     if let Some(ref lens) = config.active_lens {
@@ -2349,10 +2506,7 @@ pub fn generate_claude_xml_header(config: &EncoderConfig, files: &[FileEntry]) -
 ///
 /// * `Ok(String)` - Always returns empty string (output goes to stdout)
 /// * `Err(String)` - Error message if serialization fails
-pub fn serialize_project_streaming(
-    root: &str,
-    config: &EncoderConfig,
-) -> Result<String, String> {
+pub fn serialize_project_streaming(root: &str, config: &EncoderConfig) -> Result<String, String> {
     use std::io::{self, Write};
 
     let root_path = Path::new(root);
@@ -2467,13 +2621,22 @@ mod tests {
 
         // Line ending normalization (like Python's read_text())
         let crlf = b"line1\r\nline2\r\nline3";
-        assert_eq!(read_file_content(crlf), Some("line1\nline2\nline3".to_string()));
+        assert_eq!(
+            read_file_content(crlf),
+            Some("line1\nline2\nline3".to_string())
+        );
 
         let cr = b"line1\rline2\rline3";
-        assert_eq!(read_file_content(cr), Some("line1\nline2\nline3".to_string()));
+        assert_eq!(
+            read_file_content(cr),
+            Some("line1\nline2\nline3".to_string())
+        );
 
         let mixed = b"line1\r\nline2\rline3\nline4";
-        assert_eq!(read_file_content(mixed), Some("line1\nline2\nline3\nline4".to_string()));
+        assert_eq!(
+            read_file_content(mixed),
+            Some("line1\nline2\nline3\nline4".to_string())
+        );
     }
 
     #[test]
@@ -2488,20 +2651,28 @@ mod tests {
         let patterns = vec![".llm_archive".to_string()];
 
         // Should match files inside .llm_archive
-        assert!(matches_patterns(".llm_archive/file.md", &patterns),
-            ".llm_archive pattern should match .llm_archive/file.md");
+        assert!(
+            matches_patterns(".llm_archive/file.md", &patterns),
+            ".llm_archive pattern should match .llm_archive/file.md"
+        );
 
         // Should match nested files
-        assert!(matches_patterns(".llm_archive/subdir/file.md", &patterns),
-            ".llm_archive pattern should match nested files");
+        assert!(
+            matches_patterns(".llm_archive/subdir/file.md", &patterns),
+            ".llm_archive pattern should match nested files"
+        );
 
         // Should not match unrelated files
-        assert!(!matches_patterns("src/main.rs", &patterns),
-            ".llm_archive pattern should not match src/main.rs");
+        assert!(
+            !matches_patterns("src/main.rs", &patterns),
+            ".llm_archive pattern should not match src/main.rs"
+        );
 
         // Should not match similarly-named files
-        assert!(!matches_patterns("llm_archive/file.md", &patterns),
-            ".llm_archive pattern should not match llm_archive (no dot)");
+        assert!(
+            !matches_patterns("llm_archive/file.md", &patterns),
+            ".llm_archive pattern should not match llm_archive (no dot)"
+        );
     }
 
     #[test]
@@ -2555,7 +2726,9 @@ def main():
 
         // Should truncate since content is longer than 5 lines
         if truncated {
-            assert!(result.contains("import") || result.contains("class") || result.contains("def"));
+            assert!(
+                result.contains("import") || result.contains("class") || result.contains("def")
+            );
         }
     }
 
@@ -2730,7 +2903,8 @@ impl Config {
             &vec!["*.pyc".to_string()],
             &vec![],
             5_000_000,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Should include .py but not .pyc
         assert!(entries.iter().any(|e| e.path.contains("main.py")));
@@ -2775,7 +2949,10 @@ impl Config {
 
     #[test]
     fn test_truncate_simple_includes_summary_by_default() {
-        let content = (0..20).map(|i| format!("line{}", i)).collect::<Vec<_>>().join("\n");
+        let content = (0..20)
+            .map(|i| format!("line{}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         let (result, truncated) = truncate_simple(&content, 5, "test.txt");
 
         assert!(truncated);
@@ -2869,13 +3046,17 @@ if __name__ == "__main__":
 
         let entries = walk_directory(
             temp_dir.to_str().unwrap(),
-            &vec!["*.log".to_string()],  // Ignore all .log files
+            &vec!["*.log".to_string()], // Ignore all .log files
             &vec![],
             5_000_000,
-        ).unwrap();
+        )
+        .unwrap();
 
         // All files ignored, should return empty
-        assert!(entries.is_empty(), "Expected empty list when all files ignored");
+        assert!(
+            entries.is_empty(),
+            "Expected empty list when all files ignored"
+        );
 
         // Cleanup
         let _ = fs::remove_dir_all(&temp_dir);
@@ -2926,7 +3107,8 @@ if __name__ == "__main__":
     #[test]
     fn test_truncate_structure_with_imports() {
         // Structure mode preserves imports
-        let python = "import os\nfrom sys import path\n\nclass Foo:\n    def bar(self):\n        pass\n";
+        let python =
+            "import os\nfrom sys import path\n\nclass Foo:\n    def bar(self):\n        pass\n";
         let (result, truncated) = truncate_structure(python, "module.py");
         assert!(result.contains("import os"));
         assert!(result.contains("class Foo"));
@@ -2980,7 +3162,10 @@ if __name__ == "__main__":
     fn test_matches_patterns_component_match() {
         // Test that .git matches .git/config
         assert!(matches_patterns(".git/config", &vec![".git".to_string()]));
-        assert!(matches_patterns("node_modules/package/index.js", &vec!["node_modules".to_string()]));
+        assert!(matches_patterns(
+            "node_modules/package/index.js",
+            &vec!["node_modules".to_string()]
+        ));
     }
 
     #[test]
@@ -3054,7 +3239,7 @@ if __name__ == "__main__":
         fs::write(temp_dir.join("a.py"), "# a").unwrap();
 
         let config = EncoderConfig {
-            sort_by: "unknown".to_string(),  // Unknown, should default to name
+            sort_by: "unknown".to_string(), // Unknown, should default to name
             ..Default::default()
         };
 
@@ -3106,7 +3291,10 @@ if __name__ == "__main__":
 
     #[test]
     fn test_serialize_file_with_truncation_modes() {
-        let content = (0..100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let content = (0..100)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         let entry = FileEntry {
             path: "test.py".to_string(),
             size: content.len() as u64,
@@ -3160,7 +3348,9 @@ if __name__ == "__main__":
         let (result, truncated) = truncate_smart(python, 10, "myclass.py");
         assert!(truncated);
         // Should preserve important sections
-        assert!(result.contains("import") || result.contains("class") || result.contains("__main__"));
+        assert!(
+            result.contains("import") || result.contains("class") || result.contains("__main__")
+        );
     }
 
     #[test]
@@ -3257,7 +3447,7 @@ pub fn main() {
         let config = EncoderConfig {
             sort_by: "mtime".to_string(),
             sort_order: "asc".to_string(),
-            ignore_patterns: vec![],  // Clear default ignores
+            ignore_patterns: vec![], // Clear default ignores
             ..Default::default()
         };
 
@@ -3317,7 +3507,8 @@ pub fn main() {
             &vec![],
             &vec!["*.py".to_string()], // Only include .py files
             5_000_000,
-        ).unwrap();
+        )
+        .unwrap();
 
         // Should only include .py file
         assert!(entries.iter().any(|e| e.path.contains(".py")));
@@ -3329,7 +3520,8 @@ pub fn main() {
     #[test]
     fn test_truncate_structure_with_decorators() {
         // Test structure truncation preserves decorators
-        let python = "@decorator\ndef decorated():\n    pass\n\n@another\nclass MyClass:\n    pass\n";
+        let python =
+            "@decorator\ndef decorated():\n    pass\n\n@another\nclass MyClass:\n    pass\n";
         let (result, truncated) = truncate_structure(python, "decorated.py");
         assert!(truncated);
         assert!(result.contains("@decorator") || result.contains("def decorated"));
@@ -3338,17 +3530,27 @@ pub fn main() {
     #[test]
     fn test_smart_truncation_with_gaps() {
         // Test smart truncation creates gap markers
-        let python = (0..100).map(|i| {
-            if i == 0 { "import os".to_string() }
-            else if i == 50 { "def important():\n    pass".to_string() }
-            else if i == 99 { "if __name__ == '__main__':\n    pass".to_string() }
-            else { format!("# line {}", i) }
-        }).collect::<Vec<_>>().join("\n");
+        let python = (0..100)
+            .map(|i| {
+                if i == 0 {
+                    "import os".to_string()
+                } else if i == 50 {
+                    "def important():\n    pass".to_string()
+                } else if i == 99 {
+                    "if __name__ == '__main__':\n    pass".to_string()
+                } else {
+                    format!("# line {}", i)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
 
         let (result, truncated) = truncate_smart(&python, 10, "gaps.py");
         assert!(truncated);
         // Should have omitted lines marker
-        assert!(result.contains("omitted") || result.contains("TRUNCATED") || result.contains("import"));
+        assert!(
+            result.contains("omitted") || result.contains("TRUNCATED") || result.contains("import")
+        );
     }
 
     #[test]
@@ -3381,18 +3583,18 @@ pub fn main() {
         // Create Python file with important sections separated by many filler lines
         // This should trigger the gap marker code path (lines 627-628)
         let mut lines = Vec::new();
-        lines.push("import os".to_string());           // Line 1 - import (important)
-        lines.push("import sys".to_string());          // Line 2 - import (important)
+        lines.push("import os".to_string()); // Line 1 - import (important)
+        lines.push("import sys".to_string()); // Line 2 - import (important)
         for i in 3..50 {
             lines.push(format!("# filler comment line {}", i)); // Lines 3-49 - filler
         }
-        lines.push("class MyClass:".to_string());      // Line 50 - class (important)
+        lines.push("class MyClass:".to_string()); // Line 50 - class (important)
         lines.push("    '''Docstring'''".to_string()); // Line 51
         for i in 52..100 {
             lines.push(format!("    # more filler {}", i)); // Lines 52-99
         }
         lines.push("if __name__ == '__main__':".to_string()); // Line 100 - entry point (important)
-        lines.push("    pass".to_string());            // Line 101
+        lines.push("    pass".to_string()); // Line 101
 
         let python = lines.join("\n");
         let (result, truncated) = truncate_smart(&python, 15, "gap_test.py");
@@ -3472,21 +3674,39 @@ fn main() {
     #[test]
     fn test_truncate_simple_without_summary() {
         // Test truncation with summary disabled
-        let content = (0..20).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let content = (0..20)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         let (result, truncated) = truncate_simple_with_options(&content, 5, "test.py", false);
         assert!(truncated);
-        assert!(!result.contains("TRUNCATED"), "Should NOT include summary marker when disabled");
-        assert!(!result.contains("reduced"), "Should NOT include stats when disabled");
+        assert!(
+            !result.contains("TRUNCATED"),
+            "Should NOT include summary marker when disabled"
+        );
+        assert!(
+            !result.contains("reduced"),
+            "Should NOT include stats when disabled"
+        );
     }
 
     #[test]
     fn test_truncate_simple_with_summary() {
         // Test truncation with summary enabled (default behavior)
-        let content = (0..20).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let content = (0..20)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         let (result, truncated) = truncate_simple_with_options(&content, 5, "test.py", true);
         assert!(truncated);
-        assert!(result.contains("TRUNCATED"), "Should include summary marker when enabled");
-        assert!(result.contains("reduction"), "Should include stats when enabled");
+        assert!(
+            result.contains("TRUNCATED"),
+            "Should include summary marker when enabled"
+        );
+        assert!(
+            result.contains("reduction"),
+            "Should include stats when enabled"
+        );
     }
 
     #[test]
@@ -3505,7 +3725,10 @@ def bar():
 "#;
         let (result, truncated) = truncate_smart_with_options(python, 5, "test.py", false);
         assert!(truncated);
-        assert!(!result.contains("SMART TRUNCATED"), "Should NOT include smart truncation marker");
+        assert!(
+            !result.contains("SMART TRUNCATED"),
+            "Should NOT include smart truncation marker"
+        );
     }
 
     #[test]
@@ -3519,7 +3742,10 @@ def bar():
 "#;
         let (result, truncated) = truncate_structure_with_options(python, "test.py", false);
         assert!(truncated);
-        assert!(!result.contains("STRUCTURE MODE"), "Should NOT include structure marker");
+        assert!(
+            !result.contains("STRUCTURE MODE"),
+            "Should NOT include structure marker"
+        );
     }
 
     #[test]
@@ -3540,9 +3766,18 @@ def bar():
     fn test_encoder_config_truncate_defaults() {
         // Test default values for truncation control fields
         let config = EncoderConfig::default();
-        assert!(config.truncate_summary, "truncate_summary should default to true");
-        assert!(config.truncate_exclude.is_empty(), "truncate_exclude should default to empty");
-        assert!(!config.truncate_stats, "truncate_stats should default to false");
+        assert!(
+            config.truncate_summary,
+            "truncate_summary should default to true"
+        );
+        assert!(
+            config.truncate_exclude.is_empty(),
+            "truncate_exclude should default to empty"
+        );
+        assert!(
+            !config.truncate_stats,
+            "truncate_stats should default to false"
+        );
     }
 
     #[test]
@@ -3550,9 +3785,18 @@ def bar():
         // Test that files matching truncate_exclude are not truncated
         let patterns = vec!["*.md".to_string(), "docs/**".to_string()];
 
-        assert!(should_skip_truncation("README.md", &patterns), "*.md should match README.md");
-        assert!(should_skip_truncation("docs/guide.txt", &patterns), "docs/** should match docs/guide.txt");
-        assert!(!should_skip_truncation("src/main.py", &patterns), "src/main.py should not match");
+        assert!(
+            should_skip_truncation("README.md", &patterns),
+            "*.md should match README.md"
+        );
+        assert!(
+            should_skip_truncation("docs/guide.txt", &patterns),
+            "docs/** should match docs/guide.txt"
+        );
+        assert!(
+            !should_skip_truncation("src/main.py", &patterns),
+            "src/main.py should not match"
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -3565,7 +3809,10 @@ def bar():
         // This test ensures we create gap markers like "... [N lines omitted] ..."
 
         // Create a 100-line "non-code" file (like .ai or generic text)
-        let content: String = (1..=100).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let content: String = (1..=100)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
 
         // Truncate to 20 lines max (should keep first 8 (40%) + last 2 (10%) = 10 lines)
         let (result, truncated) = truncate_smart_with_options(&content, 20, "data.ai", true);
@@ -3586,7 +3833,10 @@ def bar():
         assert!(result.contains("line 100"), "Should keep last line");
 
         // Gap should omit middle section
-        assert!(!result.contains("line 50"), "Middle lines should be omitted");
+        assert!(
+            !result.contains("line 50"),
+            "Middle lines should be omitted"
+        );
     }
 
     #[test]
@@ -3594,11 +3844,15 @@ def bar():
         // Python format: "\n... [N lines omitted] ...\n"
         // Verify exact format for byte parity
 
-        let content: String = (1..=50).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+        let content: String = (1..=50)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         let (result, _) = truncate_smart_with_options(&content, 10, "unknown.xyz", true);
 
         // Check for Python-compatible format with newlines
-        let has_correct_format = result.contains("\n... [") && result.contains(" lines omitted] ...\n");
+        let has_correct_format =
+            result.contains("\n... [") && result.contains(" lines omitted] ...\n");
         assert!(
             has_correct_format,
             "Gap marker format must match Python: '\\n... [N lines omitted] ...\\n'"
@@ -3641,7 +3895,8 @@ class MyClass:
         return self.z * 2
 "#;
 
-        let (result, truncated) = truncate_structure_with_fallback(python_code, "test.py", true, 2000);
+        let (result, truncated) =
+            truncate_structure_with_fallback(python_code, "test.py", true, 2000);
 
         assert!(truncated, "Should be truncated in structure mode");
 
@@ -3649,25 +3904,64 @@ class MyClass:
         assert!(result.contains("import os"), "Should keep 'import os'");
         assert!(result.contains("import sys"), "Should keep 'import sys'");
         assert!(result.contains("import json"), "Should keep 'import json'");
-        assert!(result.contains("import datetime"), "Should keep 'import datetime'");
-        assert!(result.contains("import collections"), "Should keep 'import collections'");
-        assert!(result.contains("import itertools"), "Should keep 'import itertools' (line 7)");
-        assert!(result.contains("import functools"), "Should keep 'import functools' (line 8)");
-        assert!(result.contains("import pathlib"), "Should keep 'import pathlib' (line 9)");
-        assert!(result.contains("import typing"), "Should keep 'import typing' (line 10)");
-        assert!(result.contains("from typing import"), "Should keep 'from typing import' (line 11)");
-        assert!(result.contains("from pathlib import"), "Should keep 'from pathlib import' (line 12)");
-        assert!(result.contains("from dataclasses import"), "Should keep 'from dataclasses import' (line 13)");
+        assert!(
+            result.contains("import datetime"),
+            "Should keep 'import datetime'"
+        );
+        assert!(
+            result.contains("import collections"),
+            "Should keep 'import collections'"
+        );
+        assert!(
+            result.contains("import itertools"),
+            "Should keep 'import itertools' (line 7)"
+        );
+        assert!(
+            result.contains("import functools"),
+            "Should keep 'import functools' (line 8)"
+        );
+        assert!(
+            result.contains("import pathlib"),
+            "Should keep 'import pathlib' (line 9)"
+        );
+        assert!(
+            result.contains("import typing"),
+            "Should keep 'import typing' (line 10)"
+        );
+        assert!(
+            result.contains("from typing import"),
+            "Should keep 'from typing import' (line 11)"
+        );
+        assert!(
+            result.contains("from pathlib import"),
+            "Should keep 'from pathlib import' (line 12)"
+        );
+        assert!(
+            result.contains("from dataclasses import"),
+            "Should keep 'from dataclasses import' (line 13)"
+        );
 
         // Class and method signatures should also be kept
-        assert!(result.contains("class MyClass"), "Should keep class definition");
-        assert!(result.contains("def __init__"), "Should keep __init__ method");
+        assert!(
+            result.contains("class MyClass"),
+            "Should keep class definition"
+        );
+        assert!(
+            result.contains("def __init__"),
+            "Should keep __init__ method"
+        );
         assert!(result.contains("def method_one"), "Should keep method_one");
         assert!(result.contains("def method_two"), "Should keep method_two");
 
         // Implementation details should NOT be kept
-        assert!(!result.contains("self.x = 1"), "Should NOT keep implementation details");
-        assert!(!result.contains("return self.x + self.y"), "Should NOT keep method body");
+        assert!(
+            !result.contains("self.x = 1"),
+            "Should NOT keep implementation details"
+        );
+        assert!(
+            !result.contains("return self.x + self.y"),
+            "Should NOT keep method body"
+        );
     }
 
     #[test]
@@ -3690,10 +3984,22 @@ def my_property(self):
 
         let (result, _) = truncate_structure_with_fallback(python_code, "test.py", true, 2000);
 
-        assert!(result.contains("@functools.lru_cache"), "Should keep @decorator");
-        assert!(result.contains("@property"), "Should keep @property decorator");
-        assert!(result.contains("def expensive_function"), "Should keep function signature");
-        assert!(result.contains("def my_property"), "Should keep property method");
+        assert!(
+            result.contains("@functools.lru_cache"),
+            "Should keep @decorator"
+        );
+        assert!(
+            result.contains("@property"),
+            "Should keep @property decorator"
+        );
+        assert!(
+            result.contains("def expensive_function"),
+            "Should keep function signature"
+        );
+        assert!(
+            result.contains("def my_property"),
+            "Should keep property method"
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -3768,7 +4074,8 @@ This is the last section.
 
         // Python's markdown get_truncate_ranges uses a "budget" approach
         // This effectively keeps the first max_lines (simple truncation)
-        let (result, truncated) = truncate_structure_with_fallback(markdown, "HISTORY.md", true, 30);
+        let (result, truncated) =
+            truncate_structure_with_fallback(markdown, "HISTORY.md", true, 30);
 
         assert!(truncated, "Should be truncated");
 
@@ -3788,7 +4095,10 @@ This is the last section.
         );
 
         // Should keep beginning (first section)
-        assert!(result.contains("# Release History"), "Should keep first header");
+        assert!(
+            result.contains("# Release History"),
+            "Should keep first header"
+        );
 
         // Simple truncation keeps first N lines, so middle content should be there
         // but "Final Section" at end would be truncated (expected behavior)
@@ -3802,23 +4112,56 @@ This is the last section.
     #[test]
     fn test_output_format_parse_all_variants() {
         // Test all valid format strings
-        assert!(matches!(OutputFormat::parse("plus_minus"), Ok(OutputFormat::PlusMinus)));
-        assert!(matches!(OutputFormat::parse("plusminus"), Ok(OutputFormat::PlusMinus)));
-        assert!(matches!(OutputFormat::parse("pm"), Ok(OutputFormat::PlusMinus)));
-        assert!(matches!(OutputFormat::parse(""), Ok(OutputFormat::PlusMinus)));
+        assert!(matches!(
+            OutputFormat::parse("plus_minus"),
+            Ok(OutputFormat::PlusMinus)
+        ));
+        assert!(matches!(
+            OutputFormat::parse("plusminus"),
+            Ok(OutputFormat::PlusMinus)
+        ));
+        assert!(matches!(
+            OutputFormat::parse("pm"),
+            Ok(OutputFormat::PlusMinus)
+        ));
+        assert!(matches!(
+            OutputFormat::parse(""),
+            Ok(OutputFormat::PlusMinus)
+        ));
         assert!(matches!(OutputFormat::parse("xml"), Ok(OutputFormat::Xml)));
-        assert!(matches!(OutputFormat::parse("markdown"), Ok(OutputFormat::Markdown)));
-        assert!(matches!(OutputFormat::parse("md"), Ok(OutputFormat::Markdown)));
-        assert!(matches!(OutputFormat::parse("claude-xml"), Ok(OutputFormat::ClaudeXml)));
-        assert!(matches!(OutputFormat::parse("claude_xml"), Ok(OutputFormat::ClaudeXml)));
-        assert!(matches!(OutputFormat::parse("claudexml"), Ok(OutputFormat::ClaudeXml)));
+        assert!(matches!(
+            OutputFormat::parse("markdown"),
+            Ok(OutputFormat::Markdown)
+        ));
+        assert!(matches!(
+            OutputFormat::parse("md"),
+            Ok(OutputFormat::Markdown)
+        ));
+        assert!(matches!(
+            OutputFormat::parse("claude-xml"),
+            Ok(OutputFormat::ClaudeXml)
+        ));
+        assert!(matches!(
+            OutputFormat::parse("claude_xml"),
+            Ok(OutputFormat::ClaudeXml)
+        ));
+        assert!(matches!(
+            OutputFormat::parse("claudexml"),
+            Ok(OutputFormat::ClaudeXml)
+        ));
     }
 
     #[test]
     fn test_output_format_parse_case_insensitive() {
         assert!(matches!(OutputFormat::parse("XML"), Ok(OutputFormat::Xml)));
-        assert!(matches!(OutputFormat::parse("Markdown"), Ok(OutputFormat::Markdown)));
-        assert!(matches!(OutputFormat::parse("CLAUDE-XML"), Ok(OutputFormat::ClaudeXml)));
+        assert!(matches!(
+            OutputFormat::parse("Markdown"),
+            Ok(OutputFormat::Markdown)
+        ));
+        assert!(matches!(
+            OutputFormat::parse("CLAUDE-XML"),
+            Ok(OutputFormat::ClaudeXml)
+        ));
     }
 
     #[test]
@@ -3847,8 +4190,14 @@ This is the last section.
         assert!(result.is_ok());
         let output = result.unwrap();
         // XML format should contain XML tags
-        assert!(output.contains("<") && output.contains(">"), "XML should contain tags");
-        assert!(output.contains("test.rs"), "Output should contain file path");
+        assert!(
+            output.contains("<") && output.contains(">"),
+            "XML should contain tags"
+        );
+        assert!(
+            output.contains("test.rs"),
+            "Output should contain file path"
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
@@ -3892,7 +4241,10 @@ This is the last section.
         assert!(result.is_ok());
         let output = result.unwrap();
         // ClaudeXml format should contain XML tags
-        assert!(output.contains("<") && output.contains(">"), "ClaudeXml should contain tags");
+        assert!(
+            output.contains("<") && output.contains(">"),
+            "ClaudeXml should contain tags"
+        );
         assert!(output.contains("lib.rs"), "Output should contain file path");
 
         let _ = fs::remove_dir_all(&temp_dir);
@@ -4006,7 +4358,7 @@ This is the last section.
 
     #[test]
     fn test_processed_file_creation() {
-        use crate::core::models::{ProcessedFile, CompressionLevel};
+        use crate::core::models::{CompressionLevel, ProcessedFile};
         let pf = ProcessedFile {
             path: "test.py".to_string(),
             content: "x = 1".to_string(),
@@ -4100,13 +4452,19 @@ This is the last section.
             skeleton_mode: SkeletonMode::Enabled,
             ..Default::default()
         };
-        assert!(matches!(enabled_config.skeleton_mode, SkeletonMode::Enabled));
+        assert!(matches!(
+            enabled_config.skeleton_mode,
+            SkeletonMode::Enabled
+        ));
 
         let disabled_config = EncoderConfig {
             skeleton_mode: SkeletonMode::Disabled,
             ..Default::default()
         };
-        assert!(matches!(disabled_config.skeleton_mode, SkeletonMode::Disabled));
+        assert!(matches!(
+            disabled_config.skeleton_mode,
+            SkeletonMode::Disabled
+        ));
     }
 
     // ========================================================================
@@ -4336,11 +4694,7 @@ class MyClass:
         let config = EncoderConfig::default();
         let engine = ContextEngine::new(config);
 
-        let files = vec![
-            ("a.py", "x = 1"),
-            ("b.py", "y = 2"),
-            ("c.py", "z = 3"),
-        ];
+        let files = vec![("a.py", "x = 1"), ("b.py", "y = 2"), ("c.py", "z = 3")];
 
         for (path, content) in files {
             let processed = engine.process_file_content(path, content);
@@ -4362,14 +4716,23 @@ class MyClass:
         };
 
         // Test all formats
-        for format in [OutputFormat::PlusMinus, OutputFormat::Xml, OutputFormat::Markdown, OutputFormat::ClaudeXml] {
+        for format in [
+            OutputFormat::PlusMinus,
+            OutputFormat::Xml,
+            OutputFormat::Markdown,
+            OutputFormat::ClaudeXml,
+        ] {
             let config = EncoderConfig {
                 output_format: format.clone(),
                 ..Default::default()
             };
             let engine = ContextEngine::new(config);
             let output = engine.serialize_processed_file(&file);
-            assert!(!output.is_empty(), "Format {:?} should produce output", format);
+            assert!(
+                !output.is_empty(),
+                "Format {:?} should produce output",
+                format
+            );
         }
     }
 
@@ -4432,7 +4795,11 @@ class MyClass:
         fs::create_dir_all(&temp_dir).unwrap();
 
         // Create an invalid config file
-        fs::write(temp_dir.join(".pm_encoder_config.json"), "not valid json {{{").unwrap();
+        fs::write(
+            temp_dir.join(".pm_encoder_config.json"),
+            "not valid json {{{",
+        )
+        .unwrap();
 
         let result = load_config(temp_dir.to_str().unwrap());
         assert!(result.is_err());
@@ -4494,7 +4861,10 @@ class MyClass:
         assert_eq!(escape_xml_attr("\"quoted\""), "&quot;quoted&quot;");
         assert_eq!(escape_xml_attr("'single'"), "&apos;single&apos;");
         assert_eq!(escape_xml_attr("<tag>"), "&lt;tag&gt;");
-        assert_eq!(escape_xml_attr("a \"b\" & 'c' < d > e"), "a &quot;b&quot; &amp; &apos;c&apos; &lt; d &gt; e");
+        assert_eq!(
+            escape_xml_attr("a \"b\" & 'c' < d > e"),
+            "a &quot;b&quot; &amp; &apos;c&apos; &lt; d &gt; e"
+        );
     }
 
     #[test]
@@ -4507,7 +4877,10 @@ class MyClass:
     fn test_matches_patterns_exact() {
         // Exact match
         assert!(matches_patterns("file.txt", &vec!["file.txt".to_string()]));
-        assert!(!matches_patterns("other.txt", &vec!["file.txt".to_string()]));
+        assert!(!matches_patterns(
+            "other.txt",
+            &vec!["file.txt".to_string()]
+        ));
     }
 
     #[test]
@@ -4633,7 +5006,8 @@ class MyClass:
             &vec![],
             &vec![],
             100, // Very small limit - 100 bytes
-        ).unwrap();
+        )
+        .unwrap();
 
         // Only small file should be included
         assert!(entries.iter().any(|e| e.path.contains("small.txt")));
@@ -4745,16 +5119,14 @@ class MyClass:
 
     #[test]
     fn test_serialize_entries_claude_xml_basic() {
-        let files = vec![
-            FileEntry {
-                path: "test.py".to_string(),
-                content: "print('hello')".to_string(),
-                md5: "abc".to_string(),
-                mtime: 0,
-                ctime: 0,
-                size: 14,
-            },
-        ];
+        let files = vec![FileEntry {
+            path: "test.py".to_string(),
+            content: "print('hello')".to_string(),
+            md5: "abc".to_string(),
+            mtime: 0,
+            ctime: 0,
+            size: 14,
+        }];
 
         let config = EncoderConfig::default();
         let result = serialize_entries_claude_xml(&config, &files);
@@ -4768,16 +5140,14 @@ class MyClass:
 
     #[test]
     fn test_serialize_entries_claude_xml_with_lens() {
-        let files = vec![
-            FileEntry {
-                path: "src/main.rs".to_string(),
-                content: "fn main() {}".to_string(),
-                md5: "xyz".to_string(),
-                mtime: 0,
-                ctime: 0,
-                size: 12,
-            },
-        ];
+        let files = vec![FileEntry {
+            path: "src/main.rs".to_string(),
+            content: "fn main() {}".to_string(),
+            md5: "xyz".to_string(),
+            mtime: 0,
+            ctime: 0,
+            size: 12,
+        }];
 
         let config = EncoderConfig {
             active_lens: Some("architecture".to_string()),
@@ -4793,16 +5163,14 @@ class MyClass:
     #[test]
     fn test_serialize_entries_claude_xml_with_truncation() {
         let long_content: String = (0..100).map(|i| format!("line {}\n", i)).collect();
-        let files = vec![
-            FileEntry {
-                path: "long.py".to_string(),
-                content: long_content,
-                md5: "long".to_string(),
-                mtime: 0,
-                ctime: 0,
-                size: 1000,
-            },
-        ];
+        let files = vec![FileEntry {
+            path: "long.py".to_string(),
+            content: long_content,
+            md5: "long".to_string(),
+            mtime: 0,
+            ctime: 0,
+            size: 1000,
+        }];
 
         let config = EncoderConfig {
             truncate_lines: 10,

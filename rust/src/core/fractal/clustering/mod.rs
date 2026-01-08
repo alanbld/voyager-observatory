@@ -33,11 +33,13 @@ use serde::{Deserialize, Serialize};
 use crate::core::fractal::{ContextLayer, LayerContent, SymbolKind, ZoomLevel};
 
 pub use algorithms::{
-    euclidean_distance, cosine_distance, cosine_similarity, manhattan_distance,
-    ClusterResult, ClusteringError, ClusteringResult, DBSCAN, KMeans,
+    cosine_distance, cosine_similarity, euclidean_distance, manhattan_distance, ClusterResult,
+    ClusteringError, ClusteringResult, KMeans, DBSCAN,
 };
 pub use shell_patterns::{ShellPattern, ShellPatternRecognizer, ShellPatternType};
-pub use vectorizer::{FeatureType, FeatureVector, SymbolVectorizer, VectorMetadata, VectorizerConfig};
+pub use vectorizer::{
+    FeatureType, FeatureVector, SymbolVectorizer, VectorMetadata, VectorizerConfig,
+};
 
 // =============================================================================
 // Semantic Cluster
@@ -226,9 +228,7 @@ impl ClusterEngine {
         // Perform clustering
         let result = match algorithm {
             ClusterAlgorithm::KMeans { k } => {
-                let kmeans = KMeans::new(k)
-                    .with_max_iter(100)
-                    .with_tolerance(1e-4);
+                let kmeans = KMeans::new(k).with_max_iter(100).with_tolerance(1e-4);
                 kmeans.fit(&raw_vectors)
             }
             ClusterAlgorithm::DBSCAN { eps, min_samples } => {
@@ -244,9 +244,7 @@ impl ClusterEngine {
         };
 
         match result {
-            Ok(cluster_result) => {
-                self.build_semantic_clusters(layers, &vectors, &cluster_result)
-            }
+            Ok(cluster_result) => self.build_semantic_clusters(layers, &vectors, &cluster_result),
             Err(e) => {
                 eprintln!("Clustering failed: {}", e);
                 Vec::new()
@@ -381,10 +379,7 @@ impl ClusterEngine {
         semantic_clusters
     }
 
-    fn compute_centroid(
-        &self,
-        members: &[(usize, &ContextLayer, &FeatureVector)],
-    ) -> Vec<f32> {
+    fn compute_centroid(&self, members: &[(usize, &ContextLayer, &FeatureVector)]) -> Vec<f32> {
         if members.is_empty() {
             return Vec::new();
         }
@@ -632,10 +627,7 @@ impl ClusterEngine {
             name = format!("Cluster of {} items", members.len());
         }
         if description.is_empty() {
-            description = format!(
-                "Group of {} similar code elements",
-                members.len()
-            );
+            description = format!("Group of {} similar code elements", members.len());
         }
 
         (name, description)
@@ -680,7 +672,7 @@ impl ClusterEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::fractal::{Range, Visibility, Parameter};
+    use crate::core::fractal::{Parameter, Range, Visibility};
 
     fn create_test_function(name: &str, kind: SymbolKind) -> ContextLayer {
         ContextLayer::new(
@@ -712,8 +704,15 @@ mod tests {
             LayerContent::Symbol {
                 name: name.to_string(),
                 kind: SymbolKind::Function,
-                signature: format!("fn {}({})", name,
-                    params.iter().map(|p| p.name.as_str()).collect::<Vec<_>>().join(", ")),
+                signature: format!(
+                    "fn {}({})",
+                    name,
+                    params
+                        .iter()
+                        .map(|p| p.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
                 return_type: None,
                 parameters: params,
                 documentation: None,

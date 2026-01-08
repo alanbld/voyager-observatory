@@ -5,8 +5,8 @@
 
 use super::{find_child_by_kind, node_text, node_to_span, LanguageAdapter};
 use crate::ir::{
-    Block, Call, Comment, CommentKind, ControlFlow, ControlFlowKind, Declaration,
-    DeclarationKind, ImportKind, ImportLike, LanguageId, Parameter, Span, Visibility,
+    Block, Call, Comment, CommentKind, ControlFlow, ControlFlowKind, Declaration, DeclarationKind,
+    ImportKind, ImportLike, LanguageId, Parameter, Span, Visibility,
 };
 
 /// TypeScript/JavaScript language adapter using Tree-sitter
@@ -56,11 +56,7 @@ impl LanguageAdapter for TypeScriptTreeSitterAdapter {
         self.language.clone()
     }
 
-    fn extract_declarations(
-        &self,
-        tree: &tree_sitter::Tree,
-        source: &str,
-    ) -> Vec<Declaration> {
+    fn extract_declarations(&self, tree: &tree_sitter::Tree, source: &str) -> Vec<Declaration> {
         let mut declarations = Vec::new();
         let root = tree.root_node();
         let mut cursor = root.walk();
@@ -157,27 +153,21 @@ impl TypeScriptTreeSitterAdapter {
         source: &str,
     ) -> Option<Vec<Declaration>> {
         match node.kind() {
-            "function_declaration" => {
-                self.extract_function_declaration(node, source).map(|d| vec![d])
-            }
-            "class_declaration" => {
-                self.extract_class_declaration(node, source).map(|d| vec![d])
-            }
-            "interface_declaration" => {
-                self.extract_interface_declaration(node, source).map(|d| vec![d])
-            }
-            "type_alias_declaration" => {
-                self.extract_type_alias(node, source).map(|d| vec![d])
-            }
-            "enum_declaration" => {
-                self.extract_enum_declaration(node, source).map(|d| vec![d])
-            }
+            "function_declaration" => self
+                .extract_function_declaration(node, source)
+                .map(|d| vec![d]),
+            "class_declaration" => self
+                .extract_class_declaration(node, source)
+                .map(|d| vec![d]),
+            "interface_declaration" => self
+                .extract_interface_declaration(node, source)
+                .map(|d| vec![d]),
+            "type_alias_declaration" => self.extract_type_alias(node, source).map(|d| vec![d]),
+            "enum_declaration" => self.extract_enum_declaration(node, source).map(|d| vec![d]),
             "lexical_declaration" | "variable_declaration" => {
                 Some(self.extract_variable_declarations(node, source))
             }
-            "export_statement" => {
-                self.extract_export_statement(node, source)
-            }
+            "export_statement" => self.extract_export_statement(node, source),
             _ => None,
         }
     }
@@ -201,7 +191,8 @@ impl TypeScriptTreeSitterAdapter {
 
         // Check for async
         if self.is_async_function(node) {
-            decl.metadata.insert("async".to_string(), "true".to_string());
+            decl.metadata
+                .insert("async".to_string(), "true".to_string());
         }
 
         // Extract body span
@@ -265,11 +256,7 @@ impl TypeScriptTreeSitterAdapter {
     }
 
     /// Extract a type alias declaration
-    fn extract_type_alias(
-        &self,
-        node: &tree_sitter::Node,
-        source: &str,
-    ) -> Option<Declaration> {
+    fn extract_type_alias(&self, node: &tree_sitter::Node, source: &str) -> Option<Declaration> {
         let name_node = find_child_by_kind(node, "type_identifier")
             .or_else(|| find_child_by_kind(node, "identifier"))?;
         let name = node_text(&name_node, source).to_string();
@@ -361,7 +348,8 @@ impl TypeScriptTreeSitterAdapter {
         decl.doc_comment = self.extract_jsdoc(parent, source);
 
         if is_async {
-            decl.metadata.insert("async".to_string(), "true".to_string());
+            decl.metadata
+                .insert("async".to_string(), "true".to_string());
         }
 
         // Extract parameters for arrow functions
@@ -403,11 +391,7 @@ impl TypeScriptTreeSitterAdapter {
     }
 
     /// Extract class members (methods, properties)
-    fn extract_class_members(
-        &self,
-        body: &tree_sitter::Node,
-        source: &str,
-    ) -> Vec<Declaration> {
+    fn extract_class_members(&self, body: &tree_sitter::Node, source: &str) -> Vec<Declaration> {
         let mut members = Vec::new();
         let mut cursor = body.walk();
 
@@ -450,12 +434,14 @@ impl TypeScriptTreeSitterAdapter {
 
         // Check for async methods
         if self.is_async_function(node) {
-            decl.metadata.insert("async".to_string(), "true".to_string());
+            decl.metadata
+                .insert("async".to_string(), "true".to_string());
         }
 
         // Check for static methods
         if self.is_static_method(node) {
-            decl.metadata.insert("static".to_string(), "true".to_string());
+            decl.metadata
+                .insert("static".to_string(), "true".to_string());
         }
 
         Some(decl)
@@ -610,8 +596,12 @@ impl TypeScriptTreeSitterAdapter {
         let span = node_to_span(node);
 
         // Extract type annotation
-        let type_annotation = find_child_by_kind(node, "type_annotation")
-            .map(|t| node_text(&t, source).trim_start_matches(':').trim().to_string());
+        let type_annotation = find_child_by_kind(node, "type_annotation").map(|t| {
+            node_text(&t, source)
+                .trim_start_matches(':')
+                .trim()
+                .to_string()
+        });
 
         // Extract default value
         let mut default_value = None;
@@ -636,8 +626,12 @@ impl TypeScriptTreeSitterAdapter {
 
     /// Extract return type
     fn extract_return_type(&self, node: &tree_sitter::Node, source: &str) -> Option<String> {
-        find_child_by_kind(node, "type_annotation")
-            .map(|t| node_text(&t, source).trim_start_matches(':').trim().to_string())
+        find_child_by_kind(node, "type_annotation").map(|t| {
+            node_text(&t, source)
+                .trim_start_matches(':')
+                .trim()
+                .to_string()
+        })
     }
 
     /// Extract JSDoc comment
@@ -714,7 +708,11 @@ impl TypeScriptTreeSitterAdapter {
     }
 
     /// Extract items from import clause
-    fn extract_import_clause(&self, node: &tree_sitter::Node, source: &str) -> (Vec<String>, Option<String>) {
+    fn extract_import_clause(
+        &self,
+        node: &tree_sitter::Node,
+        source: &str,
+    ) -> (Vec<String>, Option<String>) {
         let mut items = Vec::new();
         let mut alias = None;
         let mut cursor = node.walk();
@@ -759,12 +757,8 @@ impl TypeScriptTreeSitterAdapter {
     }
 
     /// Visit comments in the tree
-    fn visit_comments(
-        &self,
-        node: &tree_sitter::Node,
-        source: &str,
-        comments: &mut Vec<Comment>,
-    ) {
+    #[allow(clippy::only_used_in_recursion)]
+    fn visit_comments(&self, node: &tree_sitter::Node, source: &str, comments: &mut Vec<Comment>) {
         if node.kind() == "comment" {
             let text = node_text(node, source);
             let span = node_to_span(node);
@@ -849,7 +843,13 @@ impl TypeScriptTreeSitterAdapter {
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.extract_block_contents(&child, source, &mut control_flow, &mut calls, &mut nested_declarations);
+            self.extract_block_contents(
+                &child,
+                source,
+                &mut control_flow,
+                &mut calls,
+                &mut nested_declarations,
+            );
         }
 
         Block {
@@ -949,7 +949,13 @@ impl TypeScriptTreeSitterAdapter {
             _ => {
                 let mut cursor = node.walk();
                 for child in node.children(&mut cursor) {
-                    self.extract_block_contents(&child, source, control_flow, calls, nested_declarations);
+                    self.extract_block_contents(
+                        &child,
+                        source,
+                        control_flow,
+                        calls,
+                        nested_declarations,
+                    );
                 }
             }
         }
@@ -957,8 +963,7 @@ impl TypeScriptTreeSitterAdapter {
 
     /// Extract condition span from if/while statements
     fn extract_condition_span(&self, node: &tree_sitter::Node) -> Option<Span> {
-        find_child_by_kind(node, "parenthesized_expression")
-            .map(|n| node_to_span(&n))
+        find_child_by_kind(node, "parenthesized_expression").map(|n| node_to_span(&n))
     }
 
     /// Extract a function call
@@ -997,13 +1002,17 @@ mod tests {
 
     fn parse_typescript(source: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()).unwrap();
+        parser
+            .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
+            .unwrap();
         parser.parse(source, None).unwrap()
     }
 
     fn parse_javascript(source: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_javascript::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&tree_sitter_javascript::LANGUAGE.into())
+            .unwrap();
         parser.parse(source, None).unwrap()
     }
 
@@ -1147,8 +1156,12 @@ import * as lodash from 'lodash';
         let imports = adapter.extract_imports(&tree, source);
 
         assert_eq!(imports.len(), 3);
-        assert!(imports.iter().any(|i| i.source == "react" && i.items.contains(&"React".to_string())));
-        assert!(imports.iter().any(|i| i.items.contains(&"useState".to_string())));
+        assert!(imports
+            .iter()
+            .any(|i| i.source == "react" && i.items.contains(&"React".to_string())));
+        assert!(imports
+            .iter()
+            .any(|i| i.items.contains(&"useState".to_string())));
         assert!(imports.iter().any(|i| i.items.contains(&"*".to_string())));
     }
 
@@ -1177,9 +1190,18 @@ class Calculator {
 
     #[test]
     fn test_adapter_languages() {
-        assert_eq!(TypeScriptTreeSitterAdapter::new().language(), LanguageId::TypeScript);
-        assert_eq!(TypeScriptTreeSitterAdapter::tsx().language(), LanguageId::Tsx);
-        assert_eq!(TypeScriptTreeSitterAdapter::javascript().language(), LanguageId::JavaScript);
+        assert_eq!(
+            TypeScriptTreeSitterAdapter::new().language(),
+            LanguageId::TypeScript
+        );
+        assert_eq!(
+            TypeScriptTreeSitterAdapter::tsx().language(),
+            LanguageId::Tsx
+        );
+        assert_eq!(
+            TypeScriptTreeSitterAdapter::javascript().language(),
+            LanguageId::JavaScript
+        );
     }
 
     // ==================== Adapter Creation Tests ====================
@@ -1272,7 +1294,10 @@ class Calculator {
         assert_eq!(declarations.len(), 1);
         assert_eq!(declarations[0].name, "fetchData");
         assert_eq!(declarations[0].kind, DeclarationKind::Function);
-        assert_eq!(declarations[0].metadata.get("async"), Some(&"true".to_string()));
+        assert_eq!(
+            declarations[0].metadata.get("async"),
+            Some(&"true".to_string())
+        );
     }
 
     #[test]
@@ -1716,7 +1741,10 @@ function test(): void {
 
         assert_eq!(declarations.len(), 1);
         if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
-            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::If));
+            assert!(body
+                .control_flow
+                .iter()
+                .any(|cf| cf.kind == ControlFlowKind::If));
         }
     }
 
@@ -1735,7 +1763,10 @@ function test(): void {
 
         assert_eq!(declarations.len(), 1);
         if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
-            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::For));
+            assert!(body
+                .control_flow
+                .iter()
+                .any(|cf| cf.kind == ControlFlowKind::For));
         }
     }
 
@@ -1754,7 +1785,10 @@ function test(): void {
 
         assert_eq!(declarations.len(), 1);
         if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
-            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::For));
+            assert!(body
+                .control_flow
+                .iter()
+                .any(|cf| cf.kind == ControlFlowKind::For));
         }
     }
 
@@ -1773,7 +1807,10 @@ function test(): void {
 
         assert_eq!(declarations.len(), 1);
         if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
-            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::While));
+            assert!(body
+                .control_flow
+                .iter()
+                .any(|cf| cf.kind == ControlFlowKind::While));
         }
     }
 
@@ -1795,7 +1832,10 @@ function test(x: number): void {
 
         assert_eq!(declarations.len(), 1);
         if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
-            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::Switch));
+            assert!(body
+                .control_flow
+                .iter()
+                .any(|cf| cf.kind == ControlFlowKind::Switch));
         }
     }
 
@@ -1818,7 +1858,10 @@ function test(): void {
 
         assert_eq!(declarations.len(), 1);
         if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
-            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::Try));
+            assert!(body
+                .control_flow
+                .iter()
+                .any(|cf| cf.kind == ControlFlowKind::Try));
         }
     }
 
@@ -1835,7 +1878,10 @@ function test(): number {
 
         assert_eq!(declarations.len(), 1);
         if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
-            assert!(body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::Return));
+            assert!(body
+                .control_flow
+                .iter()
+                .any(|cf| cf.kind == ControlFlowKind::Return));
         }
     }
 

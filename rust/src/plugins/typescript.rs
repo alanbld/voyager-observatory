@@ -60,74 +60,116 @@ impl Framework {
 
         // React indicators
         let react_patterns = [
-            "import React", "from 'react'", "from \"react\"",
-            "useState", "useEffect", "useCallback", "useMemo",
-            "React.FC", "React.Component", "JSX.Element",
-            "ReactElement", "createElement",
+            "import React",
+            "from 'react'",
+            "from \"react\"",
+            "useState",
+            "useEffect",
+            "useCallback",
+            "useMemo",
+            "React.FC",
+            "React.Component",
+            "JSX.Element",
+            "ReactElement",
+            "createElement",
         ];
-        let react_score: i32 = react_patterns.iter()
+        let react_score: i32 = react_patterns
+            .iter()
             .filter(|p| content.contains(*p))
             .count() as i32;
         scores.insert(Framework::React, react_score);
 
         // Angular indicators
         let angular_patterns = [
-            "@Component", "@Injectable", "@Directive", "@Pipe",
-            "@NgModule", "@Input", "@Output",
-            "Observable<", "Subject<", "BehaviorSubject<",
-            "from '@angular", "from \"@angular",
+            "@Component",
+            "@Injectable",
+            "@Directive",
+            "@Pipe",
+            "@NgModule",
+            "@Input",
+            "@Output",
+            "Observable<",
+            "Subject<",
+            "BehaviorSubject<",
+            "from '@angular",
+            "from \"@angular",
         ];
-        let angular_score: i32 = angular_patterns.iter()
+        let angular_score: i32 = angular_patterns
+            .iter()
             .filter(|p| content.contains(*p))
             .count() as i32;
         scores.insert(Framework::Angular, angular_score);
 
         // Vue indicators
         let vue_patterns = [
-            "defineComponent", "ref(", "reactive(",
-            "from 'vue'", "from \"vue\"",
-            "@vue/", "Vue.component",
+            "defineComponent",
+            "ref(",
+            "reactive(",
+            "from 'vue'",
+            "from \"vue\"",
+            "@vue/",
+            "Vue.component",
         ];
-        let vue_score: i32 = vue_patterns.iter()
-            .filter(|p| content.contains(*p))
-            .count() as i32;
+        let vue_score: i32 = vue_patterns.iter().filter(|p| content.contains(*p)).count() as i32;
         scores.insert(Framework::Vue, vue_score);
 
         // NestJS indicators
         let nestjs_patterns = [
-            "@Controller", "@Get", "@Post", "@Put", "@Delete",
-            "@Module", "@Inject",
-            "from '@nestjs", "from \"@nestjs",
+            "@Controller",
+            "@Get",
+            "@Post",
+            "@Put",
+            "@Delete",
+            "@Module",
+            "@Inject",
+            "from '@nestjs",
+            "from \"@nestjs",
         ];
-        let nestjs_score: i32 = nestjs_patterns.iter()
+        let nestjs_score: i32 = nestjs_patterns
+            .iter()
             .filter(|p| content.contains(*p))
             .count() as i32;
         scores.insert(Framework::NestJS, nestjs_score);
 
         // Express indicators
         let express_patterns = [
-            "express()", "app.get(", "app.post(",
-            "req, res", "req: Request", "res: Response",
-            "from 'express'", "from \"express\"",
+            "express()",
+            "app.get(",
+            "app.post(",
+            "req, res",
+            "req: Request",
+            "res: Response",
+            "from 'express'",
+            "from \"express\"",
         ];
-        let express_score: i32 = express_patterns.iter()
+        let express_score: i32 = express_patterns
+            .iter()
             .filter(|p| content.contains(*p))
             .count() as i32;
         scores.insert(Framework::Express, express_score);
 
         // Node.js indicators
         let node_patterns = [
-            "require(", "module.exports", "exports.",
-            "process.env", "__dirname", "__filename",
-            "fs.", "path.", "http.", "https.",
+            "require(",
+            "module.exports",
+            "exports.",
+            "process.env",
+            "__dirname",
+            "__filename",
+            "fs.",
+            "path.",
+            "http.",
+            "https.",
         ];
-        let node_score: i32 = node_patterns.iter()
+        let node_score: i32 = node_patterns
+            .iter()
             .filter(|p| content.contains(*p))
             .count() as i32;
         scores.insert(Framework::Node, node_score);
 
         // Return highest scoring framework
-        scores.iter()
+        scores
+            .iter()
             .filter(|(_, &score)| score > 0)
             .max_by_key(|(_, &score)| score)
             .map(|(&framework, _)| framework)
@@ -165,47 +207,71 @@ impl DecoratorCategory {
         let name_lower = name.to_lowercase();
 
         // Component decorators
-        if name_lower == "component" || name_lower == "directive" ||
-           name_lower == "pipe" || name_lower == "view" {
+        if name_lower == "component"
+            || name_lower == "directive"
+            || name_lower == "pipe"
+            || name_lower == "view"
+        {
             return DecoratorCategory::Component;
         }
 
         // Service decorators
-        if name_lower == "injectable" || name_lower == "service" ||
-           name_lower == "repository" || name_lower == "provider" {
+        if name_lower == "injectable"
+            || name_lower == "service"
+            || name_lower == "repository"
+            || name_lower == "provider"
+        {
             return DecoratorCategory::Service;
         }
 
         // Controller/endpoint decorators
-        if name_lower == "controller" || name_lower == "get" ||
-           name_lower == "post" || name_lower == "put" ||
-           name_lower == "delete" || name_lower == "patch" ||
-           name_lower == "route" || name_lower == "api" {
+        if name_lower == "controller"
+            || name_lower == "get"
+            || name_lower == "post"
+            || name_lower == "put"
+            || name_lower == "delete"
+            || name_lower == "patch"
+            || name_lower == "route"
+            || name_lower == "api"
+        {
             return DecoratorCategory::Controller;
         }
 
         // Validation decorators
-        if name_lower.starts_with("is") || name_lower.contains("valid") ||
-           name_lower == "validate" || name_lower == "required" {
+        if name_lower.starts_with("is")
+            || name_lower.contains("valid")
+            || name_lower == "validate"
+            || name_lower == "required"
+        {
             return DecoratorCategory::Validation;
         }
 
         // Middleware decorators
-        if name_lower == "middleware" || name_lower == "useguards" ||
-           name_lower == "useinterceptors" || name_lower == "usepipes" {
+        if name_lower == "middleware"
+            || name_lower == "useguards"
+            || name_lower == "useinterceptors"
+            || name_lower == "usepipes"
+        {
             return DecoratorCategory::Middleware;
         }
 
         // Property decorators
-        if name_lower == "input" || name_lower == "output" ||
-           name_lower == "prop" || name_lower == "column" ||
-           name_lower == "viewchild" || name_lower == "contentchild" {
+        if name_lower == "input"
+            || name_lower == "output"
+            || name_lower == "prop"
+            || name_lower == "column"
+            || name_lower == "viewchild"
+            || name_lower == "contentchild"
+        {
             return DecoratorCategory::Property;
         }
 
         // Testing decorators
-        if name_lower == "test" || name_lower == "it" ||
-           name_lower == "describe" || name_lower == "beforeeach" {
+        if name_lower == "test"
+            || name_lower == "it"
+            || name_lower == "describe"
+            || name_lower == "beforeeach"
+        {
             return DecoratorCategory::Testing;
         }
 
@@ -257,8 +323,18 @@ impl TsType {
 
         let is_primitive = matches!(
             lower.as_str(),
-            "string" | "number" | "boolean" | "void" | "null" | "undefined" |
-            "any" | "unknown" | "never" | "object" | "symbol" | "bigint"
+            "string"
+                | "number"
+                | "boolean"
+                | "void"
+                | "null"
+                | "undefined"
+                | "any"
+                | "unknown"
+                | "never"
+                | "object"
+                | "symbol"
+                | "bigint"
         );
 
         Self {
@@ -297,8 +373,11 @@ impl TsType {
         }
 
         // JSX/React element
-        if lower.contains("jsx.element") || lower.contains("reactelement") ||
-           lower.contains("react.fc") || lower.contains("react.component") {
+        if lower.contains("jsx.element")
+            || lower.contains("reactelement")
+            || lower.contains("react.fc")
+            || lower.contains("react.component")
+        {
             return Some(ConceptType::Infrastructure);
         }
 
@@ -465,7 +544,10 @@ impl TypeScriptPlugin {
                 }
             } else if in_jsdoc {
                 if trimmed.starts_with("/**") {
-                    let content = trimmed.trim_start_matches("/**").trim_end_matches("*/").trim();
+                    let content = trimmed
+                        .trim_start_matches("/**")
+                        .trim_end_matches("*/")
+                        .trim();
                     if !content.is_empty() {
                         doc_lines.push(content.to_string());
                     }
@@ -541,7 +623,10 @@ impl TypeScriptPlugin {
             let (type_hint, default_value) = if let Some(rest) = rest {
                 if rest.contains('=') {
                     let parts: Vec<&str> = rest.splitn(2, '=').collect();
-                    (Some(parts[0].trim().to_string()), Some(parts[1].trim().to_string()))
+                    (
+                        Some(parts[0].trim().to_string()),
+                        Some(parts[1].trim().to_string()),
+                    )
                 } else {
                     (Some(rest.to_string()), None)
                 }
@@ -565,9 +650,9 @@ impl TypeScriptPlugin {
 
     /// Detect if content is TSX/JSX
     fn is_tsx(&self, content: &str) -> bool {
-        self.jsx_pattern.is_match(content) ||
-        content.contains("React.createElement") ||
-        content.contains("JSX.Element")
+        self.jsx_pattern.is_match(content)
+            || content.contains("React.createElement")
+            || content.contains("JSX.Element")
     }
 
     /// Detect React hooks usage
@@ -607,53 +692,81 @@ impl TypeScriptPlugin {
         }
 
         // Validation patterns
-        if name_lower.contains("validate") || name_lower.contains("isvalid") ||
-           name_lower.starts_with("is") || name_lower.starts_with("has") ||
-           name_lower.starts_with("can") || name_lower.starts_with("should") {
+        if name_lower.contains("validate")
+            || name_lower.contains("isvalid")
+            || name_lower.starts_with("is")
+            || name_lower.starts_with("has")
+            || name_lower.starts_with("can")
+            || name_lower.starts_with("should")
+        {
             return ConceptType::Validation;
         }
 
         // Calculation patterns
-        if name_lower.contains("calculate") || name_lower.contains("compute") ||
-           name_lower.contains("sum") || name_lower.contains("total") ||
-           name_lower.contains("average") || name_lower.contains("count") {
+        if name_lower.contains("calculate")
+            || name_lower.contains("compute")
+            || name_lower.contains("sum")
+            || name_lower.contains("total")
+            || name_lower.contains("average")
+            || name_lower.contains("count")
+        {
             return ConceptType::Calculation;
         }
 
         // Error handling patterns
-        if name_lower.contains("error") || name_lower.contains("handle") ||
-           name_lower.contains("catch") || name_lower.contains("throw") {
+        if name_lower.contains("error")
+            || name_lower.contains("handle")
+            || name_lower.contains("catch")
+            || name_lower.contains("throw")
+        {
             return ConceptType::ErrorHandling;
         }
 
         // Logging patterns
-        if name_lower.contains("log") || name_lower.contains("trace") ||
-           name_lower.contains("debug") || name_lower.contains("info") {
+        if name_lower.contains("log")
+            || name_lower.contains("trace")
+            || name_lower.contains("debug")
+            || name_lower.contains("info")
+        {
             return ConceptType::Logging;
         }
 
         // Configuration patterns
-        if name_lower.contains("config") || name_lower.contains("settings") ||
-           name_lower.contains("options") || name_lower.contains("setup") {
+        if name_lower.contains("config")
+            || name_lower.contains("settings")
+            || name_lower.contains("options")
+            || name_lower.contains("setup")
+        {
             return ConceptType::Configuration;
         }
 
         // Transform/process patterns
-        if name_lower.contains("transform") || name_lower.contains("convert") ||
-           name_lower.contains("map") || name_lower.contains("filter") ||
-           name_lower.contains("reduce") || name_lower.contains("parse") {
+        if name_lower.contains("transform")
+            || name_lower.contains("convert")
+            || name_lower.contains("map")
+            || name_lower.contains("filter")
+            || name_lower.contains("reduce")
+            || name_lower.contains("parse")
+        {
             return ConceptType::Transformation;
         }
 
         // Fetch/load patterns
-        if name_lower.contains("fetch") || name_lower.contains("load") ||
-           name_lower.contains("get") || name_lower.contains("find") {
+        if name_lower.contains("fetch")
+            || name_lower.contains("load")
+            || name_lower.contains("get")
+            || name_lower.contains("find")
+        {
             return ConceptType::Infrastructure;
         }
 
         // 4. Check if it's async (infrastructure/IO)
-        if symbol.signature.contains("async ") ||
-           symbol.return_type.as_ref().map_or(false, |t| t.contains("Promise")) {
+        if symbol.signature.contains("async ")
+            || symbol
+                .return_type
+                .as_ref()
+                .map_or(false, |t| t.contains("Promise"))
+        {
             return ConceptType::Infrastructure;
         }
 
@@ -721,7 +834,8 @@ impl LanguagePlugin for TypeScriptPlugin {
 
             // Add decorators to signature
             if !decorators.is_empty() {
-                let dec_str = decorators.iter()
+                let dec_str = decorators
+                    .iter()
                     .map(|d| format!("@{}", d))
                     .collect::<Vec<_>>()
                     .join(" ");
@@ -737,7 +851,11 @@ impl LanguagePlugin for TypeScriptPlugin {
                 return_type: None,
                 parameters: Vec::new(),
                 documentation,
-                visibility: if is_exported { Visibility::Public } else { Visibility::Private },
+                visibility: if is_exported {
+                    Visibility::Public
+                } else {
+                    Visibility::Private
+                },
                 range: Range::single_line(start_line + 1),
                 calls: Vec::new(),
             });
@@ -771,7 +889,11 @@ impl LanguagePlugin for TypeScriptPlugin {
                 return_type: None,
                 parameters: Vec::new(),
                 documentation,
-                visibility: if is_exported { Visibility::Public } else { Visibility::Private },
+                visibility: if is_exported {
+                    Visibility::Public
+                } else {
+                    Visibility::Private
+                },
                 range: Range::single_line(start_line + 1),
                 calls: Vec::new(),
             });
@@ -799,7 +921,11 @@ impl LanguagePlugin for TypeScriptPlugin {
                 return_type: Some(type_def.trim().to_string()),
                 parameters: Vec::new(),
                 documentation,
-                visibility: if is_exported { Visibility::Public } else { Visibility::Private },
+                visibility: if is_exported {
+                    Visibility::Public
+                } else {
+                    Visibility::Private
+                },
                 range: Range::single_line(start_line + 1),
                 calls: Vec::new(),
             });
@@ -831,7 +957,8 @@ impl LanguagePlugin for TypeScriptPlugin {
             let signature = if decorators.is_empty() {
                 base_sig
             } else {
-                let dec_str = decorators.iter()
+                let dec_str = decorators
+                    .iter()
                     .map(|d| format!("@{}", d))
                     .collect::<Vec<_>>()
                     .join(" ");
@@ -847,7 +974,11 @@ impl LanguagePlugin for TypeScriptPlugin {
                 return_type,
                 parameters,
                 documentation,
-                visibility: if is_exported { Visibility::Public } else { Visibility::Private },
+                visibility: if is_exported {
+                    Visibility::Public
+                } else {
+                    Visibility::Private
+                },
                 range: Range::single_line(start_line + 1),
                 calls: Vec::new(),
             });
@@ -867,7 +998,10 @@ impl LanguagePlugin for TypeScriptPlugin {
             }
 
             // Skip if already extracted
-            if symbols.iter().any(|s| s.name == name && s.range.start_line == start_line + 1) {
+            if symbols
+                .iter()
+                .any(|s| s.name == name && s.range.start_line == start_line + 1)
+            {
                 continue;
             }
 
@@ -884,7 +1018,8 @@ impl LanguagePlugin for TypeScriptPlugin {
             let signature = if decorators.is_empty() {
                 base_sig
             } else {
-                let dec_str = decorators.iter()
+                let dec_str = decorators
+                    .iter()
                     .map(|d| format!("@{}", d))
                     .collect::<Vec<_>>()
                     .join(" ");
@@ -900,7 +1035,11 @@ impl LanguagePlugin for TypeScriptPlugin {
                 return_type,
                 parameters,
                 documentation,
-                visibility: if is_exported { Visibility::Public } else { Visibility::Private },
+                visibility: if is_exported {
+                    Visibility::Public
+                } else {
+                    Visibility::Private
+                },
                 range: Range::single_line(start_line + 1),
                 calls: Vec::new(),
             });
@@ -920,7 +1059,10 @@ impl LanguagePlugin for TypeScriptPlugin {
             }
 
             // Skip if already extracted
-            if symbols.iter().any(|s| s.name == name && s.range.start_line == start_line + 1) {
+            if symbols
+                .iter()
+                .any(|s| s.name == name && s.range.start_line == start_line + 1)
+            {
                 continue;
             }
 
@@ -937,7 +1079,8 @@ impl LanguagePlugin for TypeScriptPlugin {
             let signature = if decorators.is_empty() {
                 base_sig
             } else {
-                let dec_str = decorators.iter()
+                let dec_str = decorators
+                    .iter()
                     .map(|d| format!("@{}", d))
                     .collect::<Vec<_>>()
                     .join(" ");
@@ -953,7 +1096,11 @@ impl LanguagePlugin for TypeScriptPlugin {
                 return_type,
                 parameters,
                 documentation,
-                visibility: if is_exported { Visibility::Public } else { Visibility::Private },
+                visibility: if is_exported {
+                    Visibility::Public
+                } else {
+                    Visibility::Private
+                },
                 range: Range::single_line(start_line + 1),
                 calls: Vec::new(),
             });
@@ -973,7 +1120,10 @@ impl LanguagePlugin for TypeScriptPlugin {
             }
 
             // Skip if already extracted
-            if symbols.iter().any(|s| s.name == name && s.range.start_line == start_line + 1) {
+            if symbols
+                .iter()
+                .any(|s| s.name == name && s.range.start_line == start_line + 1)
+            {
                 continue;
             }
 
@@ -990,7 +1140,8 @@ impl LanguagePlugin for TypeScriptPlugin {
             let signature = if decorators.is_empty() {
                 base_sig
             } else {
-                let dec_str = decorators.iter()
+                let dec_str = decorators
+                    .iter()
                     .map(|d| format!("@{}", d))
                     .collect::<Vec<_>>()
                     .join(" ");
@@ -1006,7 +1157,11 @@ impl LanguagePlugin for TypeScriptPlugin {
                 return_type,
                 parameters,
                 documentation,
-                visibility: if is_exported { Visibility::Public } else { Visibility::Private },
+                visibility: if is_exported {
+                    Visibility::Public
+                } else {
+                    Visibility::Private
+                },
                 range: Range::single_line(start_line + 1),
                 calls: Vec::new(),
             });
@@ -1026,13 +1181,25 @@ impl LanguagePlugin for TypeScriptPlugin {
             }
 
             // Skip keywords and already extracted symbols
-            let skip_names = ["if", "for", "while", "switch", "catch", "function", "class", "constructor"];
+            let skip_names = [
+                "if",
+                "for",
+                "while",
+                "switch",
+                "catch",
+                "function",
+                "class",
+                "constructor",
+            ];
             if skip_names.contains(&name) {
                 continue;
             }
 
             // Skip if already extracted (same name at same line)
-            if symbols.iter().any(|s| s.name == name && s.range.start_line == start_line + 1) {
+            if symbols
+                .iter()
+                .any(|s| s.name == name && s.range.start_line == start_line + 1)
+            {
                 continue;
             }
 
@@ -1095,7 +1262,8 @@ impl LanguagePlugin for TypeScriptPlugin {
 
             // Named imports: { x, y, z }
             let items = if let Some(named) = cap.get(1) {
-                named.as_str()
+                named
+                    .as_str()
                     .split(',')
                     .map(|s| s.trim())
                     .filter(|s| !s.is_empty())
@@ -1135,7 +1303,8 @@ impl LanguagePlugin for TypeScriptPlugin {
             }
 
             let items = if let Some(named) = cap.get(1) {
-                named.as_str()
+                named
+                    .as_str()
                     .split(',')
                     .map(|s| s.trim().to_string())
                     .filter(|s| !s.is_empty())
@@ -1162,20 +1331,20 @@ impl LanguagePlugin for TypeScriptPlugin {
         let line_count = content.lines().count();
 
         // Detect if it's a test file
-        let is_test = content.contains("describe(") ||
-            content.contains("it(") ||
-            content.contains("test(") ||
-            content.contains("expect(") ||
-            content.contains("@Test") ||
-            content.contains("jest") ||
-            content.contains("mocha") ||
-            content.contains("vitest");
+        let is_test = content.contains("describe(")
+            || content.contains("it(")
+            || content.contains("test(")
+            || content.contains("expect(")
+            || content.contains("@Test")
+            || content.contains("jest")
+            || content.contains("mocha")
+            || content.contains("vitest");
 
         // Detect if it's executable
-        let is_executable = content.contains("if (require.main === module)") ||
-            content.contains("process.argv") ||
-            content.contains("#!/usr/bin/env node") ||
-            content.contains("#!/usr/bin/node");
+        let is_executable = content.contains("if (require.main === module)")
+            || content.contains("process.argv")
+            || content.contains("#!/usr/bin/env node")
+            || content.contains("#!/usr/bin/node");
 
         let mut metadata = HashMap::new();
 
@@ -1198,7 +1367,8 @@ impl LanguagePlugin for TypeScriptPlugin {
         }
 
         // Count async functions
-        let async_count = symbols.iter()
+        let async_count = symbols
+            .iter()
             .filter(|s| s.signature.contains("async "))
             .count();
         if async_count > 0 {
@@ -1206,7 +1376,8 @@ impl LanguagePlugin for TypeScriptPlugin {
         }
 
         // Count classes
-        let class_count = symbols.iter()
+        let class_count = symbols
+            .iter()
             .filter(|s| s.kind == SymbolKind::Class)
             .count();
         if class_count > 0 {
@@ -1214,7 +1385,8 @@ impl LanguagePlugin for TypeScriptPlugin {
         }
 
         // Count interfaces
-        let interface_count = symbols.iter()
+        let interface_count = symbols
+            .iter()
             .filter(|s| s.kind == SymbolKind::Interface)
             .count();
         if interface_count > 0 {
@@ -1222,15 +1394,21 @@ impl LanguagePlugin for TypeScriptPlugin {
         }
 
         // Detect type annotation usage
-        let has_types = symbols.iter().any(|s| s.return_type.is_some()) ||
-            symbols.iter().any(|s| s.parameters.iter().any(|p| p.type_hint.is_some()));
+        let has_types = symbols.iter().any(|s| s.return_type.is_some())
+            || symbols
+                .iter()
+                .any(|s| s.parameters.iter().any(|p| p.type_hint.is_some()));
         if has_types {
             metadata.insert("typed".to_string(), "true".to_string());
         }
 
         Ok(FileInfo {
             language: "typescript".to_string(),
-            dialect: if is_tsx { Some("tsx".to_string()) } else { Some("ts".to_string()) },
+            dialect: if is_tsx {
+                Some("tsx".to_string())
+            } else {
+                Some("ts".to_string())
+            },
             symbol_count: symbols.len(),
             line_count,
             is_test,
@@ -1245,7 +1423,8 @@ impl LanguagePlugin for TypeScriptPlugin {
 
     fn infer_concept_type(&self, symbol: &ExtractedSymbol, content: &str) -> ConceptType {
         // Extract decorators from signature
-        let decorators: Vec<String> = symbol.signature
+        let decorators: Vec<String> = symbol
+            .signature
             .split('@')
             .skip(1)
             .map(|s| s.split_whitespace().next().unwrap_or("").to_string())
@@ -1286,16 +1465,20 @@ impl LanguagePlugin for TypeScriptPlugin {
         }
 
         // Interface/type definitions get boost for architecture review
-        if (symbol.kind == SymbolKind::Interface || symbol.kind == SymbolKind::Type) &&
-           intent_lower.contains("architecture") {
+        if (symbol.kind == SymbolKind::Interface || symbol.kind == SymbolKind::Type)
+            && intent_lower.contains("architecture")
+        {
             boost += 0.2;
         }
 
         // Validation functions get boost for security review
         if intent_lower.contains("security") {
             let name_lower = symbol.name.to_lowercase();
-            if name_lower.contains("validate") || name_lower.contains("sanitize") ||
-               name_lower.contains("escape") || name_lower.starts_with("is") {
+            if name_lower.contains("validate")
+                || name_lower.contains("sanitize")
+                || name_lower.contains("escape")
+                || name_lower.starts_with("is")
+            {
                 boost += 0.2;
             }
         }
@@ -1323,7 +1506,9 @@ impl LanguagePlugin for TypeScriptPlugin {
 
         // Index 60: Type annotation completeness (0.0 - 1.0)
         let has_return_type = symbol.return_type.is_some();
-        let typed_params = symbol.parameters.iter()
+        let typed_params = symbol
+            .parameters
+            .iter()
             .filter(|p| p.type_hint.is_some())
             .count();
         let total_params = symbol.parameters.len().max(1);
@@ -1338,7 +1523,9 @@ impl LanguagePlugin for TypeScriptPlugin {
 
         // Index 61: Async/Promise usage (0.0 - 1.0)
         let is_async = symbol.signature.contains("async ");
-        let has_promise = symbol.return_type.as_ref()
+        let has_promise = symbol
+            .return_type
+            .as_ref()
             .map_or(false, |t| t.contains("Promise"));
         let async_score = if is_async && has_promise {
             1.0
@@ -1368,21 +1555,24 @@ impl LanguagePlugin for TypeScriptPlugin {
         let mut framework_score: f32 = 0.0;
 
         // React patterns
-        if context.contains("useState") || context.contains("useEffect") ||
-           context.contains("return <") || context.contains("React.FC") {
+        if context.contains("useState")
+            || context.contains("useEffect")
+            || context.contains("return <")
+            || context.contains("React.FC")
+        {
             framework_score += 0.5;
         }
 
         // Angular patterns
-        if symbol.signature.contains("@Component") ||
-           symbol.signature.contains("@Injectable") {
+        if symbol.signature.contains("@Component") || symbol.signature.contains("@Injectable") {
             framework_score += 0.5;
         }
 
         // Express/NestJS patterns
-        if symbol.signature.contains("@Controller") ||
-           symbol.signature.contains("@Get") ||
-           context.contains("req, res") {
+        if symbol.signature.contains("@Controller")
+            || symbol.signature.contains("@Get")
+            || context.contains("req, res")
+        {
             framework_score += 0.5;
         }
 
@@ -1467,7 +1657,10 @@ async function fetchData(url: string): Promise<Response> {
         assert_eq!(symbols.len(), 1);
         assert_eq!(symbols[0].name, "fetchData");
         assert!(symbols[0].signature.contains("async"));
-        assert_eq!(symbols[0].return_type, Some("Promise<Response>".to_string()));
+        assert_eq!(
+            symbols[0].return_type,
+            Some("Promise<Response>".to_string())
+        );
     }
 
     #[test]
@@ -1789,7 +1982,10 @@ export class AppComponent {}
             range: Range::single_line(1),
             calls: vec![],
         };
-        assert_eq!(p.infer_concept_type(&validate_sym, ""), ConceptType::Validation);
+        assert_eq!(
+            p.infer_concept_type(&validate_sym, ""),
+            ConceptType::Validation
+        );
 
         // Number return → Calculation
         let calc_sym = ExtractedSymbol {
@@ -1803,7 +1999,10 @@ export class AppComponent {}
             range: Range::single_line(1),
             calls: vec![],
         };
-        assert_eq!(p.infer_concept_type(&calc_sym, ""), ConceptType::Calculation);
+        assert_eq!(
+            p.infer_concept_type(&calc_sym, ""),
+            ConceptType::Calculation
+        );
     }
 
     #[test]
@@ -1821,7 +2020,10 @@ export class AppComponent {}
             range: Range::single_line(1),
             calls: vec![],
         };
-        assert_eq!(p.infer_concept_type(&component_sym, ""), ConceptType::Infrastructure);
+        assert_eq!(
+            p.infer_concept_type(&component_sym, ""),
+            ConceptType::Infrastructure
+        );
     }
 
     #[test]
@@ -1839,7 +2041,10 @@ export class AppComponent {}
             range: Range::single_line(1),
             calls: vec![],
         };
-        assert_eq!(p.infer_concept_type(&hook_sym, ""), ConceptType::Infrastructure);
+        assert_eq!(
+            p.infer_concept_type(&hook_sym, ""),
+            ConceptType::Infrastructure
+        );
     }
 
     // =========================================================================
@@ -1850,16 +2055,25 @@ export class AppComponent {}
     fn test_type_parsing() {
         let bool_type = TsType::from_string("boolean");
         assert!(bool_type.is_primitive);
-        assert_eq!(bool_type.suggests_concept_type(), Some(ConceptType::Validation));
+        assert_eq!(
+            bool_type.suggests_concept_type(),
+            Some(ConceptType::Validation)
+        );
 
         let promise_type = TsType::from_string("Promise<User>");
         assert!(promise_type.is_promise);
         assert!(promise_type.has_generics);
-        assert_eq!(promise_type.suggests_concept_type(), Some(ConceptType::Infrastructure));
+        assert_eq!(
+            promise_type.suggests_concept_type(),
+            Some(ConceptType::Infrastructure)
+        );
 
         let array_type = TsType::from_string("User[]");
         assert!(array_type.is_array);
-        assert_eq!(array_type.suggests_concept_type(), Some(ConceptType::Transformation));
+        assert_eq!(
+            array_type.suggests_concept_type(),
+            Some(ConceptType::Transformation)
+        );
     }
 
     // =========================================================================
@@ -1981,13 +2195,22 @@ export const useUserData = () => {
 
         // Verify concept types
         let is_valid = symbols.iter().find(|s| s.name == "isValidEmail").unwrap();
-        assert_eq!(p.infer_concept_type(is_valid, content), ConceptType::Validation);
+        assert_eq!(
+            p.infer_concept_type(is_valid, content),
+            ConceptType::Validation
+        );
 
         let calc_age = symbols.iter().find(|s| s.name == "calculateAge").unwrap();
-        assert_eq!(p.infer_concept_type(calc_age, content), ConceptType::Calculation);
+        assert_eq!(
+            p.infer_concept_type(calc_age, content),
+            ConceptType::Calculation
+        );
 
         // Verify React hook detection
         let use_user_data = symbols.iter().find(|s| s.name == "useUserData").unwrap();
-        assert_eq!(p.infer_concept_type(use_user_data, content), ConceptType::Infrastructure);
+        assert_eq!(
+            p.infer_concept_type(use_user_data, content),
+            ConceptType::Infrastructure
+        );
     }
 }

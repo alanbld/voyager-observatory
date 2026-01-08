@@ -221,8 +221,7 @@ impl NebulaNamer {
         }
 
         // Fallback
-        NebulaName::new("Code Cluster", NamingStrategy::Fallback)
-            .with_confidence(0.3)
+        NebulaName::new("Code Cluster", NamingStrategy::Fallback).with_confidence(0.3)
     }
 
     /// Try to name based on dominant concept type.
@@ -240,9 +239,8 @@ impl NebulaNamer {
         }
 
         // Find dominant concept
-        let (dominant_type, dominant_count) = concept_counts
-            .iter()
-            .max_by_key(|(_, count)| *count)?;
+        let (dominant_type, dominant_count) =
+            concept_counts.iter().max_by_key(|(_, count)| *count)?;
 
         // Must be at least 40% of total to be "dominant"
         let dominance = *dominant_count as f32 / total as f32;
@@ -255,12 +253,15 @@ impl NebulaNamer {
             return None;
         }
 
-        let name = self.concept_names.get(dominant_type)
+        let name = self
+            .concept_names
+            .get(dominant_type)
             .copied()
             .unwrap_or("Code");
 
-        Some(NebulaName::new(name, NamingStrategy::ConceptBased)
-            .with_confidence(dominance.min(1.0)))
+        Some(
+            NebulaName::new(name, NamingStrategy::ConceptBased).with_confidence(dominance.min(1.0)),
+        )
     }
 
     /// Try to name based on primary directory.
@@ -292,9 +293,7 @@ impl NebulaNamer {
         }
 
         // Find most common directory
-        let (common_dir, count) = dir_counts
-            .iter()
-            .max_by_key(|(_, count)| *count)?;
+        let (common_dir, count) = dir_counts.iter().max_by_key(|(_, count)| *count)?;
 
         // Must be present in at least 50% of files
         let coverage = *count as f32 / files.len() as f32;
@@ -303,7 +302,9 @@ impl NebulaNamer {
         }
 
         // Look up semantic name
-        let name = self.directory_names.get(*common_dir)
+        let name = self
+            .directory_names
+            .get(*common_dir)
             .copied()
             .unwrap_or(*common_dir);
 
@@ -314,9 +315,11 @@ impl NebulaNamer {
             name.to_string()
         };
 
-        Some(NebulaName::new(display_name, NamingStrategy::DirectoryBased)
-            .with_subtitle(*common_dir)
-            .with_confidence(coverage.min(0.9)))
+        Some(
+            NebulaName::new(display_name, NamingStrategy::DirectoryBased)
+                .with_subtitle(*common_dir)
+                .with_confidence(coverage.min(0.9)),
+        )
     }
 
     /// Try to name based on common file patterns.
@@ -326,50 +329,73 @@ impl NebulaNamer {
         }
 
         // Check for test files
-        let test_count = files.iter().filter(|f| {
-            let lower = f.to_lowercase();
-            lower.contains("test") || lower.contains("spec") || lower.starts_with("test_")
-        }).count();
+        let test_count = files
+            .iter()
+            .filter(|f| {
+                let lower = f.to_lowercase();
+                lower.contains("test") || lower.contains("spec") || lower.starts_with("test_")
+            })
+            .count();
 
         if test_count > files.len() / 2 {
-            return Some(NebulaName::new("Test Suite", NamingStrategy::PatternBased)
-                .with_confidence(0.9));
+            return Some(
+                NebulaName::new("Test Suite", NamingStrategy::PatternBased).with_confidence(0.9),
+            );
         }
 
         // Check for config files
-        let config_count = files.iter().filter(|f| {
-            let lower = f.to_lowercase();
-            lower.contains("config") || lower.ends_with(".json") ||
-            lower.ends_with(".yaml") || lower.ends_with(".yml") ||
-            lower.ends_with(".toml")
-        }).count();
+        let config_count = files
+            .iter()
+            .filter(|f| {
+                let lower = f.to_lowercase();
+                lower.contains("config")
+                    || lower.ends_with(".json")
+                    || lower.ends_with(".yaml")
+                    || lower.ends_with(".yml")
+                    || lower.ends_with(".toml")
+            })
+            .count();
 
         if config_count > files.len() / 2 {
-            return Some(NebulaName::new("Configuration", NamingStrategy::PatternBased)
-                .with_confidence(0.85));
+            return Some(
+                NebulaName::new("Configuration", NamingStrategy::PatternBased)
+                    .with_confidence(0.85),
+            );
         }
 
         // Check for scripts
-        let script_count = files.iter().filter(|f| {
-            let lower = f.to_lowercase();
-            lower.ends_with(".sh") || lower.ends_with(".bash") ||
-            lower.ends_with(".ps1") || lower.ends_with(".bat")
-        }).count();
+        let script_count = files
+            .iter()
+            .filter(|f| {
+                let lower = f.to_lowercase();
+                lower.ends_with(".sh")
+                    || lower.ends_with(".bash")
+                    || lower.ends_with(".ps1")
+                    || lower.ends_with(".bat")
+            })
+            .count();
 
         if script_count > files.len() / 2 {
-            return Some(NebulaName::new("Automation Scripts", NamingStrategy::PatternBased)
-                .with_confidence(0.8));
+            return Some(
+                NebulaName::new("Automation Scripts", NamingStrategy::PatternBased)
+                    .with_confidence(0.8),
+            );
         }
 
         // Check for migration files
-        let migration_count = files.iter().filter(|f| {
-            let lower = f.to_lowercase();
-            lower.contains("migration") || lower.contains("migrate")
-        }).count();
+        let migration_count = files
+            .iter()
+            .filter(|f| {
+                let lower = f.to_lowercase();
+                lower.contains("migration") || lower.contains("migrate")
+            })
+            .count();
 
         if migration_count > files.len() / 2 {
-            return Some(NebulaName::new("Schema Migrations", NamingStrategy::PatternBased)
-                .with_confidence(0.85));
+            return Some(
+                NebulaName::new("Schema Migrations", NamingStrategy::PatternBased)
+                    .with_confidence(0.85),
+            );
         }
 
         None
@@ -377,7 +403,10 @@ impl NebulaNamer {
 
     /// Get a name for a concept type.
     pub fn concept_type_name(&self, concept_type: UniversalConceptType) -> &str {
-        self.concept_names.get(&concept_type).copied().unwrap_or("Code")
+        self.concept_names
+            .get(&concept_type)
+            .copied()
+            .unwrap_or("Code")
     }
 }
 
@@ -476,11 +505,7 @@ mod tests {
     fn test_nebula_namer_fallback() {
         let namer = NebulaNamer::new();
 
-        let files = vec![
-            "a.rs".to_string(),
-            "b.py".to_string(),
-            "c.js".to_string(),
-        ];
+        let files = vec!["a.rs".to_string(), "b.py".to_string(), "c.js".to_string()];
 
         let name = namer.name_nebula(&files, &HashMap::new());
         assert_eq!(name.strategy, NamingStrategy::Fallback);

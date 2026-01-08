@@ -93,9 +93,7 @@ fn test_format_claude_xml_produces_valid_xml() {
     let temp_dir = create_test_project();
 
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--format")
-        .arg("claude-xml");
+    cmd.arg(temp_dir.path()).arg("--format").arg("claude-xml");
 
     cmd.assert()
         .success()
@@ -125,9 +123,7 @@ fn test_format_markdown() {
     let temp_dir = create_test_project();
 
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--format")
-        .arg("markdown");
+    cmd.arg(temp_dir.path()).arg("--format").arg("markdown");
 
     cmd.assert()
         .success()
@@ -141,9 +137,7 @@ fn test_format_xml() {
     let temp_dir = create_test_project();
 
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--format")
-        .arg("xml");
+    cmd.arg(temp_dir.path()).arg("--format").arg("xml");
 
     cmd.assert()
         .success()
@@ -189,7 +183,10 @@ fn test_frozen_mode_deterministic_output() {
 
     // In frozen mode, timestamps should be replaced with snapshot IDs
     // The outputs should be byte-identical
-    assert_eq!(stdout1, stdout2, "Frozen mode should produce identical output");
+    assert_eq!(
+        stdout1, stdout2,
+        "Frozen mode should produce identical output"
+    );
 }
 
 #[test]
@@ -217,9 +214,7 @@ fn test_zoom_file_basic() {
     let temp_dir = create_test_project();
 
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--zoom")
-        .arg("file=main.py");
+    cmd.arg(temp_dir.path()).arg("--zoom").arg("file=main.py");
 
     cmd.assert()
         .success()
@@ -249,9 +244,7 @@ fn test_zoom_function() {
     let temp_dir = create_test_project();
 
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--zoom")
-        .arg("fn=main");
+    cmd.arg(temp_dir.path()).arg("--zoom").arg("fn=main");
 
     cmd.assert()
         .success()
@@ -344,9 +337,7 @@ fn test_truncation_with_zoom_affordance() {
     let temp_dir = create_test_project();
 
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--truncate")
-        .arg("5");
+    cmd.arg(temp_dir.path()).arg("--truncate").arg("5");
 
     cmd.assert()
         .success()
@@ -450,9 +441,7 @@ fn test_token_budget_basic() {
     let temp_dir = create_test_project();
 
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--token-budget")
-        .arg("1000");
+    cmd.arg(temp_dir.path()).arg("--token-budget").arg("1000");
 
     cmd.assert()
         .success()
@@ -464,9 +453,7 @@ fn test_token_budget_shorthand() {
     let temp_dir = create_test_project();
 
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--token-budget")
-        .arg("1k");
+    cmd.arg(temp_dir.path()).arg("--token-budget").arg("1k");
 
     cmd.assert()
         .success()
@@ -502,9 +489,7 @@ fn test_include_pattern() {
     let temp_dir = create_test_project();
 
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--include")
-        .arg("*.py");
+    cmd.arg(temp_dir.path()).arg("--include").arg("*.py");
 
     let output = cmd.output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -512,7 +497,10 @@ fn test_include_pattern() {
     assert!(output.status.success());
     assert!(stdout.contains("main.py"), "Should include Python files");
     // With --include *.py, only .py files should be in output
-    assert!(!stdout.contains("++++++++++  lib.rs"), "Should not include lib.rs when filtering for *.py");
+    assert!(
+        !stdout.contains("++++++++++  lib.rs"),
+        "Should not include lib.rs when filtering for *.py"
+    );
 }
 
 #[test]
@@ -520,9 +508,7 @@ fn test_exclude_pattern() {
     let temp_dir = create_test_project();
 
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    cmd.arg(temp_dir.path())
-        .arg("--exclude")
-        .arg("*.json");
+    cmd.arg(temp_dir.path()).arg("--exclude").arg("*.json");
 
     cmd.assert()
         .success()
@@ -635,8 +621,7 @@ fn test_pm_encoder_hint_can_be_suppressed() {
     let temp_dir = create_test_project();
 
     let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
-    cmd.arg(temp_dir.path())
-        .env("PM_ENCODER_NO_HINT", "1");
+    cmd.arg(temp_dir.path()).env("PM_ENCODER_NO_HINT", "1");
 
     let output = cmd.output().unwrap();
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -678,5 +663,8 @@ fn test_vo_and_pm_encoder_produce_same_output() {
     let vo_stdout = String::from_utf8_lossy(&vo_output.stdout);
     let pm_stdout = String::from_utf8_lossy(&pm_output.stdout);
 
-    assert_eq!(vo_stdout, pm_stdout, "vo and pm_encoder should produce identical output");
+    assert_eq!(
+        vo_stdout, pm_stdout,
+        "vo and pm_encoder should produce identical output"
+    );
 }

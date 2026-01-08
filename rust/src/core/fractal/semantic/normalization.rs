@@ -59,8 +59,8 @@ impl LanguageNormalizationConfig {
         let mut config = Self::default_config();
 
         // ABL tends to have longer procedures, adjust complexity weighting
-        config.feature_weights[0] = 0.8;  // Reduce cyclomatic complexity weight
-        config.feature_weights[1] = 1.2;  // Increase nesting depth importance
+        config.feature_weights[0] = 0.8; // Reduce cyclomatic complexity weight
+        config.feature_weights[1] = 1.2; // Increase nesting depth importance
 
         // ABL-specific features (indices 50-54) map to universal positions
         config.feature_mappings.insert(50, 20); // Database operations → universal DB index
@@ -85,8 +85,8 @@ impl LanguageNormalizationConfig {
         let mut config = Self::default_config();
 
         // Python is more concise, adjust accordingly
-        config.feature_weights[0] = 1.1;  // Slightly increase complexity weight
-        config.feature_weights[1] = 0.9;  // Reduce nesting weight (indentation-based)
+        config.feature_weights[0] = 1.1; // Slightly increase complexity weight
+        config.feature_weights[1] = 0.9; // Reduce nesting weight (indentation-based)
 
         // Python-specific features (indices 55-59) map to universal positions
         config.feature_mappings.insert(55, 25); // Async patterns → universal async index
@@ -147,8 +147,8 @@ impl LanguageNormalizationConfig {
         let mut config = Self::default_config();
 
         // Shell scripts have different complexity patterns
-        config.feature_weights[0] = 0.7;  // Lower complexity weight
-        config.feature_weights[1] = 1.0;  // Normal nesting
+        config.feature_weights[0] = 0.7; // Lower complexity weight
+        config.feature_weights[1] = 1.0; // Normal nesting
 
         // Shell typically has higher baseline complexity for simple tasks
         config.baselines[0] = 0.35;
@@ -195,8 +195,14 @@ impl FeatureNormalizer {
         // Pre-populate with known language configs
         language_configs.insert(Language::ABL, LanguageNormalizationConfig::abl());
         language_configs.insert(Language::Python, LanguageNormalizationConfig::python());
-        language_configs.insert(Language::TypeScript, LanguageNormalizationConfig::typescript());
-        language_configs.insert(Language::JavaScript, LanguageNormalizationConfig::javascript());
+        language_configs.insert(
+            Language::TypeScript,
+            LanguageNormalizationConfig::typescript(),
+        );
+        language_configs.insert(
+            Language::JavaScript,
+            LanguageNormalizationConfig::javascript(),
+        );
         language_configs.insert(Language::Shell, LanguageNormalizationConfig::shell());
 
         Self {
@@ -290,7 +296,9 @@ impl FeatureNormalizer {
             NormalizationStrategy::None => *vector,
             NormalizationStrategy::ZScore => self.normalize_zscore(vector),
             NormalizationStrategy::MinMax => self.normalize_minmax(vector),
-            NormalizationStrategy::LanguageWeighted => self.normalize_language_weighted(vector, language),
+            NormalizationStrategy::LanguageWeighted => {
+                self.normalize_language_weighted(vector, language)
+            }
         }
     }
 
@@ -329,7 +337,8 @@ impl FeatureNormalizer {
 
     /// Language-weighted normalization
     fn normalize_language_weighted(&self, vector: &[f32; 64], language: Language) -> [f32; 64] {
-        let config = self.language_configs
+        let config = self
+            .language_configs
             .get(&language)
             .cloned()
             .unwrap_or_else(LanguageNormalizationConfig::default_config);
@@ -416,11 +425,7 @@ mod tests {
     fn test_zscore_normalization() {
         let mut normalizer = FeatureNormalizer::zscore();
 
-        let vectors = vec![
-            [0.0f32; 64],
-            [1.0f32; 64],
-            [0.5f32; 64],
-        ];
+        let vectors = vec![[0.0f32; 64], [1.0f32; 64], [0.5f32; 64]];
 
         normalizer.fit(&vectors);
 
@@ -436,10 +441,7 @@ mod tests {
     fn test_minmax_normalization() {
         let mut normalizer = FeatureNormalizer::minmax();
 
-        let vectors = vec![
-            [0.0f32; 64],
-            [10.0f32; 64],
-        ];
+        let vectors = vec![[0.0f32; 64], [10.0f32; 64]];
 
         normalizer.fit(&vectors);
 
@@ -469,7 +471,10 @@ mod tests {
             }
         }
 
-        assert!(differences > 0, "Language-weighted should produce different results per language");
+        assert!(
+            differences > 0,
+            "Language-weighted should produce different results per language"
+        );
     }
 
     #[test]
@@ -495,11 +500,17 @@ mod tests {
 
         // Identical vectors should have score 1.0
         let score_same = normalizer.alignment_score(&a, &b);
-        assert!((score_same - 1.0).abs() < 0.01, "Identical vectors should have score 1.0");
+        assert!(
+            (score_same - 1.0).abs() < 0.01,
+            "Identical vectors should have score 1.0"
+        );
 
         // Opposite vectors should have score 0.0
         let score_opposite = normalizer.alignment_score(&a, &c);
-        assert!((score_opposite - 0.0).abs() < 0.01, "Opposite vectors should have score 0.0");
+        assert!(
+            (score_opposite - 0.0).abs() < 0.01,
+            "Opposite vectors should have score 0.0"
+        );
     }
 
     #[test]

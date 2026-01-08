@@ -61,7 +61,12 @@ impl NormalizedAst {
     pub fn public_symbols(&self) -> Vec<&Symbol> {
         self.symbols
             .iter()
-            .filter(|s| matches!(s.visibility, SymbolVisibility::Public | SymbolVisibility::Export))
+            .filter(|s| {
+                matches!(
+                    s.visibility,
+                    SymbolVisibility::Public | SymbolVisibility::Export
+                )
+            })
             .collect()
     }
 
@@ -431,7 +436,11 @@ pub struct Location {
 
 impl Location {
     pub fn new(line: usize, column: usize, offset: usize) -> Self {
-        Self { line, column, offset }
+        Self {
+            line,
+            column,
+            offset,
+        }
     }
 }
 
@@ -458,12 +467,7 @@ pub struct Span {
 }
 
 impl Span {
-    pub fn new(
-        start_line: usize,
-        start_column: usize,
-        end_line: usize,
-        end_column: usize,
-    ) -> Self {
+    pub fn new(start_line: usize, start_column: usize, end_line: usize, end_column: usize) -> Self {
         Self {
             start_line,
             start_column,
@@ -567,10 +571,26 @@ mod tests {
     #[test]
     fn test_symbols_of_kind() {
         let mut ast = NormalizedAst::new();
-        ast.symbols.push(Symbol::new("func1", SymbolKind::Function, Location::default()));
-        ast.symbols.push(Symbol::new("class1", SymbolKind::Class, Location::default()));
-        ast.symbols.push(Symbol::new("func2", SymbolKind::Function, Location::default()));
-        ast.symbols.push(Symbol::new("struct1", SymbolKind::Struct, Location::default()));
+        ast.symbols.push(Symbol::new(
+            "func1",
+            SymbolKind::Function,
+            Location::default(),
+        ));
+        ast.symbols.push(Symbol::new(
+            "class1",
+            SymbolKind::Class,
+            Location::default(),
+        ));
+        ast.symbols.push(Symbol::new(
+            "func2",
+            SymbolKind::Function,
+            Location::default(),
+        ));
+        ast.symbols.push(Symbol::new(
+            "struct1",
+            SymbolKind::Struct,
+            Location::default(),
+        ));
 
         let functions = ast.symbols_of_kind(SymbolKind::Function);
         assert_eq!(functions.len(), 2);
@@ -605,10 +625,23 @@ mod tests {
     #[test]
     fn test_functions() {
         let mut ast = NormalizedAst::new();
-        ast.symbols.push(Symbol::new("func", SymbolKind::Function, Location::default()));
-        ast.symbols.push(Symbol::new("method", SymbolKind::Method, Location::default()));
-        ast.symbols.push(Symbol::new("class", SymbolKind::Class, Location::default()));
-        ast.symbols.push(Symbol::new("ctor", SymbolKind::Constructor, Location::default()));
+        ast.symbols.push(Symbol::new(
+            "func",
+            SymbolKind::Function,
+            Location::default(),
+        ));
+        ast.symbols.push(Symbol::new(
+            "method",
+            SymbolKind::Method,
+            Location::default(),
+        ));
+        ast.symbols
+            .push(Symbol::new("class", SymbolKind::Class, Location::default()));
+        ast.symbols.push(Symbol::new(
+            "ctor",
+            SymbolKind::Constructor,
+            Location::default(),
+        ));
 
         let funcs = ast.functions();
         assert_eq!(funcs.len(), 2); // Function and Method, not Constructor
@@ -617,13 +650,38 @@ mod tests {
     #[test]
     fn test_types() {
         let mut ast = NormalizedAst::new();
-        ast.symbols.push(Symbol::new("MyClass", SymbolKind::Class, Location::default()));
-        ast.symbols.push(Symbol::new("MyStruct", SymbolKind::Struct, Location::default()));
-        ast.symbols.push(Symbol::new("MyInterface", SymbolKind::Interface, Location::default()));
-        ast.symbols.push(Symbol::new("MyTrait", SymbolKind::Trait, Location::default()));
-        ast.symbols.push(Symbol::new("MyEnum", SymbolKind::Enum, Location::default()));
-        ast.symbols.push(Symbol::new("MyType", SymbolKind::TypeAlias, Location::default()));
-        ast.symbols.push(Symbol::new("my_func", SymbolKind::Function, Location::default()));
+        ast.symbols.push(Symbol::new(
+            "MyClass",
+            SymbolKind::Class,
+            Location::default(),
+        ));
+        ast.symbols.push(Symbol::new(
+            "MyStruct",
+            SymbolKind::Struct,
+            Location::default(),
+        ));
+        ast.symbols.push(Symbol::new(
+            "MyInterface",
+            SymbolKind::Interface,
+            Location::default(),
+        ));
+        ast.symbols.push(Symbol::new(
+            "MyTrait",
+            SymbolKind::Trait,
+            Location::default(),
+        ));
+        ast.symbols
+            .push(Symbol::new("MyEnum", SymbolKind::Enum, Location::default()));
+        ast.symbols.push(Symbol::new(
+            "MyType",
+            SymbolKind::TypeAlias,
+            Location::default(),
+        ));
+        ast.symbols.push(Symbol::new(
+            "my_func",
+            SymbolKind::Function,
+            Location::default(),
+        ));
 
         let types = ast.types();
         assert_eq!(types.len(), 6);
@@ -632,8 +690,13 @@ mod tests {
     #[test]
     fn test_find_symbol() {
         let mut ast = NormalizedAst::new();
-        ast.symbols.push(Symbol::new("alpha", SymbolKind::Function, Location::default()));
-        ast.symbols.push(Symbol::new("beta", SymbolKind::Class, Location::default()));
+        ast.symbols.push(Symbol::new(
+            "alpha",
+            SymbolKind::Function,
+            Location::default(),
+        ));
+        ast.symbols
+            .push(Symbol::new("beta", SymbolKind::Class, Location::default()));
 
         assert!(ast.find_symbol("alpha").is_some());
         assert!(ast.find_symbol("beta").is_some());
@@ -644,9 +707,21 @@ mod tests {
     fn test_ast_find_symbols() {
         let mut ast = NormalizedAst::new();
 
-        ast.symbols.push(Symbol::new("calculate_total", SymbolKind::Function, Location::default()));
-        ast.symbols.push(Symbol::new("calculate_tax", SymbolKind::Function, Location::default()));
-        ast.symbols.push(Symbol::new("other_func", SymbolKind::Function, Location::default()));
+        ast.symbols.push(Symbol::new(
+            "calculate_total",
+            SymbolKind::Function,
+            Location::default(),
+        ));
+        ast.symbols.push(Symbol::new(
+            "calculate_tax",
+            SymbolKind::Function,
+            Location::default(),
+        ));
+        ast.symbols.push(Symbol::new(
+            "other_func",
+            SymbolKind::Function,
+            Location::default(),
+        ));
 
         let matches = ast.find_symbols("calculate");
         assert_eq!(matches.len(), 2);
@@ -665,7 +740,11 @@ mod tests {
         ast.symbols.push(sym2);
 
         // Symbol without span
-        ast.symbols.push(Symbol::new("no_span", SymbolKind::Variable, Location::default()));
+        ast.symbols.push(Symbol::new(
+            "no_span",
+            SymbolKind::Variable,
+            Location::default(),
+        ));
 
         assert_eq!(ast.symbol_line_coverage(), 16);
     }
@@ -687,7 +766,8 @@ mod tests {
     #[test]
     fn test_ast_merge() {
         let mut ast1 = NormalizedAst::new();
-        ast1.symbols.push(Symbol::new("a", SymbolKind::Function, Location::default()));
+        ast1.symbols
+            .push(Symbol::new("a", SymbolKind::Function, Location::default()));
         ast1.imports.push(Import {
             source: "mod1".to_string(),
             kind: ImportKind::Module,
@@ -699,7 +779,8 @@ mod tests {
         ast1.metadata.insert("key1".to_string(), "val1".to_string());
 
         let mut ast2 = NormalizedAst::new();
-        ast2.symbols.push(Symbol::new("b", SymbolKind::Function, Location::default()));
+        ast2.symbols
+            .push(Symbol::new("b", SymbolKind::Function, Location::default()));
         ast2.imports.push(Import {
             source: "mod2".to_string(),
             kind: ImportKind::Selective,
@@ -723,7 +804,8 @@ mod tests {
         });
         ast2.metadata.insert("key2".to_string(), "val2".to_string());
         // Test that existing key is not overwritten
-        ast2.metadata.insert("key1".to_string(), "val1_new".to_string());
+        ast2.metadata
+            .insert("key1".to_string(), "val1_new".to_string());
 
         ast1.merge(ast2);
         assert_eq!(ast1.symbols.len(), 2);
@@ -809,7 +891,9 @@ mod tests {
         symbol.return_type = Some("String".to_string());
         symbol.decorators = vec!["@decorator".to_string()];
         symbol.type_parameters = vec!["T".to_string()];
-        symbol.metadata.insert("key".to_string(), "value".to_string());
+        symbol
+            .metadata
+            .insert("key".to_string(), "value".to_string());
 
         assert_eq!(symbol.name, "complex_method");
         assert_eq!(symbol.children.len(), 2);
@@ -1216,7 +1300,11 @@ mod tests {
     #[test]
     fn test_ast_serialization() {
         let mut ast = NormalizedAst::new();
-        ast.symbols.push(Symbol::new("test_func", SymbolKind::Function, Location::new(1, 1, 0)));
+        ast.symbols.push(Symbol::new(
+            "test_func",
+            SymbolKind::Function,
+            Location::new(1, 1, 0),
+        ));
 
         let json = serde_json::to_string(&ast).unwrap();
         let parsed: NormalizedAst = serde_json::from_str(&json).unwrap();

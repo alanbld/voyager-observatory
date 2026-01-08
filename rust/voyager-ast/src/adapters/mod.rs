@@ -9,18 +9,17 @@
 //! - **Python**: Functions (def/async), classes, imports, decorators, docstrings
 //! - **TypeScript/JavaScript**: Functions, classes, interfaces, types, imports/exports
 
-pub mod rust_adapter;
 pub mod python_adapter;
+pub mod rust_adapter;
 pub mod typescript_adapter;
 
-use crate::error::Result;
 use crate::ir::{
     Block, Comment, Declaration, ImportLike, LanguageId, Span, UnknownNode, Visibility,
 };
 
 // Re-export all adapters
-pub use rust_adapter::RustTreeSitterAdapter;
 pub use python_adapter::PythonTreeSitterAdapter;
+pub use rust_adapter::RustTreeSitterAdapter;
 pub use typescript_adapter::TypeScriptTreeSitterAdapter;
 
 /// Trait for language-specific adapters
@@ -41,11 +40,7 @@ pub trait LanguageAdapter: Send + Sync {
     ///
     /// This should extract top-level declarations only.
     /// Nested declarations (methods, inner functions) are handled separately.
-    fn extract_declarations(
-        &self,
-        tree: &tree_sitter::Tree,
-        source: &str,
-    ) -> Vec<Declaration>;
+    fn extract_declarations(&self, tree: &tree_sitter::Tree, source: &str) -> Vec<Declaration>;
 
     /// Extract imports from a parse tree
     fn extract_imports(&self, tree: &tree_sitter::Tree, source: &str) -> Vec<ImportLike>;
@@ -134,6 +129,7 @@ pub fn node_text<'a>(node: &tree_sitter::Node, source: &'a str) -> &'a str {
 }
 
 /// Find a child node by its kind
+#[allow(clippy::manual_find)]
 pub fn find_child_by_kind<'a>(
     node: &'a tree_sitter::Node<'a>,
     kind: &str,
@@ -168,7 +164,9 @@ mod tests {
 
     fn parse_rust(source: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&tree_sitter_rust::LANGUAGE.into())
+            .unwrap();
         parser.parse(source, None).unwrap()
     }
 
@@ -335,7 +333,7 @@ mod tests {
 
     #[test]
     fn test_extract_errors_with_syntax_error() {
-        let source = "fn broken( {}";  // Missing closing paren and params
+        let source = "fn broken( {}"; // Missing closing paren and params
         let tree = parse_rust(source);
 
         let adapter = RustTreeSitterAdapter::new();
@@ -380,7 +378,7 @@ mod tests {
     #[test]
     fn test_extract_errors_reason_for_missing() {
         // Try to create a missing node scenario
-        let source = "fn test() { let x = ; }";  // Missing expression after =
+        let source = "fn test() { let x = ; }"; // Missing expression after =
         let tree = parse_rust(source);
 
         let adapter = RustTreeSitterAdapter::new();
@@ -437,7 +435,9 @@ mod tests {
         let source = "fn hello() {}\npub struct Point { x: i32 }";
         let mut parser = tree_sitter::Parser::new();
         let adapter = RustTreeSitterAdapter::new();
-        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        parser
+            .set_language(&adapter.tree_sitter_language())
+            .unwrap();
         let tree = parser.parse(source, None).unwrap();
 
         let decls = adapter.extract_declarations(&tree, source);
@@ -451,7 +451,9 @@ mod tests {
         let source = "def greet():\n    pass\n\nclass Person:\n    pass";
         let mut parser = tree_sitter::Parser::new();
         let adapter = PythonTreeSitterAdapter::new();
-        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        parser
+            .set_language(&adapter.tree_sitter_language())
+            .unwrap();
         let tree = parser.parse(source, None).unwrap();
 
         let decls = adapter.extract_declarations(&tree, source);
@@ -465,7 +467,9 @@ mod tests {
         let source = "function hello() {}\nclass World {}";
         let mut parser = tree_sitter::Parser::new();
         let adapter = TypeScriptTreeSitterAdapter::new();
-        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        parser
+            .set_language(&adapter.tree_sitter_language())
+            .unwrap();
         let tree = parser.parse(source, None).unwrap();
 
         let decls = adapter.extract_declarations(&tree, source);
@@ -477,7 +481,9 @@ mod tests {
         let source = "use std::io;\nuse std::collections::HashMap;";
         let mut parser = tree_sitter::Parser::new();
         let adapter = RustTreeSitterAdapter::new();
-        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        parser
+            .set_language(&adapter.tree_sitter_language())
+            .unwrap();
         let tree = parser.parse(source, None).unwrap();
 
         let imports = adapter.extract_imports(&tree, source);
@@ -489,7 +495,9 @@ mod tests {
         let source = "import os\nfrom pathlib import Path";
         let mut parser = tree_sitter::Parser::new();
         let adapter = PythonTreeSitterAdapter::new();
-        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        parser
+            .set_language(&adapter.tree_sitter_language())
+            .unwrap();
         let tree = parser.parse(source, None).unwrap();
 
         let imports = adapter.extract_imports(&tree, source);
@@ -501,7 +509,9 @@ mod tests {
         let source = "// Line comment\n/* Block comment */\nfn foo() {}";
         let mut parser = tree_sitter::Parser::new();
         let adapter = RustTreeSitterAdapter::new();
-        parser.set_language(&adapter.tree_sitter_language()).unwrap();
+        parser
+            .set_language(&adapter.tree_sitter_language())
+            .unwrap();
         let tree = parser.parse(source, None).unwrap();
 
         let comments = adapter.extract_comments(&tree, source);

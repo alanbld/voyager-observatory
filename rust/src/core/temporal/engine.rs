@@ -4,21 +4,19 @@
 //! for optimized history extraction. Includes the Chronos Warp caching
 //! system for near-instantaneous repeat scans.
 
-use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
 use chrono::{DateTime, Duration, Utc};
-use git2::{Repository, Commit, DiffOptions, Oid};
+use git2::{Commit, DiffOptions, Oid, Repository};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use super::metrics::{
-    ChronosMetrics, ChronosState, StellarAge, VolcanicChurn,
-    Observer, ObserverImpact, TemporalCensus, ConstellationChurn,
-    FileChurn, TectonicShift, AncientStar, Supernova,
-    AgeClassification, ChurnClassification,
+    AgeClassification, AncientStar, ChronosMetrics, ChronosState, ChurnClassification,
+    ConstellationChurn, FileChurn, Observer, ObserverImpact, StellarAge, Supernova, TectonicShift,
+    TemporalCensus, VolcanicChurn,
 };
 
 use super::cache::{
-    ChronosCache, ChronosCacheManager, CachedObservation, CachedGalaxyStats,
-    WarpStatus,
+    CachedGalaxyStats, CachedObservation, ChronosCache, ChronosCacheManager, WarpStatus,
 };
 
 // =============================================================================
@@ -165,10 +163,13 @@ impl ChronosEngine {
 
         // First, collect all commit data to avoid borrow conflicts
         let (commit_data, hit_depth_limit): (Vec<CommitData>, bool) = {
-            let mut revwalk = self.repo.revwalk()
+            let mut revwalk = self
+                .repo
+                .revwalk()
                 .map_err(|e| format!("Failed to create revwalk: {}", e))?;
 
-            revwalk.push_head()
+            revwalk
+                .push_head()
                 .map_err(|e| format!("Failed to push HEAD: {}", e))?;
 
             // Take one extra to detect if we hit the limit
@@ -214,7 +215,9 @@ impl ChronosEngine {
 
             // Update observer stats
             let observer_key = data.observer_email.clone();
-            let observer_stats = self.galaxy_stats.observers
+            let observer_stats = self
+                .galaxy_stats
+                .observers
                 .entry(observer_key)
                 .or_insert_with(|| ObserverStats {
                     name: data.observer_name.clone(),
@@ -222,10 +225,14 @@ impl ChronosEngine {
                     ..Default::default()
                 });
             observer_stats.observations += 1;
-            if observer_stats.first_seen.is_none() || data.timestamp < observer_stats.first_seen.unwrap() {
+            if observer_stats.first_seen.is_none()
+                || data.timestamp < observer_stats.first_seen.unwrap()
+            {
                 observer_stats.first_seen = Some(data.timestamp);
             }
-            if observer_stats.last_seen.is_none() || data.timestamp > observer_stats.last_seen.unwrap() {
+            if observer_stats.last_seen.is_none()
+                || data.timestamp > observer_stats.last_seen.unwrap()
+            {
                 observer_stats.last_seen = Some(data.timestamp);
             }
 
@@ -307,7 +314,8 @@ impl ChronosEngine {
         // Convert cached observations back to FileObservation
         self.file_histories.clear();
         for (path, cached_obs) in cache.file_histories {
-            let observations: Vec<FileObservation> = cached_obs.into_iter()
+            let observations: Vec<FileObservation> = cached_obs
+                .into_iter()
                 .map(|co| FileObservation {
                     timestamp: DateTime::from_timestamp(co.timestamp_secs, 0)
                         .unwrap_or_else(Utc::now),
@@ -322,14 +330,20 @@ impl ChronosEngine {
 
         // Restore galaxy stats
         self.galaxy_stats.total_observations = cache.galaxy_stats.total_observations;
-        self.galaxy_stats.first_observation = cache.galaxy_stats.first_observation_secs
+        self.galaxy_stats.first_observation = cache
+            .galaxy_stats
+            .first_observation_secs
             .and_then(|s| DateTime::from_timestamp(s, 0));
-        self.galaxy_stats.last_observation = cache.galaxy_stats.last_observation_secs
+        self.galaxy_stats.last_observation = cache
+            .galaxy_stats
+            .last_observation_secs
             .and_then(|s| DateTime::from_timestamp(s, 0));
 
         // Restore state
         let now = Utc::now();
-        let galaxy_age_days = self.galaxy_stats.first_observation
+        let galaxy_age_days = self
+            .galaxy_stats
+            .first_observation
             .map(|first| (now - first).num_days().max(0) as u64)
             .unwrap_or(0);
 
@@ -354,7 +368,8 @@ impl ChronosEngine {
         // Convert file histories to cached format
         let mut cached_histories: HashMap<String, Vec<CachedObservation>> = HashMap::new();
         for (path, observations) in &self.file_histories {
-            let cached: Vec<CachedObservation> = observations.iter()
+            let cached: Vec<CachedObservation> = observations
+                .iter()
                 .map(|o| CachedObservation {
                     timestamp_secs: o.timestamp.timestamp(),
                     observer_name: o.observer_name.clone(),
@@ -367,7 +382,10 @@ impl ChronosEngine {
         }
 
         // Build galaxy stats
-        let top_observers: Vec<(String, usize)> = self.galaxy_stats.observers.values()
+        let top_observers: Vec<(String, usize)> = self
+            .galaxy_stats
+            .observers
+            .values()
             .map(|o| (o.name.clone(), o.observations))
             .collect();
 
@@ -419,11 +437,14 @@ impl ChronosEngine {
         let mut diff_opts = DiffOptions::new();
         diff_opts.include_untracked(false);
 
-        let diff = self.repo.diff_tree_to_tree(
-            parent_tree.as_ref(),
-            Some(&commit_tree),
-            Some(&mut diff_opts),
-        ).ok()?;
+        let diff = self
+            .repo
+            .diff_tree_to_tree(
+                parent_tree.as_ref(),
+                Some(&commit_tree),
+                Some(&mut diff_opts),
+            )
+            .ok()?;
 
         // Collect changed files
         let mut files_changed = Vec::new();
@@ -462,7 +483,11 @@ impl ChronosEngine {
     }
 
     /// Calculate metrics from observations
-    fn calculate_file_metrics(&self, observations: &[FileObservation], now: &DateTime<Utc>) -> ChronosMetrics {
+    fn calculate_file_metrics(
+        &self,
+        observations: &[FileObservation],
+        now: &DateTime<Utc>,
+    ) -> ChronosMetrics {
         if observations.is_empty() {
             return ChronosMetrics::default();
         }
@@ -488,17 +513,21 @@ impl ChronosEngine {
         let threshold_90d = *now - Duration::days(CHURN_WINDOW_90D);
         let threshold_year = *now - Duration::days(CHURN_WINDOW_YEAR);
 
-        let last_30_days = observations.iter()
+        let last_30_days = observations
+            .iter()
             .filter(|o| o.timestamp > threshold_30d)
             .count();
-        let last_90_days = observations.iter()
+        let last_90_days = observations
+            .iter()
             .filter(|o| o.timestamp > threshold_90d)
             .count();
-        let last_year = observations.iter()
+        let last_year = observations
+            .iter()
             .filter(|o| o.timestamp > threshold_year)
             .count();
 
-        let (lines_added_90d, lines_removed_90d) = observations.iter()
+        let (lines_added_90d, lines_removed_90d) = observations
+            .iter()
             .filter(|o| o.timestamp > threshold_90d)
             .fold((0, 0), |(a, r), o| (a + o.lines_added, r + o.lines_removed));
 
@@ -522,7 +551,8 @@ impl ChronosEngine {
             entry.3 += obs.lines_removed;
         }
 
-        let mut observers: Vec<Observer> = observer_map.into_iter()
+        let mut observers: Vec<Observer> = observer_map
+            .into_iter()
             .map(|(email, (name, obs_count, added, removed))| Observer {
                 name,
                 email_hash: hash_email(&email),
@@ -558,7 +588,11 @@ impl ChronosEngine {
         census.state = self.state.clone();
 
         match &self.state {
-            ChronosState::Active { total_events, galaxy_age_days, observer_count } => {
+            ChronosState::Active {
+                total_events,
+                galaxy_age_days,
+                observer_count,
+            } => {
                 census.total_observations = *total_events;
                 census.galaxy_age_days = *galaxy_age_days;
                 census.observer_count = *observer_count;
@@ -588,7 +622,8 @@ impl ChronosEngine {
                     path: path.clone(),
                     observations_30d: metrics.volcanic_churn.last_30_days,
                     observer_count: metrics.primary_observers.len(),
-                    lines_changed: metrics.volcanic_churn.lines_added_90d + metrics.volcanic_churn.lines_removed_90d,
+                    lines_changed: metrics.volcanic_churn.lines_added_90d
+                        + metrics.volcanic_churn.lines_removed_90d,
                     warning: format!(
                         "Extreme activity: {} observations in 30 days",
                         metrics.volcanic_churn.last_30_days
@@ -597,7 +632,8 @@ impl ChronosEngine {
             }
 
             // Identify ancient stars (dormant > 2 years)
-            let dormant_days = metrics.last_observation
+            let dormant_days = metrics
+                .last_observation
                 .map(|t| (now - t).num_days().max(0) as u64)
                 .unwrap_or(0);
 
@@ -630,23 +666,34 @@ impl ChronosEngine {
             let file_count = files.len();
             let churn_90d: usize = files.iter().map(|f| f.churn_90d).sum();
             let total_age: u64 = files.iter().map(|f| f.age_days).sum();
-            let avg_age_days = if file_count > 0 { total_age / file_count as u64 } else { 0 };
+            let avg_age_days = if file_count > 0 {
+                total_age / file_count as u64
+            } else {
+                0
+            };
 
             let max_30d = files.iter().map(|f| f.churn_30d).max().unwrap_or(0);
-            let classification = ChurnClassification::from_counts(max_30d, churn_90d / file_count.max(1));
+            let classification =
+                ChurnClassification::from_counts(max_30d, churn_90d / file_count.max(1));
 
-            census.constellations.insert(path.clone(), ConstellationChurn {
-                path: path.clone(),
-                file_count,
-                churn_90d,
-                avg_age_days,
-                primary_observers: Vec::new(), // Simplified for now
-                classification,
-            });
+            census.constellations.insert(
+                path.clone(),
+                ConstellationChurn {
+                    path: path.clone(),
+                    file_count,
+                    churn_90d,
+                    avg_age_days,
+                    primary_observers: Vec::new(), // Simplified for now
+                    classification,
+                },
+            );
         }
 
         // Build top observers
-        let mut observers: Vec<Observer> = self.galaxy_stats.observers.values()
+        let mut observers: Vec<Observer> = self
+            .galaxy_stats
+            .observers
+            .values()
             .map(|stats| Observer {
                 name: stats.name.clone(),
                 email_hash: hash_email(&stats.email),
@@ -700,7 +747,11 @@ impl ChronosEngine {
         }
 
         // Sort by risk score
-        shifts.sort_by(|a, b| b.risk_score.partial_cmp(&a.risk_score).unwrap_or(std::cmp::Ordering::Equal));
+        shifts.sort_by(|a, b| {
+            b.risk_score
+                .partial_cmp(&a.risk_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         shifts
     }
 }
@@ -712,8 +763,7 @@ impl ChronosEngine {
 /// Get timestamp from a commit
 fn commit_timestamp(commit: &Commit) -> DateTime<Utc> {
     let time = commit.time();
-    DateTime::from_timestamp(time.seconds(), 0)
-        .unwrap_or_else(Utc::now)
+    DateTime::from_timestamp(time.seconds(), 0).unwrap_or_else(Utc::now)
 }
 
 /// Normalize a file path relative to the repository root
@@ -730,8 +780,8 @@ fn normalize_path(path: &str, root: &Path) -> String {
 
 /// Hash an email for privacy
 fn hash_email(email: &str) -> String {
-    use std::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
     let mut hasher = DefaultHasher::new();
     email.hash(&mut hasher);
     format!("{:x}", hasher.finish())
@@ -795,26 +845,41 @@ mod tests {
 
     #[test]
     fn test_churn_classification_from_counts() {
-        assert_eq!(ChurnClassification::from_counts(0, 0), ChurnClassification::Dormant);
-        assert_eq!(ChurnClassification::from_counts(35, 50), ChurnClassification::Supernova);
+        assert_eq!(
+            ChurnClassification::from_counts(0, 0),
+            ChurnClassification::Dormant
+        );
+        assert_eq!(
+            ChurnClassification::from_counts(35, 50),
+            ChurnClassification::Supernova
+        );
     }
 
     #[test]
     fn test_churn_classification_high() {
         // High: > 10 in 90d
-        assert_eq!(ChurnClassification::from_counts(7, 15), ChurnClassification::High);
+        assert_eq!(
+            ChurnClassification::from_counts(7, 15),
+            ChurnClassification::High
+        );
     }
 
     #[test]
     fn test_churn_classification_low() {
         // Low: 1-3 in 90d
-        assert_eq!(ChurnClassification::from_counts(0, 2), ChurnClassification::Low);
+        assert_eq!(
+            ChurnClassification::from_counts(0, 2),
+            ChurnClassification::Low
+        );
     }
 
     #[test]
     fn test_churn_classification_moderate() {
         // Moderate: 4-10 in 90d
-        assert_eq!(ChurnClassification::from_counts(3, 6), ChurnClassification::Moderate);
+        assert_eq!(
+            ChurnClassification::from_counts(3, 6),
+            ChurnClassification::Moderate
+        );
     }
 
     #[test]
@@ -823,8 +888,14 @@ mod tests {
         assert_eq!(AgeClassification::from_days(15), AgeClassification::Newborn);
         assert_eq!(AgeClassification::from_days(60), AgeClassification::Young);
         assert_eq!(AgeClassification::from_days(400), AgeClassification::Mature);
-        assert_eq!(AgeClassification::from_days(800), AgeClassification::Ancient);
-        assert_eq!(AgeClassification::from_days(1000), AgeClassification::Ancient);
+        assert_eq!(
+            AgeClassification::from_days(800),
+            AgeClassification::Ancient
+        );
+        assert_eq!(
+            AgeClassification::from_days(1000),
+            AgeClassification::Ancient
+        );
     }
 
     // ==================== Struct Tests ====================
@@ -940,15 +1011,13 @@ mod tests {
         let cwd = env::current_dir().expect("Failed to get current dir");
         if let Some(engine) = ChronosEngine::new(&cwd) {
             let now = Utc::now();
-            let observations = vec![
-                FileObservation {
-                    timestamp: now - Duration::days(10),
-                    observer_name: "Alice".to_string(),
-                    observer_email: "alice@example.com".to_string(),
-                    lines_added: 100,
-                    lines_removed: 20,
-                },
-            ];
+            let observations = vec![FileObservation {
+                timestamp: now - Duration::days(10),
+                observer_name: "Alice".to_string(),
+                observer_email: "alice@example.com".to_string(),
+                lines_added: 100,
+                lines_removed: 20,
+            }];
 
             let metrics = engine.calculate_file_metrics(&observations, &now);
 
@@ -1003,15 +1072,13 @@ mod tests {
         let cwd = env::current_dir().expect("Failed to get current dir");
         if let Some(engine) = ChronosEngine::new(&cwd) {
             let now = Utc::now();
-            let observations = vec![
-                FileObservation {
-                    timestamp: now - Duration::days(100),
-                    observer_name: "Developer".to_string(),
-                    observer_email: "dev@example.com".to_string(),
-                    lines_added: 50,
-                    lines_removed: 10,
-                },
-            ];
+            let observations = vec![FileObservation {
+                timestamp: now - Duration::days(100),
+                observer_name: "Developer".to_string(),
+                observer_email: "dev@example.com".to_string(),
+                lines_added: 50,
+                lines_removed: 10,
+            }];
 
             let metrics = engine.calculate_file_metrics(&observations, &now);
 
@@ -1027,21 +1094,22 @@ mod tests {
         let cwd = env::current_dir().expect("Failed to get current dir");
         if let Some(engine) = ChronosEngine::new(&cwd) {
             let now = Utc::now();
-            let observations = vec![
-                FileObservation {
-                    timestamp: now - Duration::days(500),
-                    observer_name: "Dev".to_string(),
-                    observer_email: "dev@example.com".to_string(),
-                    lines_added: 100,
-                    lines_removed: 0,
-                },
-            ];
+            let observations = vec![FileObservation {
+                timestamp: now - Duration::days(500),
+                observer_name: "Dev".to_string(),
+                observer_email: "dev@example.com".to_string(),
+                lines_added: 100,
+                lines_removed: 0,
+            }];
 
             let metrics = engine.calculate_file_metrics(&observations, &now);
 
             assert!(metrics.stellar_age.age_days >= 499);
             // 500 days is Mature (365-729 days)
-            assert_eq!(metrics.stellar_age.classification, AgeClassification::Mature);
+            assert_eq!(
+                metrics.stellar_age.classification,
+                AgeClassification::Mature
+            );
         }
     }
 
@@ -1116,7 +1184,9 @@ mod tests {
             let census = engine.build_census();
 
             // After extraction, census should have data
-            assert!(census.total_observations > 0 || matches!(census.state, ChronosState::StaticGalaxy));
+            assert!(
+                census.total_observations > 0 || matches!(census.state, ChronosState::StaticGalaxy)
+            );
         }
     }
 
@@ -1194,8 +1264,16 @@ mod tests {
             // Check state
             let state = engine.state();
             match state {
-                ChronosState::Active { total_events, observer_count, .. } |
-                ChronosState::ShallowCensus { total_events, observer_count, .. } => {
+                ChronosState::Active {
+                    total_events,
+                    observer_count,
+                    ..
+                }
+                | ChronosState::ShallowCensus {
+                    total_events,
+                    observer_count,
+                    ..
+                } => {
                     assert!(*total_events > 0);
                     assert!(*observer_count > 0);
                 }

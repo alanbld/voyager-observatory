@@ -5,8 +5,8 @@
 
 use super::{find_child_by_kind, node_text, node_to_span, LanguageAdapter};
 use crate::ir::{
-    Block, Call, Comment, CommentKind, ControlFlow, ControlFlowKind, Declaration,
-    DeclarationKind, ImportKind, ImportLike, LanguageId, Parameter, Span, Visibility,
+    Block, Call, Comment, CommentKind, ControlFlow, ControlFlowKind, Declaration, DeclarationKind,
+    ImportKind, ImportLike, LanguageId, Parameter, Span, Visibility,
 };
 
 /// Python language adapter using Tree-sitter
@@ -38,11 +38,7 @@ impl LanguageAdapter for PythonTreeSitterAdapter {
         self.language.clone()
     }
 
-    fn extract_declarations(
-        &self,
-        tree: &tree_sitter::Tree,
-        source: &str,
-    ) -> Vec<Declaration> {
+    fn extract_declarations(&self, tree: &tree_sitter::Tree, source: &str) -> Vec<Declaration> {
         let mut declarations = Vec::new();
         let root = tree.root_node();
         let mut cursor = root.walk();
@@ -101,9 +97,7 @@ impl LanguageAdapter for PythonTreeSitterAdapter {
 
         // Extract the body block
         let body_node = match node.kind() {
-            "function_definition" | "class_definition" => {
-                find_child_by_kind(&node, "block")
-            }
+            "function_definition" | "class_definition" => find_child_by_kind(&node, "block"),
             _ => None,
         }?;
 
@@ -138,11 +132,7 @@ impl LanguageAdapter for PythonTreeSitterAdapter {
 
 impl PythonTreeSitterAdapter {
     /// Extract a declaration from a node
-    fn extract_declaration(
-        &self,
-        node: &tree_sitter::Node,
-        source: &str,
-    ) -> Option<Declaration> {
+    fn extract_declaration(&self, node: &tree_sitter::Node, source: &str) -> Option<Declaration> {
         let kind = node.kind();
         let decl_kind = match kind {
             "function_definition" => DeclarationKind::Function,
@@ -178,7 +168,8 @@ impl PythonTreeSitterAdapter {
 
         // Check for async and store in metadata
         if self.is_async_function(node) {
-            decl.metadata.insert("async".to_string(), "true".to_string());
+            decl.metadata
+                .insert("async".to_string(), "true".to_string());
         }
 
         // Extract children for classes
@@ -217,7 +208,8 @@ impl PythonTreeSitterAdapter {
 
         // Add decorators to metadata
         if !decorators.is_empty() {
-            decl.metadata.insert("decorators".to_string(), decorators.join(", "));
+            decl.metadata
+                .insert("decorators".to_string(), decorators.join(", "));
         }
 
         // Update span to include decorators
@@ -247,7 +239,8 @@ impl PythonTreeSitterAdapter {
         let block = find_child_by_kind(node, "block")?;
 
         let mut cursor = block.walk();
-        for child in block.children(&mut cursor) {
+        // Only check the first statement for docstring
+        if let Some(child) = block.children(&mut cursor).next() {
             if child.kind() == "expression_statement" {
                 let mut expr_cursor = child.walk();
                 for expr_child in child.children(&mut expr_cursor) {
@@ -266,8 +259,6 @@ impl PythonTreeSitterAdapter {
                     }
                 }
             }
-            // Only check the first statement
-            break;
         }
 
         None
@@ -292,7 +283,8 @@ impl PythonTreeSitterAdapter {
         }
 
         // Find minimum indentation (ignoring empty lines)
-        let min_indent = lines.iter()
+        let min_indent = lines
+            .iter()
             .filter(|l| !l.trim().is_empty())
             .skip(1) // Skip first line which may not be indented
             .map(|l| l.len() - l.trim_start().len())
@@ -300,7 +292,8 @@ impl PythonTreeSitterAdapter {
             .unwrap_or(0);
 
         // Remove that indentation from each line
-        let cleaned: Vec<String> = lines.iter()
+        let cleaned: Vec<String> = lines
+            .iter()
             .enumerate()
             .map(|(i, l)| {
                 if i == 0 {
@@ -422,7 +415,11 @@ impl PythonTreeSitterAdapter {
     }
 
     /// Extract a default parameter (name=value)
-    fn extract_default_parameter(&self, node: &tree_sitter::Node, source: &str) -> Option<Parameter> {
+    fn extract_default_parameter(
+        &self,
+        node: &tree_sitter::Node,
+        source: &str,
+    ) -> Option<Parameter> {
         let mut name = None;
         let mut default_value = None;
         let mut cursor = node.walk();
@@ -448,7 +445,11 @@ impl PythonTreeSitterAdapter {
     }
 
     /// Extract a typed default parameter (name: type = value)
-    fn extract_typed_default_parameter(&self, node: &tree_sitter::Node, source: &str) -> Option<Parameter> {
+    fn extract_typed_default_parameter(
+        &self,
+        node: &tree_sitter::Node,
+        source: &str,
+    ) -> Option<Parameter> {
         let mut name = None;
         let mut type_annotation = None;
         let mut default_value = None;
@@ -576,11 +577,7 @@ impl PythonTreeSitterAdapter {
     }
 
     /// Extract an import statement (import x, y, z)
-    fn extract_import_statement(
-        &self,
-        node: &tree_sitter::Node,
-        source: &str,
-    ) -> Vec<ImportLike> {
+    fn extract_import_statement(&self, node: &tree_sitter::Node, source: &str) -> Vec<ImportLike> {
         let mut imports = Vec::new();
         let span = node_to_span(node);
 
@@ -652,7 +649,9 @@ impl PythonTreeSitterAdapter {
         let span = node_to_span(node);
 
         // Get the module path (after 'from')
-        let module_source = self.extract_module_path(node, source).unwrap_or_else(|| ".".to_string());
+        let module_source = self
+            .extract_module_path(node, source)
+            .unwrap_or_else(|| ".".to_string());
 
         // Check for wildcard import and collect items
         let mut cursor = node.walk();
@@ -662,7 +661,12 @@ impl PythonTreeSitterAdapter {
         for child in node.children(&mut cursor) {
             if child.kind() == "wildcard_import" {
                 is_wildcard = true;
-            } else if child.kind() == "import_prefix" || child.kind() == "from" || child.kind() == "import" || child.kind() == "dotted_name" || child.kind() == "relative_import" {
+            } else if child.kind() == "import_prefix"
+                || child.kind() == "from"
+                || child.kind() == "import"
+                || child.kind() == "dotted_name"
+                || child.kind() == "relative_import"
+            {
                 continue;
             } else if child.kind() == "identifier" {
                 items.push(node_text(&child, source).to_string());
@@ -727,12 +731,8 @@ impl PythonTreeSitterAdapter {
     }
 
     /// Visit comments in the tree
-    fn visit_comments(
-        &self,
-        node: &tree_sitter::Node,
-        source: &str,
-        comments: &mut Vec<Comment>,
-    ) {
+    #[allow(clippy::only_used_in_recursion)]
+    fn visit_comments(&self, node: &tree_sitter::Node, source: &str, comments: &mut Vec<Comment>) {
         if node.kind() == "comment" {
             let text = node_text(node, source);
             let cleaned = text.trim_start_matches('#').trim();
@@ -792,7 +792,13 @@ impl PythonTreeSitterAdapter {
 
         let mut cursor = node.walk();
         for child in node.children(&mut cursor) {
-            self.extract_block_contents(&child, source, &mut control_flow, &mut calls, &mut nested_declarations);
+            self.extract_block_contents(
+                &child,
+                source,
+                &mut control_flow,
+                &mut calls,
+                &mut nested_declarations,
+            );
         }
 
         Block {
@@ -909,7 +915,13 @@ impl PythonTreeSitterAdapter {
                 // Recurse into children
                 let mut cursor = node.walk();
                 for child in node.children(&mut cursor) {
-                    self.extract_block_contents(&child, source, control_flow, calls, nested_declarations);
+                    self.extract_block_contents(
+                        &child,
+                        source,
+                        control_flow,
+                        calls,
+                        nested_declarations,
+                    );
                 }
             }
         }
@@ -972,7 +984,9 @@ mod tests {
 
     fn parse_python(source: &str) -> tree_sitter::Tree {
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(&tree_sitter_python::LANGUAGE.into()).unwrap();
+        parser
+            .set_language(&tree_sitter_python::LANGUAGE.into())
+            .unwrap();
         parser.parse(source, None).unwrap()
     }
 
@@ -1120,7 +1134,11 @@ mod tests {
         assert_eq!(class.kind, DeclarationKind::Class);
         assert!(class.doc_comment.is_some());
 
-        assert!(class.children.len() >= 2, "Expected at least 2 children, got {}", class.children.len());
+        assert!(
+            class.children.len() >= 2,
+            "Expected at least 2 children, got {}",
+            class.children.len()
+        );
     }
 
     #[test]
@@ -1200,9 +1218,15 @@ mod tests {
         let adapter = PythonTreeSitterAdapter::new();
         let imports = adapter.extract_imports(&tree, source);
 
-        assert!(imports.len() >= 4, "Expected at least 4 imports, got {}", imports.len());
+        assert!(
+            imports.len() >= 4,
+            "Expected at least 4 imports, got {}",
+            imports.len()
+        );
         assert!(imports.iter().any(|i| i.source == "os"));
-        assert!(imports.iter().any(|i| i.source == "json" && i.alias == Some("js".to_string())));
+        assert!(imports
+            .iter()
+            .any(|i| i.source == "json" && i.alias == Some("js".to_string())));
     }
 
     #[test]
@@ -1264,16 +1288,28 @@ mod tests {
 
         assert_eq!(declarations.len(), 4);
 
-        let public = declarations.iter().find(|d| d.name == "public_func").unwrap();
+        let public = declarations
+            .iter()
+            .find(|d| d.name == "public_func")
+            .unwrap();
         assert_eq!(public.visibility, Visibility::Public);
 
-        let protected = declarations.iter().find(|d| d.name == "_protected_func").unwrap();
+        let protected = declarations
+            .iter()
+            .find(|d| d.name == "_protected_func")
+            .unwrap();
         assert_eq!(protected.visibility, Visibility::Protected);
 
-        let private = declarations.iter().find(|d| d.name == "__private_func").unwrap();
+        let private = declarations
+            .iter()
+            .find(|d| d.name == "__private_func")
+            .unwrap();
         assert_eq!(private.visibility, Visibility::Private);
 
-        let dunder = declarations.iter().find(|d| d.name == "__dunder_method__").unwrap();
+        let dunder = declarations
+            .iter()
+            .find(|d| d.name == "__dunder_method__")
+            .unwrap();
         assert_eq!(dunder.visibility, Visibility::Public);
     }
 
@@ -1300,7 +1336,10 @@ mod tests {
         let decls = adapter.extract_declarations(&tree, source);
 
         assert!(decls[0].doc_comment.is_some());
-        assert_eq!(decls[0].doc_comment.as_ref().unwrap().kind, CommentKind::Doc);
+        assert_eq!(
+            decls[0].doc_comment.as_ref().unwrap().kind,
+            CommentKind::Doc
+        );
     }
 
     #[test]
@@ -1393,8 +1432,14 @@ mod tests {
         let decls = adapter.extract_declarations(&tree, source);
 
         if let Some(body) = adapter.extract_body(&tree, source, &decls[0]) {
-            let has_try = body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::Try);
-            let has_catch = body.control_flow.iter().any(|cf| cf.kind == ControlFlowKind::Catch);
+            let has_try = body
+                .control_flow
+                .iter()
+                .any(|cf| cf.kind == ControlFlowKind::Try);
+            let has_catch = body
+                .control_flow
+                .iter()
+                .any(|cf| cf.kind == ControlFlowKind::Catch);
             assert!(has_try || has_catch || body.control_flow.is_empty());
         }
     }

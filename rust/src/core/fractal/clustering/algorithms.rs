@@ -100,7 +100,10 @@ impl Default for KMeans {
 
 impl KMeans {
     pub fn new(k: usize) -> Self {
-        Self { k, ..Default::default() }
+        Self {
+            k,
+            ..Default::default()
+        }
     }
 
     pub fn with_max_iter(mut self, max_iter: usize) -> Self {
@@ -305,12 +308,7 @@ impl KMeans {
             .collect()
     }
 
-    fn calculate_inertia(
-        &self,
-        data: &[Vec<f32>],
-        labels: &[i32],
-        centroids: &[Vec<f32>],
-    ) -> f32 {
+    fn calculate_inertia(&self, data: &[Vec<f32>], labels: &[i32], centroids: &[Vec<f32>]) -> f32 {
         data.iter()
             .zip(labels.iter())
             .map(|(point, &label)| {
@@ -347,7 +345,11 @@ impl KMeans {
                     a_count += 1;
                 }
             }
-            let a_i = if a_count > 0 { a_sum / a_count as f32 } else { 0.0 };
+            let a_i = if a_count > 0 {
+                a_sum / a_count as f32
+            } else {
+                0.0
+            };
 
             // b(i): minimum average distance to other clusters
             let mut b_i = f32::INFINITY;
@@ -393,7 +395,10 @@ impl KMeans {
 
     fn simple_random(&self, iter: usize, max: usize) -> usize {
         // Simple deterministic "random" for reproducibility
-        let hash = self.seed.wrapping_mul(iter as u64 + 1).wrapping_add(0x9e3779b97f4a7c15);
+        let hash = self
+            .seed
+            .wrapping_mul(iter as u64 + 1)
+            .wrapping_add(0x9e3779b97f4a7c15);
         (hash % max as u64) as usize
     }
 }
@@ -513,9 +518,7 @@ impl DBSCAN {
         let point = &data[point_idx];
         data.iter()
             .enumerate()
-            .filter(|(i, other)| {
-                *i != point_idx && euclidean_distance(point, other) <= self.eps
-            })
+            .filter(|(i, other)| *i != point_idx && euclidean_distance(point, other) <= self.eps)
             .map(|(i, _)| i)
             .collect()
     }
@@ -615,7 +618,11 @@ impl DBSCAN {
                     a_count += 1;
                 }
             }
-            let a_i = if a_count > 0 { a_sum / a_count as f32 } else { 0.0 };
+            let a_i = if a_count > 0 {
+                a_sum / a_count as f32
+            } else {
+                0.0
+            };
 
             // b(i): minimum average distance to other clusters
             let mut b_i = f32::INFINITY;
@@ -930,11 +937,7 @@ mod tests {
 
     #[test]
     fn test_dbscan_all_same_point() {
-        let data = vec![
-            vec![1.0, 1.0],
-            vec![1.0, 1.0],
-            vec![1.0, 1.0],
-        ];
+        let data = vec![vec![1.0, 1.0], vec![1.0, 1.0], vec![1.0, 1.0]];
         let dbscan = DBSCAN::new(0.5, 2);
 
         let result = dbscan.fit(&data).unwrap();
@@ -949,6 +952,9 @@ mod tests {
         let kmeans = KMeans::new(2);
 
         let result = kmeans.fit(&data);
-        assert!(matches!(result, Err(ClusteringError::DimensionMismatch { .. })));
+        assert!(matches!(
+            result,
+            Err(ClusteringError::DimensionMismatch { .. })
+        ));
     }
 }

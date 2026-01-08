@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::fractal::ContextLayer;
 
-use super::primitives::ConceptType;
 use super::composition::ExplorationIntent;
+use super::primitives::ConceptType;
 
 // =============================================================================
 // Reading Decision
@@ -63,7 +63,10 @@ impl ReadingDecision {
 
     /// Check if this is a "should read" decision
     pub fn should_read(&self) -> bool {
-        matches!(self, ReadingDecision::ReadDeeply { .. } | ReadingDecision::Skim { .. })
+        matches!(
+            self,
+            ReadingDecision::ReadDeeply { .. } | ReadingDecision::Skim { .. }
+        )
     }
 }
 
@@ -118,7 +121,10 @@ impl StopReadingEngine {
         }
 
         // High complexity + high relevance = bookmark if not central
-        if complexity > self.complexity_threshold && relevance > self.read_deeply_threshold && centrality < 0.3 {
+        if complexity > self.complexity_threshold
+            && relevance > self.read_deeply_threshold
+            && centrality < 0.3
+        {
             return ReadingDecision::Bookmark {
                 prerequisite: "Understand simpler related concepts first".to_string(),
                 when_to_review: "After reviewing the core logic".to_string(),
@@ -159,23 +165,43 @@ impl StopReadingEngine {
 
         match concept_type {
             ConceptType::Calculation => {
-                format!("Core {} logic ({:.0}% relevant to {})",
-                    "calculation", relevance * 100.0, intent_name)
+                format!(
+                    "Core {} logic ({:.0}% relevant to {})",
+                    "calculation",
+                    relevance * 100.0,
+                    intent_name
+                )
             }
             ConceptType::Validation => {
-                format!("Key {} rules ({:.0}% relevant to {})",
-                    "validation", relevance * 100.0, intent_name)
+                format!(
+                    "Key {} rules ({:.0}% relevant to {})",
+                    "validation",
+                    relevance * 100.0,
+                    intent_name
+                )
             }
             ConceptType::Decision => {
-                format!("Important {} point ({:.0}% relevant to {})",
-                    "decision", relevance * 100.0, intent_name)
+                format!(
+                    "Important {} point ({:.0}% relevant to {})",
+                    "decision",
+                    relevance * 100.0,
+                    intent_name
+                )
             }
             ConceptType::ErrorHandling => {
-                format!("Critical {} path ({:.0}% relevant to {})",
-                    "error handling", relevance * 100.0, intent_name)
+                format!(
+                    "Critical {} path ({:.0}% relevant to {})",
+                    "error handling",
+                    relevance * 100.0,
+                    intent_name
+                )
             }
             _ => {
-                format!("High relevance to {} ({:.0}%)", intent_name, relevance * 100.0)
+                format!(
+                    "High relevance to {} ({:.0}%)",
+                    intent_name,
+                    relevance * 100.0
+                )
             }
         }
     }
@@ -196,7 +222,11 @@ impl StopReadingEngine {
                 "Configuration code - can be explored later if needed".to_string()
             }
             _ => {
-                format!("Low relevance to {} ({:.0}%)", intent_name, relevance * 100.0)
+                format!(
+                    "Low relevance to {} ({:.0}%)",
+                    intent_name,
+                    relevance * 100.0
+                )
             }
         }
     }
@@ -206,18 +236,12 @@ impl StopReadingEngine {
         let concept_type = ConceptType::infer(layer);
 
         match concept_type {
-            ConceptType::Testing => {
-                Some("you need to verify expected behavior".to_string())
-            }
+            ConceptType::Testing => Some("you need to verify expected behavior".to_string()),
             ConceptType::Configuration => {
                 Some("you encounter configuration-related issues".to_string())
             }
-            ConceptType::Logging => {
-                Some("you need to understand logging behavior".to_string())
-            }
-            ConceptType::ErrorHandling => {
-                Some("you encounter related errors".to_string())
-            }
+            ConceptType::Logging => Some("you need to understand logging behavior".to_string()),
+            ConceptType::ErrorHandling => Some("you encounter related errors".to_string()),
             _ => None,
         }
     }
@@ -284,7 +308,11 @@ impl StopReadingEngine {
         }
 
         // Check for documentation
-        if let crate::core::fractal::LayerContent::Symbol { documentation: Some(_), .. } = &layer.content {
+        if let crate::core::fractal::LayerContent::Symbol {
+            documentation: Some(_),
+            ..
+        } = &layer.content
+        {
             points.push("Read the documentation".to_string());
         }
 
@@ -317,7 +345,7 @@ impl StopReadingEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::fractal::{LayerContent, SymbolKind, Visibility, Range};
+    use crate::core::fractal::{LayerContent, Range, SymbolKind, Visibility};
 
     fn create_test_layer(name: &str, lines: usize) -> ContextLayer {
         ContextLayer::new(
@@ -377,21 +405,33 @@ mod tests {
 
     #[test]
     fn test_decision_labels() {
-        assert_eq!(ReadingDecision::ReadDeeply {
-            reason: "".to_string(),
-            estimated_minutes: 0,
-            key_points: vec![],
-        }.label(), "READ");
+        assert_eq!(
+            ReadingDecision::ReadDeeply {
+                reason: "".to_string(),
+                estimated_minutes: 0,
+                key_points: vec![],
+            }
+            .label(),
+            "READ"
+        );
 
-        assert_eq!(ReadingDecision::Skim {
-            focus_on: vec![],
-            time_limit_seconds: 0,
-        }.label(), "SKIM");
+        assert_eq!(
+            ReadingDecision::Skim {
+                focus_on: vec![],
+                time_limit_seconds: 0,
+            }
+            .label(),
+            "SKIM"
+        );
 
-        assert_eq!(ReadingDecision::Skip {
-            reason: "".to_string(),
-            come_back_if: None,
-        }.label(), "SKIP");
+        assert_eq!(
+            ReadingDecision::Skip {
+                reason: "".to_string(),
+                come_back_if: None,
+            }
+            .label(),
+            "SKIP"
+        );
     }
 
     #[test]
@@ -407,26 +447,42 @@ mod tests {
 
     #[test]
     fn test_reading_decision_as_str() {
-        assert_eq!(ReadingDecision::ReadDeeply {
-            reason: "".to_string(),
-            estimated_minutes: 0,
-            key_points: vec![],
-        }.as_str(), "read");
+        assert_eq!(
+            ReadingDecision::ReadDeeply {
+                reason: "".to_string(),
+                estimated_minutes: 0,
+                key_points: vec![],
+            }
+            .as_str(),
+            "read"
+        );
 
-        assert_eq!(ReadingDecision::Skim {
-            focus_on: vec![],
-            time_limit_seconds: 0,
-        }.as_str(), "skim");
+        assert_eq!(
+            ReadingDecision::Skim {
+                focus_on: vec![],
+                time_limit_seconds: 0,
+            }
+            .as_str(),
+            "skim"
+        );
 
-        assert_eq!(ReadingDecision::Skip {
-            reason: "".to_string(),
-            come_back_if: None,
-        }.as_str(), "skip");
+        assert_eq!(
+            ReadingDecision::Skip {
+                reason: "".to_string(),
+                come_back_if: None,
+            }
+            .as_str(),
+            "skip"
+        );
 
-        assert_eq!(ReadingDecision::Bookmark {
-            prerequisite: "".to_string(),
-            when_to_review: "".to_string(),
-        }.as_str(), "bookmark");
+        assert_eq!(
+            ReadingDecision::Bookmark {
+                prerequisite: "".to_string(),
+                when_to_review: "".to_string(),
+            }
+            .as_str(),
+            "bookmark"
+        );
     }
 
     #[test]
@@ -435,30 +491,38 @@ mod tests {
             reason: "".to_string(),
             estimated_minutes: 0,
             key_points: vec![],
-        }.should_read());
+        }
+        .should_read());
 
         assert!(ReadingDecision::Skim {
             focus_on: vec![],
             time_limit_seconds: 0,
-        }.should_read());
+        }
+        .should_read());
 
         assert!(!ReadingDecision::Skip {
             reason: "".to_string(),
             come_back_if: None,
-        }.should_read());
+        }
+        .should_read());
 
         assert!(!ReadingDecision::Bookmark {
             prerequisite: "".to_string(),
             when_to_review: "".to_string(),
-        }.should_read());
+        }
+        .should_read());
     }
 
     #[test]
     fn test_bookmark_label() {
-        assert_eq!(ReadingDecision::Bookmark {
-            prerequisite: "understand X".to_string(),
-            when_to_review: "after Y".to_string(),
-        }.label(), "BOOKMARK");
+        assert_eq!(
+            ReadingDecision::Bookmark {
+                prerequisite: "understand X".to_string(),
+                when_to_review: "after Y".to_string(),
+            }
+            .label(),
+            "BOOKMARK"
+        );
     }
 
     // ==================== Bookmark Decision Tests ====================
@@ -677,7 +741,10 @@ mod tests {
         let layer = create_test_layer("small_fn", 10);
 
         let decision = engine.decide(&layer, 0.9, 0.1, 0.8);
-        if let ReadingDecision::ReadDeeply { estimated_minutes, .. } = decision {
+        if let ReadingDecision::ReadDeeply {
+            estimated_minutes, ..
+        } = decision
+        {
             assert!(estimated_minutes > 0);
             assert!(estimated_minutes <= 5);
         }
@@ -689,7 +756,10 @@ mod tests {
         let layer = create_test_layer("large_fn", 200);
 
         let decision = engine.decide(&layer, 0.9, 0.1, 0.8);
-        if let ReadingDecision::ReadDeeply { estimated_minutes, .. } = decision {
+        if let ReadingDecision::ReadDeeply {
+            estimated_minutes, ..
+        } = decision
+        {
             assert!(estimated_minutes > 5);
         }
     }
@@ -703,9 +773,16 @@ mod tests {
         let decision_high = engine.decide(&layer, 0.9, 0.9, 0.8);
 
         if let (
-            ReadingDecision::ReadDeeply { estimated_minutes: low_minutes, .. },
-            ReadingDecision::ReadDeeply { estimated_minutes: high_minutes, .. }
-        ) = (decision_low, decision_high) {
+            ReadingDecision::ReadDeeply {
+                estimated_minutes: low_minutes,
+                ..
+            },
+            ReadingDecision::ReadDeeply {
+                estimated_minutes: high_minutes,
+                ..
+            },
+        ) = (decision_low, decision_high)
+        {
             // High complexity should take longer
             assert!(high_minutes >= low_minutes);
         }
@@ -731,7 +808,10 @@ mod tests {
         );
 
         let decision = engine.decide(&layer, 0.8, 0.5, 0.7);
-        if let ReadingDecision::ReadDeeply { estimated_minutes, .. } = decision {
+        if let ReadingDecision::ReadDeeply {
+            estimated_minutes, ..
+        } = decision
+        {
             assert!(estimated_minutes > 0);
         }
     }

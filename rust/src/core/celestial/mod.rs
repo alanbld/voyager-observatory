@@ -18,10 +18,10 @@
 //! - **Constellations**: Higher-level groupings (e.g., all business logic)
 //! - **Compass**: Navigation suggestions for exploration
 
-pub mod nebula_namer;
-pub mod constellation_mapper;
 pub mod compass;
+pub mod constellation_mapper;
+pub mod nebula_namer;
 
-pub use nebula_namer::{NebulaNamer, NebulaName, NamingStrategy};
-pub use constellation_mapper::{ConstellationMapper, Nebula, CelestialMap, Star, FileInfo};
-pub use compass::{NavigationCompass, NavigationSuggestion, ExplorationHint, SuggestionAction};
+pub use compass::{ExplorationHint, NavigationCompass, NavigationSuggestion, SuggestionAction};
+pub use constellation_mapper::{CelestialMap, ConstellationMapper, FileInfo, Nebula, Star};
+pub use nebula_namer::{NamingStrategy, NebulaName, NebulaNamer};

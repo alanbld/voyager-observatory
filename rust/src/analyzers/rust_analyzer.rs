@@ -1,8 +1,8 @@
+use super::{AnalysisResult, LanguageAnalyzer};
+use crate::python_style_split;
 /// Rust source code analyzer
 use lazy_static::lazy_static;
 use regex::Regex;
-use super::{AnalysisResult, LanguageAnalyzer};
-use crate::python_style_split;
 
 lazy_static! {
     static ref STRUCT_PATTERN: Regex = Regex::new(r"^\s*(?:pub\s+)?struct\s+(\w+)").unwrap();
@@ -11,7 +11,8 @@ lazy_static! {
     static ref IMPL_PATTERN: Regex = Regex::new(r"^\s*impl(?:\s+<[^>]+>)?\s+(\w+)").unwrap();
     static ref USE_PATTERN: Regex = Regex::new(r"^\s*use\s+([^;]+);").unwrap();
     static ref ENUM_PATTERN: Regex = Regex::new(r"^\s*(?:pub\s+)?enum\s+(\w+)").unwrap();
-    static ref MARKER_PATTERN: Regex = Regex::new(r"//\s*(TODO|FIXME|XXX|HACK|NOTE):?\s*(.+)").unwrap();
+    static ref MARKER_PATTERN: Regex =
+        Regex::new(r"//\s*(TODO|FIXME|XXX|HACK|NOTE):?\s*(.+)").unwrap();
 }
 
 pub struct RustAnalyzer;
@@ -204,8 +205,12 @@ mod tests {
         let result = analyzer.analyze(content, "lib.rs");
 
         assert!(result.imports.contains(&"std::io".to_string()));
-        assert!(result.imports.contains(&"std::collections::HashMap".to_string()));
-        assert!(result.imports.contains(&"crate::config::Config".to_string()));
+        assert!(result
+            .imports
+            .contains(&"std::collections::HashMap".to_string()));
+        assert!(result
+            .imports
+            .contains(&"crate::config::Config".to_string()));
     }
 
     #[test]

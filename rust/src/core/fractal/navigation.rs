@@ -774,7 +774,10 @@ mod tests {
         let result = FractalNavigator::new_at(ctx, "nonexistent");
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), NavigationError::LayerNotFound(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            NavigationError::LayerNotFound(_)
+        ));
     }
 
     #[test]
@@ -847,7 +850,10 @@ mod tests {
 
         let result = nav.zoom_out();
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), NavigationError::NoParentLayer));
+        assert!(matches!(
+            result.unwrap_err(),
+            NavigationError::NoParentLayer
+        ));
     }
 
     #[test]
@@ -948,7 +954,10 @@ mod tests {
 
         let result = nav.forward();
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), NavigationError::NoForwardHistory));
+        assert!(matches!(
+            result.unwrap_err(),
+            NavigationError::NoForwardHistory
+        ));
     }
 
     #[test]

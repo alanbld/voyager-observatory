@@ -39,62 +39,62 @@
 //! ctx.zoom_out();  // Symbol → File
 //! ```
 
-pub mod layers;
-pub mod context;
 pub mod builder;
+pub mod clustering;
+pub mod context;
+pub mod intent;
+pub mod layers;
 pub mod navigation;
 pub mod relationships;
-pub mod clustering;
-pub mod intent;
 pub mod semantic;
 
 // Re-export commonly used types
 pub use layers::{
-    ZoomLevel,
-    ContextLayer,
-    LayerContent,
-    LayerMetadata,
-    Range,
-    Position,
-    // Symbol types
-    SymbolKind,
     BlockType,
-    TokenType,
-    Visibility,
+    ContextLayer,
     // Supporting types
     Dependency,
     DependencyKind,
     Import,
+    LayerContent,
+    LayerMetadata,
     Parameter,
+    Position,
+    Range,
+    // Symbol types
+    SymbolKind,
+    TokenType,
+    Visibility,
+    ZoomLevel,
 };
 
 pub use context::{
-    FractalContext,
-    ZoomView,
-    HierarchicalView,
-    // Relationship graph
-    RelationshipGraph,
-    GraphNode,
-    GraphEdge,
-    NodeType,
-    RelationshipType,
     // Metadata
     ExtractionMetadata,
+    FractalContext,
+    GraphEdge,
+    GraphNode,
+    HierarchicalView,
+    NodeType,
+    // Relationship graph
+    RelationshipGraph,
+    RelationshipType,
+    ZoomView,
 };
 
 pub use builder::{
-    // Builder
-    FractalContextBuilder,
+    detect_language,
+    extract_symbols_regex,
     // Configuration
     BuilderConfig,
-    ExtractionDepth,
     // Errors
     BuilderError,
     BuilderResult,
     // Extraction
     ExtractedSymbol,
-    extract_symbols_regex,
-    detect_language,
+    ExtractionDepth,
+    // Builder
+    FractalContextBuilder,
 };
 
 pub use navigation::{
@@ -106,104 +106,104 @@ pub use navigation::{
     // Types
     NavigationSnapshot,
     NavigationStats,
-    SiblingDirection,
     PanDirection,
+    SiblingDirection,
 };
 
 pub use relationships::{
+    CallEdge,
+    // Extractor
+    CallExtractor,
     // Call Graph
     CallGraph,
     CallGraphMetadata,
-    CallNode,
-    CallEdge,
     CallKind,
+    CallNode,
     CallableKind,
-    // Extractor
-    CallExtractor,
     ExtractedCalls,
     FileCallExtraction,
 };
 
 pub use clustering::{
+    ClusterAlgorithm,
+    ClusterConfig,
     // Cluster Engine
     ClusterEngine,
-    ClusterConfig,
-    ClusterAlgorithm,
-    // Semantic Cluster
-    SemanticCluster,
     ClusterMember,
     ClusterMetrics,
     ClusterPattern,
-    // Vectorizer
-    SymbolVectorizer,
-    FeatureVector,
-    FeatureType,
-    VectorizerConfig,
-    // Algorithms
-    KMeans,
-    DBSCAN,
     ClusterResult,
     ClusteringError,
+    FeatureType,
+    FeatureVector,
+    // Algorithms
+    KMeans,
+    // Semantic Cluster
+    SemanticCluster,
+    ShellPattern,
     // Shell Patterns
     ShellPatternRecognizer,
-    ShellPattern,
     ShellPatternType,
+    // Vectorizer
+    SymbolVectorizer,
+    VectorizerConfig,
+    DBSCAN,
 };
 
 pub use intent::{
     // Cognitive Primitives
     CognitivePrimitive,
-    NoiseFilter,
-    NoiseFilterParams,
-    RelevanceScorer,
-    RelevanceScorerParams,
+    ConceptType,
+    ConfiguredPrimitive,
+    ExplorationIntent,
     ExplorationPlanner,
     ExplorationPlannerParams,
-    ConceptType,
-    RelevanceScore,
-    ScoredElement,
+    ExplorationResult,
+    ExplorationStep,
+    ExplorerConfig,
     // Intent Composition
     IntentComposition,
-    ExplorationIntent,
-    IntentResult,
-    ExplorationStep,
-    ConfiguredPrimitive,
-    // Reading Decisions
-    ReadingDecision,
-    StopReadingEngine,
     // Intent Explorer (High-Level API)
     IntentExplorer,
-    ExplorerConfig,
-    ExplorationResult,
+    IntentResult,
+    NoiseFilter,
+    NoiseFilterParams,
+    // Reading Decisions
+    ReadingDecision,
+    RelevanceScore,
+    RelevanceScorer,
+    RelevanceScorerParams,
+    ScoredElement,
+    StopReadingEngine,
 };
 
 pub use semantic::{
-    // Unified Substrate
-    UnifiedSemanticSubstrate,
-    UnifiedConcept,
     ConceptId,
-    UniversalConceptType,
-    LanguageSpecificData,
-    UnifiedProperties,
     // Cross-Language Alignment
     CrossLanguageAligner,
     CrossLanguageEquivalent,
+    CrossLanguageExplorationStep,
+    CrossLanguageInsight,
     CrossLanguageRelationship,
     EquivalenceClass,
     // Normalization
     FeatureNormalizer,
-    NormalizationStrategy,
-    LanguageNormalizationConfig,
-    // Multi-Language Project
-    MultiLanguageProject,
-    MultiLanguageExplorer,
-    MultiLanguageExplorationResult,
-    CrossLanguageExplorationStep,
-    CrossLanguageInsight,
-    LanguageBreakdown,
-    ProjectLanguageStats,
     // Language & Context
     Language,
+    LanguageBreakdown,
+    LanguageNormalizationConfig,
+    LanguageSpecificData,
+    MultiLanguageExplorationResult,
+    MultiLanguageExplorer,
+    // Multi-Language Project
+    MultiLanguageProject,
+    NormalizationStrategy,
+    ProjectLanguageStats,
+    UnifiedConcept,
+    UnifiedProperties,
+    // Unified Substrate
+    UnifiedSemanticSubstrate,
+    UniversalConceptType,
     UserContext,
 };
 
@@ -216,72 +216,87 @@ mod integration_tests {
     #[test]
     fn test_complete_hierarchy() {
         // Create project layer
-        let project = ContextLayer::new("proj_001", LayerContent::Project {
-            name: "my_project".to_string(),
-            description: Some("Test project".to_string()),
-            root_path: Some(PathBuf::from("/project")),
-            file_count: 5,
-            dependencies: vec![],
-        });
+        let project = ContextLayer::new(
+            "proj_001",
+            LayerContent::Project {
+                name: "my_project".to_string(),
+                description: Some("Test project".to_string()),
+                root_path: Some(PathBuf::from("/project")),
+                file_count: 5,
+                dependencies: vec![],
+            },
+        );
 
         let mut ctx = FractalContext::new("ctx_001", project);
 
         // Add module layer
-        let module = ContextLayer::new("mod_001", LayerContent::Module {
-            name: "core".to_string(),
-            path: Some(PathBuf::from("/project/src/core")),
-            file_count: 3,
-            exports: vec!["Engine".to_string(), "Config".to_string()],
-        }).with_parent("proj_001");
+        let module = ContextLayer::new(
+            "mod_001",
+            LayerContent::Module {
+                name: "core".to_string(),
+                path: Some(PathBuf::from("/project/src/core")),
+                file_count: 3,
+                exports: vec!["Engine".to_string(), "Config".to_string()],
+            },
+        )
+        .with_parent("proj_001");
         ctx.add_layer(module);
 
         // Add file layer
-        let file = ContextLayer::new("file_001", LayerContent::File {
-            path: PathBuf::from("/project/src/core/engine.rs"),
-            language: "rust".to_string(),
-            size_bytes: 2048,
-            line_count: 100,
-            symbol_count: 5,
-            imports: vec![
-                Import {
+        let file = ContextLayer::new(
+            "file_001",
+            LayerContent::File {
+                path: PathBuf::from("/project/src/core/engine.rs"),
+                language: "rust".to_string(),
+                size_bytes: 2048,
+                line_count: 100,
+                symbol_count: 5,
+                imports: vec![Import {
                     module: "std::io".to_string(),
                     items: vec!["Read".to_string()],
                     alias: None,
                     line: 1,
-                },
-            ],
-        }).with_parent("mod_001");
+                }],
+            },
+        )
+        .with_parent("mod_001");
         ctx.add_layer(file);
 
         // Add symbol layers
-        let sym1 = ContextLayer::new("sym_001", LayerContent::Symbol {
-            name: "Engine".to_string(),
-            kind: SymbolKind::Struct,
-            signature: "pub struct Engine".to_string(),
-            return_type: None,
-            parameters: vec![],
-            documentation: Some("Main engine struct".to_string()),
-            visibility: Visibility::Public,
-            range: Range::line_range(10, 50),
-        }).with_parent("file_001");
+        let sym1 = ContextLayer::new(
+            "sym_001",
+            LayerContent::Symbol {
+                name: "Engine".to_string(),
+                kind: SymbolKind::Struct,
+                signature: "pub struct Engine".to_string(),
+                return_type: None,
+                parameters: vec![],
+                documentation: Some("Main engine struct".to_string()),
+                visibility: Visibility::Public,
+                range: Range::line_range(10, 50),
+            },
+        )
+        .with_parent("file_001");
         ctx.add_layer(sym1);
 
-        let sym2 = ContextLayer::new("sym_002", LayerContent::Symbol {
-            name: "process".to_string(),
-            kind: SymbolKind::Method,
-            signature: "pub fn process(&self) -> Result<()>".to_string(),
-            return_type: Some("Result<()>".to_string()),
-            parameters: vec![
-                Parameter {
+        let sym2 = ContextLayer::new(
+            "sym_002",
+            LayerContent::Symbol {
+                name: "process".to_string(),
+                kind: SymbolKind::Method,
+                signature: "pub fn process(&self) -> Result<()>".to_string(),
+                return_type: Some("Result<()>".to_string()),
+                parameters: vec![Parameter {
                     name: "self".to_string(),
                     type_hint: Some("&self".to_string()),
                     default_value: None,
-                },
-            ],
-            documentation: None,
-            visibility: Visibility::Public,
-            range: Range::line_range(55, 75),
-        }).with_parent("file_001");
+                }],
+                documentation: None,
+                visibility: Visibility::Public,
+                range: Range::line_range(55, 75),
+            },
+        )
+        .with_parent("file_001");
         ctx.add_layer(sym2);
 
         // Link children
@@ -358,27 +373,34 @@ mod integration_tests {
     /// Test JSON serialization of a complete context
     #[test]
     fn test_context_json_output() {
-        let file = ContextLayer::new("file_001", LayerContent::File {
-            path: PathBuf::from("test.rs"),
-            language: "rust".to_string(),
-            size_bytes: 512,
-            line_count: 25,
-            symbol_count: 2,
-            imports: vec![],
-        });
+        let file = ContextLayer::new(
+            "file_001",
+            LayerContent::File {
+                path: PathBuf::from("test.rs"),
+                language: "rust".to_string(),
+                size_bytes: 512,
+                line_count: 25,
+                symbol_count: 2,
+                imports: vec![],
+            },
+        );
 
         let mut ctx = FractalContext::new("ctx_001", file);
 
-        let sym = ContextLayer::new("sym_001", LayerContent::Symbol {
-            name: "main".to_string(),
-            kind: SymbolKind::Function,
-            signature: "fn main()".to_string(),
-            return_type: None,
-            parameters: vec![],
-            documentation: None,
-            visibility: Visibility::Public,
-            range: Range::line_range(1, 10),
-        }).with_parent("file_001");
+        let sym = ContextLayer::new(
+            "sym_001",
+            LayerContent::Symbol {
+                name: "main".to_string(),
+                kind: SymbolKind::Function,
+                signature: "fn main()".to_string(),
+                return_type: None,
+                parameters: vec![],
+                documentation: None,
+                visibility: Visibility::Public,
+                range: Range::line_range(1, 10),
+            },
+        )
+        .with_parent("file_001");
         ctx.add_layer(sym);
 
         if let Some(file_layer) = ctx.get_layer_mut("file_001") {

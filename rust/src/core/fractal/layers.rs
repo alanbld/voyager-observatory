@@ -395,7 +395,8 @@ impl LayerContent {
         match self {
             LayerContent::Project { name, .. } => name,
             LayerContent::Module { name, .. } => name,
-            LayerContent::File { path, .. } => path.file_name()
+            LayerContent::File { path, .. } => path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown"),
             LayerContent::Symbol { name, .. } => name,
@@ -742,8 +743,7 @@ mod tests {
             range: Range::default(),
         };
 
-        let layer = ContextLayer::new("sym_001", content)
-            .with_parent("file_001");
+        let layer = ContextLayer::new("sym_001", content).with_parent("file_001");
 
         assert!(layer.has_parent());
         assert_eq!(layer.parent_id, Some("file_001".to_string()));
@@ -858,14 +858,12 @@ mod tests {
             size_bytes: 2048,
             line_count: 100,
             symbol_count: 10,
-            imports: vec![
-                Import {
-                    module: "std::io".to_string(),
-                    items: vec!["Read".to_string(), "Write".to_string()],
-                    alias: None,
-                    line: 1,
-                },
-            ],
+            imports: vec![Import {
+                module: "std::io".to_string(),
+                items: vec!["Read".to_string(), "Write".to_string()],
+                alias: None,
+                line: 1,
+            }],
         };
 
         let mut layer = ContextLayer::new("file_001", content);
@@ -1044,7 +1042,13 @@ mod tests {
                 nested_depth: 0,
                 range: Range::default(),
             };
-            assert_eq!(block.name(), expected_name, "BlockType::{:?} should have name '{}'", block_type, expected_name);
+            assert_eq!(
+                block.name(),
+                expected_name,
+                "BlockType::{:?} should have name '{}'",
+                block_type,
+                expected_name
+            );
         }
     }
 
@@ -1112,15 +1116,19 @@ mod tests {
         metadata.source_line = 42;
         metadata.extraction_method = "ast".to_string();
         metadata.confidence = 0.95;
-        metadata.properties.insert("test_key".to_string(), "test_value".to_string());
+        metadata
+            .properties
+            .insert("test_key".to_string(), "test_value".to_string());
 
-        let layer = ContextLayer::new("test_layer", content)
-            .with_metadata(metadata);
+        let layer = ContextLayer::new("test_layer", content).with_metadata(metadata);
 
         assert_eq!(layer.metadata.source_line, 42);
         assert_eq!(layer.metadata.extraction_method, "ast");
         assert_eq!(layer.metadata.confidence, 0.95);
-        assert_eq!(layer.metadata.properties.get("test_key"), Some(&"test_value".to_string()));
+        assert_eq!(
+            layer.metadata.properties.get("test_key"),
+            Some(&"test_value".to_string())
+        );
     }
 
     #[test]

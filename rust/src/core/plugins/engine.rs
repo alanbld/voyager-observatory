@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 
 use super::error::PluginResult;
-use super::loader::{PluginLoader, LoadedPlugin, PluginStatus, CURRENT_API_VERSION};
+use super::loader::{LoadedPlugin, PluginLoader, PluginStatus, CURRENT_API_VERSION};
 
 #[cfg(feature = "plugins")]
 use super::bridges::vo_table::SharedContributions;
@@ -135,9 +135,9 @@ impl PluginEngine {
     #[cfg(feature = "plugins")]
     pub fn get_metric(&self, name: &str) -> Option<f64> {
         self.contributions.as_ref().and_then(|c| {
-            c.lock().ok().and_then(|contribs| {
-                contribs.metrics.get(name).map(|m| m.value)
-            })
+            c.lock()
+                .ok()
+                .and_then(|contribs| contribs.metrics.get(name).map(|m| m.value))
         })
     }
 
@@ -147,9 +147,9 @@ impl PluginEngine {
         self.contributions
             .as_ref()
             .and_then(|c| {
-                c.lock().ok().map(|contribs| {
-                    contribs.tags.get(node_id).cloned().unwrap_or_default()
-                })
+                c.lock()
+                    .ok()
+                    .map(|contribs| contribs.tags.get(node_id).cloned().unwrap_or_default())
             })
             .unwrap_or_default()
     }
@@ -159,9 +159,7 @@ impl PluginEngine {
     pub fn get_logs(&self) -> Vec<super::bridges::vo_table::LogEntry> {
         self.contributions
             .as_ref()
-            .and_then(|c| {
-                c.lock().ok().map(|contribs| contribs.logs.clone())
-            })
+            .and_then(|c| c.lock().ok().map(|contribs| contribs.logs.clone()))
             .unwrap_or_default()
     }
 
@@ -176,7 +174,8 @@ impl PluginEngine {
             return String::from("🔌 No external optics detected.");
         }
 
-        let mut output = format!("🔌 External Optics: {} community plugin{} loaded\n",
+        let mut output = format!(
+            "🔌 External Optics: {} community plugin{} loaded\n",
             plugin_count,
             if plugin_count == 1 { "" } else { "s" }
         );
@@ -194,8 +193,13 @@ impl PluginEngine {
         let mut output = String::new();
 
         output.push_str(&format!("Plugin API Version: {}\n", CURRENT_API_VERSION));
-        output.push_str(&format!("Feature Status: {}\n",
-            if Self::is_available() { "Enabled" } else { "Disabled" }
+        output.push_str(&format!(
+            "Feature Status: {}\n",
+            if Self::is_available() {
+                "Enabled"
+            } else {
+                "Disabled"
+            }
         ));
         output.push_str("\nSearch Paths:\n");
 
@@ -204,7 +208,10 @@ impl PluginEngine {
             output.push_str(&format!("  {} {}\n", status, path.display()));
         }
 
-        output.push_str(&format!("\nDiscovered Plugins: {}\n", self.loader.plugins().len()));
+        output.push_str(&format!(
+            "\nDiscovered Plugins: {}\n",
+            self.loader.plugins().len()
+        ));
 
         for plugin in self.loader.plugins() {
             let status_icon = match &plugin.status {
@@ -215,10 +222,9 @@ impl PluginEngine {
                 PluginStatus::ExecutionError(_) => "✗",
             };
 
-            output.push_str(&format!("  {} {} (priority: {})\n",
-                status_icon,
-                plugin.entry.name,
-                plugin.entry.priority
+            output.push_str(&format!(
+                "  {} {} (priority: {})\n",
+                status_icon, plugin.entry.name, plugin.entry.priority
             ));
 
             if let PluginStatus::LoadError(e) | PluginStatus::ExecutionError(e) = &plugin.status {

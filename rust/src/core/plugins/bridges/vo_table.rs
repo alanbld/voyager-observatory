@@ -4,9 +4,9 @@
 //! All functions are sandboxed and follow the sovereignty model.
 
 #[cfg(feature = "plugins")]
-use mlua::{Lua, Table, Function, Result as LuaResult};
-use std::sync::{Arc, Mutex};
+use mlua::{Function, Lua, Result as LuaResult, Table};
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 use super::patterns::create_patterns_table;
 use crate::core::regex_engine;
@@ -66,10 +66,16 @@ pub fn create_vo_table(lua: &Lua, contributions: SharedContributions) -> LuaResu
     vo.set("log", create_log_function(lua, contributions.clone())?)?;
 
     // Tag contribution
-    vo.set("contribute_tag", create_tag_function(lua, contributions.clone())?)?;
+    vo.set(
+        "contribute_tag",
+        create_tag_function(lua, contributions.clone())?,
+    )?;
 
     // Metric registration (stores callback for later use)
-    vo.set("register_metric", create_metric_function(lua, contributions)?)?;
+    vo.set(
+        "register_metric",
+        create_metric_function(lua, contributions)?,
+    )?;
 
     // AST proxy (read-only)
     vo.set("ast", create_ast_proxy(lua)?)?;
@@ -134,12 +140,15 @@ fn create_tag_function(lua: &Lua, contributions: SharedContributions) -> LuaResu
     lua.create_function(move |_, (node_id, tag): (String, String)| {
         // Validate inputs
         if node_id.is_empty() || tag.is_empty() {
-            return Err(mlua::Error::RuntimeError("node_id and tag cannot be empty".to_string()));
+            return Err(mlua::Error::RuntimeError(
+                "node_id and tag cannot be empty".to_string(),
+            ));
         }
 
         // Store tag (append-only)
         if let Ok(mut contribs) = contributions.lock() {
-            contribs.tags
+            contribs
+                .tags
                 .entry(node_id)
                 .or_insert_with(Vec::new)
                 .push(tag);
@@ -155,7 +164,9 @@ fn create_metric_function(lua: &Lua, contributions: SharedContributions) -> LuaR
     lua.create_function(move |lua, (name, callback): (String, Function)| {
         // Validate metric name
         if name.is_empty() {
-            return Err(mlua::Error::RuntimeError("metric name cannot be empty".to_string()));
+            return Err(mlua::Error::RuntimeError(
+                "metric name cannot be empty".to_string(),
+            ));
         }
 
         // For now, just execute the callback with an empty AST to get initial value
@@ -173,11 +184,14 @@ fn create_metric_function(lua: &Lua, contributions: SharedContributions) -> LuaR
 
         // Store metric
         if let Ok(mut contribs) = contributions.lock() {
-            contribs.metrics.insert(name, MetricValue {
-                value,
-                confidence,
-                explanation,
-            });
+            contribs.metrics.insert(
+                name,
+                MetricValue {
+                    value,
+                    confidence,
+                    explanation,
+                },
+            );
         }
 
         Ok(())
@@ -240,10 +254,15 @@ mod tests {
         let vo = create_vo_table(&lua, contributions).unwrap();
         lua.globals().set("vo", vo).unwrap();
 
-        let result: i32 = lua.load(r#"
+        let result: i32 = lua
+            .load(
+                r#"
             local pattern = vo.regex("test")
             return pattern("this is a test string with test")
-        "#).eval().unwrap();
+        "#,
+            )
+            .eval()
+            .unwrap();
 
         assert_eq!(result, 2); // "test" appears twice
     }
@@ -254,10 +273,14 @@ mod tests {
         let vo = create_vo_table(&lua, contributions.clone()).unwrap();
         lua.globals().set("vo", vo).unwrap();
 
-        lua.load(r#"
+        lua.load(
+            r#"
             vo.log("info", "Plugin initialized")
             vo.log("warn", "Something happened")
-        "#).exec().unwrap();
+        "#,
+        )
+        .exec()
+        .unwrap();
 
         let contribs = contributions.lock().unwrap();
         assert_eq!(contribs.logs.len(), 2);
@@ -271,11 +294,15 @@ mod tests {
         let vo = create_vo_table(&lua, contributions.clone()).unwrap();
         lua.globals().set("vo", vo).unwrap();
 
-        lua.load(r#"
+        lua.load(
+            r#"
             vo.contribute_tag("src/main.rs:42", "needs-review")
             vo.contribute_tag("src/main.rs:42", "complex")
             vo.contribute_tag("src/lib.rs:10", "todo")
-        "#).exec().unwrap();
+        "#,
+        )
+        .exec()
+        .unwrap();
 
         let contribs = contributions.lock().unwrap();
         assert_eq!(contribs.tags.len(), 2); // Two unique node IDs
@@ -288,7 +315,8 @@ mod tests {
         let vo = create_vo_table(&lua, contributions.clone()).unwrap();
         lua.globals().set("vo", vo).unwrap();
 
-        lua.load(r#"
+        lua.load(
+            r#"
             vo.register_metric("test_metric", function(ast)
                 return {
                     value = 42,
@@ -296,7 +324,10 @@ mod tests {
                     explanation = "Test metric"
                 }
             end)
-        "#).exec().unwrap();
+        "#,
+        )
+        .exec()
+        .unwrap();
 
         let contribs = contributions.lock().unwrap();
         let metric = contribs.metrics.get("test_metric").unwrap();
@@ -310,10 +341,15 @@ mod tests {
         let vo = create_vo_table(&lua, contributions).unwrap();
         lua.globals().set("vo", vo).unwrap();
 
-        let path: String = lua.load(r#"
+        let path: String = lua
+            .load(
+                r#"
             local ast = vo.ast("src/main.rs")
             return ast.path
-        "#).eval().unwrap();
+        "#,
+            )
+            .eval()
+            .unwrap();
 
         assert_eq!(path, "src/main.rs");
     }

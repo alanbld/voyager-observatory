@@ -341,7 +341,12 @@ impl Declaration {
 
     /// Create a unique identifier for this declaration
     pub fn id(&self) -> String {
-        format!("{}:{}:{}", self.kind.as_str(), self.name, self.span.start_line)
+        format!(
+            "{}:{}:{}",
+            self.kind.as_str(),
+            self.name,
+            self.span.start_line
+        )
     }
 }
 
@@ -852,17 +857,17 @@ mod tests {
         assert_eq!(span.end, 50);
         assert_eq!(span.start_line, 5);
         assert_eq!(span.end_line, 10);
-        assert_eq!(span.start_column, 0);  // Default
-        assert_eq!(span.end_column, 0);    // Default
+        assert_eq!(span.start_column, 0); // Default
+        assert_eq!(span.end_column, 0); // Default
     }
 
     #[test]
     fn test_span_contains_line() {
         let span = Span::new(0, 100, 5, 15);
-        assert!(!span.contains_line(4));  // Before
-        assert!(span.contains_line(5));   // Start
-        assert!(span.contains_line(10));  // Middle
-        assert!(span.contains_line(15));  // End (inclusive)
+        assert!(!span.contains_line(4)); // Before
+        assert!(span.contains_line(5)); // Start
+        assert!(span.contains_line(10)); // Middle
+        assert!(span.contains_line(15)); // End (inclusive)
         assert!(!span.contains_line(16)); // After
     }
 
@@ -875,7 +880,11 @@ mod tests {
         assert_eq!(empty_span.len(), 0);
 
         // Saturating sub for inverted spans
-        let inverted = Span { start: 50, end: 10, ..Default::default() };
+        let inverted = Span {
+            start: 50,
+            end: 10,
+            ..Default::default()
+        };
         assert_eq!(inverted.len(), 0);
     }
 
@@ -888,7 +897,11 @@ mod tests {
         assert!(!non_empty.is_empty());
 
         // Inverted span is also empty
-        let inverted = Span { start: 20, end: 10, ..Default::default() };
+        let inverted = Span {
+            start: 20,
+            end: 10,
+            ..Default::default()
+        };
         assert!(inverted.is_empty());
     }
 

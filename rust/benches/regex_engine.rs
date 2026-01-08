@@ -3,8 +3,8 @@
 //! These benchmarks validate the <1μs per-call overhead target for the regex engine bridge.
 //! Run with: `cargo bench --bench regex_engine`
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
-use pm_encoder::core::regex_engine::{RegexEngine, CompiledRegex, global_engine, PatternSet};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use pm_encoder::core::regex_engine::{global_engine, CompiledRegex, PatternSet, RegexEngine};
 
 // =============================================================================
 // Benchmark Data
@@ -36,9 +36,7 @@ fn bench_compile_cache_hit(c: &mut Criterion) {
     let _ = engine.compile(EMAIL_PATTERN).unwrap();
 
     c.bench_function("compile_cache_hit", |b| {
-        b.iter(|| {
-            engine.compile(black_box(EMAIL_PATTERN)).unwrap()
-        })
+        b.iter(|| engine.compile(black_box(EMAIL_PATTERN)).unwrap())
     });
 }
 
@@ -60,9 +58,7 @@ fn bench_global_engine_compile(c: &mut Criterion) {
     let _ = global_engine().compile(EMAIL_PATTERN);
 
     c.bench_function("global_engine_compile", |b| {
-        b.iter(|| {
-            global_engine().compile(black_box(EMAIL_PATTERN)).unwrap()
-        })
+        b.iter(|| global_engine().compile(black_box(EMAIL_PATTERN)).unwrap())
     });
 }
 
@@ -80,9 +76,11 @@ fn bench_is_match(c: &mut Criterion) {
         b.iter(|| engine.is_match(&regex, black_box(text)))
     });
 
-    group.bench_with_input(BenchmarkId::new("medium", "200B"), MEDIUM_TEXT, |b, text| {
-        b.iter(|| engine.is_match(&regex, black_box(text)))
-    });
+    group.bench_with_input(
+        BenchmarkId::new("medium", "200B"),
+        MEDIUM_TEXT,
+        |b, text| b.iter(|| engine.is_match(&regex, black_box(text))),
+    );
 
     group.bench_with_input(BenchmarkId::new("long", "~10KB"), LONG_TEXT, |b, text| {
         b.iter(|| engine.is_match(&regex, black_box(text)))
@@ -97,9 +95,11 @@ fn bench_find_iter(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("find_iter");
 
-    group.bench_with_input(BenchmarkId::new("medium", "200B"), MEDIUM_TEXT, |b, text| {
-        b.iter(|| engine.find_iter(&regex, black_box(text)))
-    });
+    group.bench_with_input(
+        BenchmarkId::new("medium", "200B"),
+        MEDIUM_TEXT,
+        |b, text| b.iter(|| engine.find_iter(&regex, black_box(text))),
+    );
 
     group.bench_with_input(BenchmarkId::new("long", "~10KB"), LONG_TEXT, |b, text| {
         b.iter(|| engine.find_iter(&regex, black_box(text)))
@@ -123,9 +123,11 @@ fn bench_captures_iter(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("captures_iter");
 
-    group.bench_with_input(BenchmarkId::new("medium", "200B"), MEDIUM_TEXT, |b, text| {
-        b.iter(|| engine.captures_iter(&regex, black_box(text)))
-    });
+    group.bench_with_input(
+        BenchmarkId::new("medium", "200B"),
+        MEDIUM_TEXT,
+        |b, text| b.iter(|| engine.captures_iter(&regex, black_box(text))),
+    );
 
     group.finish();
 }
@@ -136,9 +138,11 @@ fn bench_replace_all(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("replace_all");
 
-    group.bench_with_input(BenchmarkId::new("medium", "200B"), MEDIUM_TEXT, |b, text| {
-        b.iter(|| engine.replace_all(&regex, black_box(text), "XXX"))
-    });
+    group.bench_with_input(
+        BenchmarkId::new("medium", "200B"),
+        MEDIUM_TEXT,
+        |b, text| b.iter(|| engine.replace_all(&regex, black_box(text), "XXX")),
+    );
 
     group.finish();
 }
@@ -152,8 +156,12 @@ fn bench_shell_plugin_simulation(c: &mut Criterion) {
 
     // Simulate Shell plugin pattern compilation (should use cache)
     let function_re = engine.compile(SHELL_FUNCTION_PATTERN).unwrap();
-    let export_re = engine.compile(r"(?m)^[ \t]*export\s+([A-Z_][A-Z0-9_]*)(?:=(.*))?$").unwrap();
-    let source_re = engine.compile(r#"(?m)^[ \t]*(?:source|\.)\s+["']?([^"'\s]+)["']?"#).unwrap();
+    let export_re = engine
+        .compile(r"(?m)^[ \t]*export\s+([A-Z_][A-Z0-9_]*)(?:=(.*))?$")
+        .unwrap();
+    let source_re = engine
+        .compile(r#"(?m)^[ \t]*(?:source|\.)\s+["']?([^"'\s]+)["']?"#)
+        .unwrap();
 
     let shell_script = r#"
 #!/bin/bash
@@ -191,9 +199,15 @@ fn bench_abl_plugin_simulation(c: &mut Criterion) {
     let engine = RegexEngine::new();
 
     // Simulate ABL plugin pattern compilation
-    let procedure_re = engine.compile(r"(?mi)^\s*PROCEDURE\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*(?:(EXTERNAL|PERSISTENT))?\s*:").unwrap();
-    let function_re = engine.compile(r"(?mi)^\s*FUNCTION\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s+RETURNS\s+(\w+(?:\s+EXTENT)?)").unwrap();
-    let for_each_re = engine.compile(r"(?mi)\bFOR\s+(?:FIRST|LAST|EACH)\s+([a-zA-Z_][a-zA-Z0-9_-]*)").unwrap();
+    let procedure_re = engine
+        .compile(r"(?mi)^\s*PROCEDURE\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s*(?:(EXTERNAL|PERSISTENT))?\s*:")
+        .unwrap();
+    let function_re = engine
+        .compile(r"(?mi)^\s*FUNCTION\s+([a-zA-Z_][a-zA-Z0-9_-]*)\s+RETURNS\s+(\w+(?:\s+EXTENT)?)")
+        .unwrap();
+    let for_each_re = engine
+        .compile(r"(?mi)\bFOR\s+(?:FIRST|LAST|EACH)\s+([a-zA-Z_][a-zA-Z0-9_-]*)")
+        .unwrap();
 
     let abl_code = r#"
 /* Order processing module */
@@ -261,9 +275,7 @@ fn bench_concurrent_compile(c: &mut Criterion) {
             for i in 0..4 {
                 let engine = engine.clone();
                 let pattern = format!(r"test_pattern_{}", i % 10);
-                handles.push(thread::spawn(move || {
-                    engine.compile(&pattern).unwrap()
-                }));
+                handles.push(thread::spawn(move || engine.compile(&pattern).unwrap()));
             }
             for handle in handles {
                 let _ = handle.join().unwrap();

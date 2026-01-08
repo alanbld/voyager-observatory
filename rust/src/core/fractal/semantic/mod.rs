@@ -56,26 +56,23 @@
 //! let equivalents = substrate.find_equivalents("calculate_total");
 //! ```
 
-pub mod unified_substrate;
 pub mod cross_language;
-pub mod normalization;
 pub mod multi_language;
+pub mod normalization;
+pub mod unified_substrate;
 
-pub use unified_substrate::{
-    UnifiedSemanticSubstrate, UnifiedConcept, ConceptId,
-    LanguageSpecificData, UnifiedProperties, UniversalConceptType,
-};
 pub use cross_language::{
-    CrossLanguageAligner, CrossLanguageEquivalent, CrossLanguageRelationship,
-    EquivalenceClass,
-};
-pub use normalization::{
-    FeatureNormalizer, NormalizationStrategy, LanguageNormalizationConfig,
+    CrossLanguageAligner, CrossLanguageEquivalent, CrossLanguageRelationship, EquivalenceClass,
 };
 pub use multi_language::{
-    MultiLanguageProject, MultiLanguageExplorer, LanguageBreakdown, ProjectLanguageStats,
-    MultiLanguageExplorationResult, CrossLanguageExplorationStep,
-    CrossLanguageInsight,
+    CrossLanguageExplorationStep, CrossLanguageInsight, LanguageBreakdown,
+    MultiLanguageExplorationResult, MultiLanguageExplorer, MultiLanguageProject,
+    ProjectLanguageStats,
+};
+pub use normalization::{FeatureNormalizer, LanguageNormalizationConfig, NormalizationStrategy};
+pub use unified_substrate::{
+    ConceptId, LanguageSpecificData, UnifiedConcept, UnifiedProperties, UnifiedSemanticSubstrate,
+    UniversalConceptType,
 };
 
 // =============================================================================
@@ -274,7 +271,10 @@ mod tests {
     #[test]
     fn test_language_from_str() {
         assert_eq!("python".parse::<Language>().unwrap(), Language::Python);
-        assert_eq!("TypeScript".parse::<Language>().unwrap(), Language::TypeScript);
+        assert_eq!(
+            "TypeScript".parse::<Language>().unwrap(),
+            Language::TypeScript
+        );
         assert_eq!("ABL".parse::<Language>().unwrap(), Language::ABL);
         assert!("invalid".parse::<Language>().is_err());
     }
@@ -423,11 +423,17 @@ mod tests {
         assert_eq!("py".parse::<Language>().unwrap(), Language::Python);
 
         // TypeScript aliases
-        assert_eq!("typescript".parse::<Language>().unwrap(), Language::TypeScript);
+        assert_eq!(
+            "typescript".parse::<Language>().unwrap(),
+            Language::TypeScript
+        );
         assert_eq!("ts".parse::<Language>().unwrap(), Language::TypeScript);
 
         // JavaScript aliases
-        assert_eq!("javascript".parse::<Language>().unwrap(), Language::JavaScript);
+        assert_eq!(
+            "javascript".parse::<Language>().unwrap(),
+            Language::JavaScript
+        );
         assert_eq!("js".parse::<Language>().unwrap(), Language::JavaScript);
 
         // Shell aliases

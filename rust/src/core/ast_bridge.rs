@@ -13,8 +13,8 @@
 
 use std::path::Path;
 use voyager_ast::{
-    AdapterRegistry, AstError, Declaration, DeclarationKind, File as AstFile,
-    LanguageId, Visibility,
+    AdapterRegistry, AstError, Declaration, DeclarationKind, File as AstFile, LanguageId,
+    Visibility,
 };
 
 /// Bridge for AST-based code analysis
@@ -59,7 +59,11 @@ impl AstBridge {
             Ok(file) => Some(file),
             Err(e) => {
                 // Try to extract partial results
-                if let AstError::ParseError { partial: Some(file), .. } = e {
+                if let AstError::ParseError {
+                    partial: Some(file),
+                    ..
+                } = e
+                {
                     Some(*file)
                 } else {
                     None
@@ -173,11 +177,14 @@ impl Star {
 
         let is_public = matches!(decl.visibility, Visibility::Public);
 
-        let doc_summary = decl.doc_comment.as_ref().map(|c| {
-            c.text.lines().next().unwrap_or("").to_string()
-        });
+        let doc_summary = decl
+            .doc_comment
+            .as_ref()
+            .map(|c| c.text.lines().next().unwrap_or("").to_string());
 
-        let children = decl.children.iter()
+        let children = decl
+            .children
+            .iter()
             .map(|c| Star::from_declaration(c, file_path))
             .collect();
 
@@ -302,7 +309,8 @@ fn declaration_kind_to_string(kind: DeclarationKind) -> String {
         DeclarationKind::Impl => "impl",
         DeclarationKind::Macro => "macro",
         DeclarationKind::Other => "other",
-    }.to_string()
+    }
+    .to_string()
 }
 
 /// Helper to convert visibility to string
@@ -313,7 +321,8 @@ fn visibility_to_string(vis: Visibility) -> String {
         Visibility::Protected => "protected",
         Visibility::Internal => "internal",
         Visibility::Unknown => "unknown",
-    }.to_string()
+    }
+    .to_string()
 }
 
 #[cfg(test)]
@@ -352,13 +361,19 @@ struct Point {
         let file = bridge.analyze_file(source, LanguageId::Rust).unwrap();
 
         // Should find at least the function and struct
-        assert!(file.declarations.len() >= 2,
-            "Expected at least 2 declarations, got {}", file.declarations.len());
+        assert!(
+            file.declarations.len() >= 2,
+            "Expected at least 2 declarations, got {}",
+            file.declarations.len()
+        );
 
         let stars = bridge.extract_stars(&file);
         // Stars include both top-level declarations and nested children
-        assert!(stars.len() >= 2,
-            "Expected at least 2 stars, got {}", stars.len());
+        assert!(
+            stars.len() >= 2,
+            "Expected at least 2 stars, got {}",
+            stars.len()
+        );
 
         // Find the hello function
         let hello = stars.iter().find(|s| s.name == "hello");
@@ -380,37 +395,67 @@ struct Point {
     fn test_python_analysis() {
         let bridge = AstBridge::new();
         // Python is supported (Phase 1B Core Fleet)
-        let result = bridge.analyze_file("def greet(name): pass\nclass User: pass", LanguageId::Python);
+        let result = bridge.analyze_file(
+            "def greet(name): pass\nclass User: pass",
+            LanguageId::Python,
+        );
         assert!(result.is_some());
         let file = result.unwrap();
-        assert!(file.declarations.len() >= 2, "Expected at least function and class, got {}", file.declarations.len());
+        assert!(
+            file.declarations.len() >= 2,
+            "Expected at least function and class, got {}",
+            file.declarations.len()
+        );
     }
 
     #[test]
     fn test_typescript_analysis() {
         let bridge = AstBridge::new();
         // TypeScript is supported (Phase 1B Core Fleet)
-        let result = bridge.analyze_file("function greet(name: string): void {}\ninterface User { name: string; }", LanguageId::TypeScript);
+        let result = bridge.analyze_file(
+            "function greet(name: string): void {}\ninterface User { name: string; }",
+            LanguageId::TypeScript,
+        );
         assert!(result.is_some());
         let file = result.unwrap();
-        assert!(file.declarations.len() >= 2, "Expected at least function and interface, got {}", file.declarations.len());
+        assert!(
+            file.declarations.len() >= 2,
+            "Expected at least function and interface, got {}",
+            file.declarations.len()
+        );
     }
 
     #[test]
     fn test_javascript_analysis() {
         let bridge = AstBridge::new();
         // JavaScript is supported (Phase 1B Core Fleet)
-        let result = bridge.analyze_file("function greet(name) { return 'Hello ' + name; }\nclass Calculator {}", LanguageId::JavaScript);
+        let result = bridge.analyze_file(
+            "function greet(name) { return 'Hello ' + name; }\nclass Calculator {}",
+            LanguageId::JavaScript,
+        );
         assert!(result.is_some());
         let file = result.unwrap();
-        assert!(file.declarations.len() >= 2, "Expected at least function and class, got {}", file.declarations.len());
+        assert!(
+            file.declarations.len() >= 2,
+            "Expected at least function and class, got {}",
+            file.declarations.len()
+        );
     }
 
     #[test]
     fn test_language_detection() {
-        assert_eq!(AstBridge::detect_language(Path::new("main.rs")), LanguageId::Rust);
-        assert_eq!(AstBridge::detect_language(Path::new("app.py")), LanguageId::Python);
-        assert_eq!(AstBridge::detect_language(Path::new("index.ts")), LanguageId::TypeScript);
+        assert_eq!(
+            AstBridge::detect_language(Path::new("main.rs")),
+            LanguageId::Rust
+        );
+        assert_eq!(
+            AstBridge::detect_language(Path::new("app.py")),
+            LanguageId::Python
+        );
+        assert_eq!(
+            AstBridge::detect_language(Path::new("index.ts")),
+            LanguageId::TypeScript
+        );
     }
 
     #[test]
@@ -510,18 +555,42 @@ struct Baz {}
 
     #[test]
     fn test_declaration_kind_to_string_all_variants() {
-        assert_eq!(declaration_kind_to_string(DeclarationKind::Function), "function");
-        assert_eq!(declaration_kind_to_string(DeclarationKind::Method), "method");
+        assert_eq!(
+            declaration_kind_to_string(DeclarationKind::Function),
+            "function"
+        );
+        assert_eq!(
+            declaration_kind_to_string(DeclarationKind::Method),
+            "method"
+        );
         assert_eq!(declaration_kind_to_string(DeclarationKind::Class), "class");
-        assert_eq!(declaration_kind_to_string(DeclarationKind::Struct), "struct");
+        assert_eq!(
+            declaration_kind_to_string(DeclarationKind::Struct),
+            "struct"
+        );
         assert_eq!(declaration_kind_to_string(DeclarationKind::Enum), "enum");
-        assert_eq!(declaration_kind_to_string(DeclarationKind::Interface), "interface");
+        assert_eq!(
+            declaration_kind_to_string(DeclarationKind::Interface),
+            "interface"
+        );
         assert_eq!(declaration_kind_to_string(DeclarationKind::Trait), "trait");
         assert_eq!(declaration_kind_to_string(DeclarationKind::Type), "type");
-        assert_eq!(declaration_kind_to_string(DeclarationKind::Constant), "constant");
-        assert_eq!(declaration_kind_to_string(DeclarationKind::Variable), "variable");
-        assert_eq!(declaration_kind_to_string(DeclarationKind::Module), "module");
-        assert_eq!(declaration_kind_to_string(DeclarationKind::Namespace), "namespace");
+        assert_eq!(
+            declaration_kind_to_string(DeclarationKind::Constant),
+            "constant"
+        );
+        assert_eq!(
+            declaration_kind_to_string(DeclarationKind::Variable),
+            "variable"
+        );
+        assert_eq!(
+            declaration_kind_to_string(DeclarationKind::Module),
+            "module"
+        );
+        assert_eq!(
+            declaration_kind_to_string(DeclarationKind::Namespace),
+            "namespace"
+        );
         assert_eq!(declaration_kind_to_string(DeclarationKind::Impl), "impl");
         assert_eq!(declaration_kind_to_string(DeclarationKind::Macro), "macro");
         assert_eq!(declaration_kind_to_string(DeclarationKind::Other), "other");
@@ -703,22 +772,40 @@ class Calculator:
 
     #[test]
     fn test_language_detection_javascript() {
-        assert_eq!(AstBridge::detect_language(Path::new("app.js")), LanguageId::JavaScript);
+        assert_eq!(
+            AstBridge::detect_language(Path::new("app.js")),
+            LanguageId::JavaScript
+        );
         // JSX is a separate language ID
-        assert_eq!(AstBridge::detect_language(Path::new("app.jsx")), LanguageId::Jsx);
+        assert_eq!(
+            AstBridge::detect_language(Path::new("app.jsx")),
+            LanguageId::Jsx
+        );
     }
 
     #[test]
     fn test_language_detection_typescript() {
-        assert_eq!(AstBridge::detect_language(Path::new("app.ts")), LanguageId::TypeScript);
+        assert_eq!(
+            AstBridge::detect_language(Path::new("app.ts")),
+            LanguageId::TypeScript
+        );
         // TSX is a separate language ID
-        assert_eq!(AstBridge::detect_language(Path::new("app.tsx")), LanguageId::Tsx);
+        assert_eq!(
+            AstBridge::detect_language(Path::new("app.tsx")),
+            LanguageId::Tsx
+        );
     }
 
     #[test]
     fn test_language_detection_unknown() {
-        assert_eq!(AstBridge::detect_language(Path::new("readme")), LanguageId::Unknown);
-        assert_eq!(AstBridge::detect_language(Path::new("file.xyz")), LanguageId::Unknown);
+        assert_eq!(
+            AstBridge::detect_language(Path::new("readme")),
+            LanguageId::Unknown
+        );
+        assert_eq!(
+            AstBridge::detect_language(Path::new("file.xyz")),
+            LanguageId::Unknown
+        );
     }
 
     // ==================== File Summary Tests ====================

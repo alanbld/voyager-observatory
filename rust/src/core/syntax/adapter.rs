@@ -4,9 +4,8 @@
 //! It handles parsing for 25 core languages with unified symbol extraction.
 
 use super::{
-    Language, NormalizedAst, PluginHook, ProviderStats, Symbol, SymbolKind,
-    SymbolVisibility, SyntaxError, SyntaxProvider, Import, ImportKind,
-    Location, Span, Parameter,
+    Import, ImportKind, Language, Location, NormalizedAst, Parameter, PluginHook, ProviderStats,
+    Span, Symbol, SymbolKind, SymbolVisibility, SyntaxError, SyntaxProvider,
 };
 use std::collections::HashMap;
 
@@ -67,6 +66,7 @@ impl Default for SyntaxRegistry {
 /// and provides normalized AST extraction.
 pub struct TreeSitterAdapter {
     /// Cached parsers (created lazily)
+    #[allow(dead_code)]
     parsers: std::sync::Mutex<HashMap<Language, tree_sitter::Parser>>,
 
     /// Registered plugin hooks
@@ -181,7 +181,12 @@ impl TreeSitterAdapter {
     // Language-Specific Extractors
     // ========================================================================
 
-    fn extract_rust_symbols(&self, ast: &mut NormalizedAst, node: tree_sitter::Node, source: &[u8]) {
+    fn extract_rust_symbols(
+        &self,
+        ast: &mut NormalizedAst,
+        node: tree_sitter::Node,
+        source: &[u8],
+    ) {
         let mut cursor = node.walk();
 
         for child in node.children(&mut cursor) {
@@ -190,7 +195,8 @@ impl TreeSitterAdapter {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
                         let visibility = self.rust_visibility(&child);
-                        let mut symbol = Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
                         symbol.visibility = visibility;
                         symbol.span = Some(self.node_span(child));
                         symbol.parameters = self.extract_rust_params(&child, source);
@@ -203,7 +209,8 @@ impl TreeSitterAdapter {
                 "struct_item" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Struct, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Struct, self.node_location(name_node));
                         symbol.visibility = self.rust_visibility(&child);
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
@@ -212,7 +219,8 @@ impl TreeSitterAdapter {
                 "enum_item" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Enum, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Enum, self.node_location(name_node));
                         symbol.visibility = self.rust_visibility(&child);
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
@@ -221,7 +229,8 @@ impl TreeSitterAdapter {
                 "trait_item" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Trait, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Trait, self.node_location(name_node));
                         symbol.visibility = self.rust_visibility(&child);
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
@@ -234,7 +243,8 @@ impl TreeSitterAdapter {
                 "mod_item" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Module, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Module, self.node_location(name_node));
                         symbol.visibility = self.rust_visibility(&child);
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
@@ -259,7 +269,8 @@ impl TreeSitterAdapter {
                 "type_alias" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::TypeAlias, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::TypeAlias, self.node_location(name_node));
                         symbol.visibility = self.rust_visibility(&child);
                         ast.symbols.push(symbol);
                     }
@@ -267,7 +278,8 @@ impl TreeSitterAdapter {
                 "macro_definition" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let symbol = Symbol::new(name, SymbolKind::Macro, self.node_location(name_node));
+                        let symbol =
+                            Symbol::new(name, SymbolKind::Macro, self.node_location(name_node));
                         ast.symbols.push(symbol);
                     }
                 }
@@ -294,7 +306,11 @@ impl TreeSitterAdapter {
                     if method.kind() == "function_item" {
                         if let Some(name_node) = method.child_by_field_name("name") {
                             let name = self.node_text(name_node, source);
-                            let mut symbol = Symbol::new(name, SymbolKind::Method, self.node_location(name_node));
+                            let mut symbol = Symbol::new(
+                                name,
+                                SymbolKind::Method,
+                                self.node_location(name_node),
+                            );
                             symbol.visibility = self.rust_visibility(&method);
                             symbol.parent = type_name.clone();
                             symbol.span = Some(self.node_span(method));
@@ -376,7 +392,8 @@ impl TreeSitterAdapter {
                         } else {
                             SymbolKind::Function
                         };
-                        let mut symbol = Symbol::new(name.clone(), kind, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name.clone(), kind, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         symbol.visibility = if name.starts_with('_') && !name.starts_with("__") {
                             SymbolVisibility::Private
@@ -391,7 +408,11 @@ impl TreeSitterAdapter {
                 "class_definition" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name.clone(), SymbolKind::Class, self.node_location(name_node));
+                        let mut symbol = Symbol::new(
+                            name.clone(),
+                            SymbolKind::Class,
+                            self.node_location(name_node),
+                        );
                         symbol.span = Some(self.node_span(child));
                         symbol.visibility = if name.starts_with('_') {
                             SymbolVisibility::Private
@@ -414,7 +435,11 @@ impl TreeSitterAdapter {
                         if left.kind() == "identifier" {
                             let name = self.node_text(left, source);
                             if name.chars().all(|c| c.is_uppercase() || c == '_') {
-                                let symbol = Symbol::new(name, SymbolKind::Constant, self.node_location(left));
+                                let symbol = Symbol::new(
+                                    name,
+                                    SymbolKind::Constant,
+                                    self.node_location(left),
+                                );
                                 ast.symbols.push(symbol);
                             }
                         }
@@ -443,7 +468,8 @@ impl TreeSitterAdapter {
                         } else {
                             SymbolKind::Method
                         };
-                        let mut symbol = Symbol::new(name.clone(), kind, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name.clone(), kind, self.node_location(name_node));
                         symbol.parent = Some(class_name.clone());
                         symbol.span = Some(self.node_span(child));
                         symbol.visibility = if name.starts_with('_') && !name.starts_with("__") {
@@ -459,11 +485,7 @@ impl TreeSitterAdapter {
         }
     }
 
-    fn extract_python_decorators(
-        &self,
-        node: &tree_sitter::Node,
-        source: &[u8],
-    ) -> Vec<String> {
+    fn extract_python_decorators(&self, node: &tree_sitter::Node, source: &[u8]) -> Vec<String> {
         let mut decorators = Vec::new();
         let mut cursor = node.walk();
 
@@ -476,7 +498,11 @@ impl TreeSitterAdapter {
         decorators
     }
 
-    fn extract_python_params(&self, func_node: &tree_sitter::Node, source: &[u8]) -> Vec<Parameter> {
+    fn extract_python_params(
+        &self,
+        func_node: &tree_sitter::Node,
+        source: &[u8],
+    ) -> Vec<Parameter> {
         let mut params = Vec::new();
 
         if let Some(params_node) = func_node.child_by_field_name("parameters") {
@@ -534,7 +560,12 @@ impl TreeSitterAdapter {
         params
     }
 
-    fn extract_python_import(&self, ast: &mut NormalizedAst, node: tree_sitter::Node, source: &[u8]) {
+    fn extract_python_import(
+        &self,
+        ast: &mut NormalizedAst,
+        node: tree_sitter::Node,
+        source: &[u8],
+    ) {
         let import = Import {
             source: self.node_text(node, source),
             kind: if node.kind() == "import_from_statement" {
@@ -558,7 +589,8 @@ impl TreeSitterAdapter {
                 "function_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         symbol.visibility = SymbolVisibility::Private;
                         ast.symbols.push(symbol);
@@ -567,7 +599,11 @@ impl TreeSitterAdapter {
                 "class_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name.clone(), SymbolKind::Class, self.node_location(name_node));
+                        let mut symbol = Symbol::new(
+                            name.clone(),
+                            SymbolKind::Class,
+                            self.node_location(name_node),
+                        );
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
 
@@ -578,7 +614,8 @@ impl TreeSitterAdapter {
                 "interface_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Interface, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Interface, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -586,7 +623,8 @@ impl TreeSitterAdapter {
                 "type_alias_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::TypeAlias, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::TypeAlias, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -594,7 +632,8 @@ impl TreeSitterAdapter {
                 "enum_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Enum, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Enum, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -641,7 +680,8 @@ impl TreeSitterAdapter {
                     "public_field_definition" | "field_definition" => {
                         if let Some(name_node) = child.child_by_field_name("name") {
                             let name = self.node_text(name_node, source);
-                            let mut symbol = Symbol::new(name, SymbolKind::Field, self.node_location(name_node));
+                            let mut symbol =
+                                Symbol::new(name, SymbolKind::Field, self.node_location(name_node));
                             symbol.parent = Some(class_name.clone());
                             ast.symbols.push(symbol);
                         }
@@ -659,7 +699,8 @@ impl TreeSitterAdapter {
                 "function_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
                         symbol.visibility = SymbolVisibility::Export;
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
@@ -668,7 +709,8 @@ impl TreeSitterAdapter {
                 "class_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Class, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Class, self.node_location(name_node));
                         symbol.visibility = SymbolVisibility::Export;
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
@@ -717,8 +759,17 @@ impl TreeSitterAdapter {
                 "function_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name.clone(), SymbolKind::Function, self.node_location(name_node));
-                        symbol.visibility = if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                        let mut symbol = Symbol::new(
+                            name.clone(),
+                            SymbolKind::Function,
+                            self.node_location(name_node),
+                        );
+                        symbol.visibility = if name
+                            .chars()
+                            .next()
+                            .map(|c| c.is_uppercase())
+                            .unwrap_or(false)
+                        {
                             SymbolVisibility::Public
                         } else {
                             SymbolVisibility::Private
@@ -730,8 +781,17 @@ impl TreeSitterAdapter {
                 "method_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name.clone(), SymbolKind::Method, self.node_location(name_node));
-                        symbol.visibility = if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                        let mut symbol = Symbol::new(
+                            name.clone(),
+                            SymbolKind::Method,
+                            self.node_location(name_node),
+                        );
+                        symbol.visibility = if name
+                            .chars()
+                            .next()
+                            .map(|c| c.is_uppercase())
+                            .unwrap_or(false)
+                        {
                             SymbolVisibility::Public
                         } else {
                             SymbolVisibility::Private
@@ -772,7 +832,12 @@ impl TreeSitterAdapter {
                         _ => SymbolKind::TypeAlias,
                     };
                     let mut symbol = Symbol::new(name.clone(), kind, self.node_location(name_node));
-                    symbol.visibility = if name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                    symbol.visibility = if name
+                        .chars()
+                        .next()
+                        .map(|c| c.is_uppercase())
+                        .unwrap_or(false)
+                    {
                         SymbolVisibility::Public
                     } else {
                         SymbolVisibility::Private
@@ -792,7 +857,11 @@ impl TreeSitterAdapter {
                 "class_declaration" | "class_definition" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name.clone(), SymbolKind::Class, self.node_location(name_node));
+                        let mut symbol = Symbol::new(
+                            name.clone(),
+                            SymbolKind::Class,
+                            self.node_location(name_node),
+                        );
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                         self.extract_jvm_class_members(ast, child, source, name);
@@ -801,7 +870,8 @@ impl TreeSitterAdapter {
                 "interface_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Interface, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Interface, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -809,7 +879,8 @@ impl TreeSitterAdapter {
                 "enum_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Enum, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Enum, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -844,7 +915,11 @@ impl TreeSitterAdapter {
                     "method_declaration" | "function_declaration" => {
                         if let Some(name_node) = child.child_by_field_name("name") {
                             let name = self.node_text(name_node, source);
-                            let mut symbol = Symbol::new(name, SymbolKind::Method, self.node_location(name_node));
+                            let mut symbol = Symbol::new(
+                                name,
+                                SymbolKind::Method,
+                                self.node_location(name_node),
+                            );
                             symbol.parent = Some(class_name.clone());
                             symbol.span = Some(self.node_span(child));
                             ast.symbols.push(symbol);
@@ -866,7 +941,11 @@ impl TreeSitterAdapter {
                             if decl.kind() == "variable_declarator" {
                                 if let Some(name_node) = decl.child_by_field_name("name") {
                                     let name = self.node_text(name_node, source);
-                                    let mut symbol = Symbol::new(name, SymbolKind::Field, self.node_location(name_node));
+                                    let mut symbol = Symbol::new(
+                                        name,
+                                        SymbolKind::Field,
+                                        self.node_location(name_node),
+                                    );
                                     symbol.parent = Some(class_name.clone());
                                     ast.symbols.push(symbol);
                                 }
@@ -888,7 +967,11 @@ impl TreeSitterAdapter {
                     if let Some(declarator) = child.child_by_field_name("declarator") {
                         if let Some(name_node) = declarator.child_by_field_name("declarator") {
                             let name = self.node_text(name_node, source);
-                            let mut symbol = Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
+                            let mut symbol = Symbol::new(
+                                name,
+                                SymbolKind::Function,
+                                self.node_location(name_node),
+                            );
                             symbol.span = Some(self.node_span(child));
                             ast.symbols.push(symbol);
                         }
@@ -897,7 +980,8 @@ impl TreeSitterAdapter {
                 "struct_specifier" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Struct, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Struct, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -905,7 +989,8 @@ impl TreeSitterAdapter {
                 "enum_specifier" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Enum, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Enum, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -913,7 +998,11 @@ impl TreeSitterAdapter {
                 "type_definition" => {
                     if let Some(declarator) = child.child_by_field_name("declarator") {
                         let name = self.node_text(declarator, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::TypeAlias, self.node_location(declarator));
+                        let mut symbol = Symbol::new(
+                            name,
+                            SymbolKind::TypeAlias,
+                            self.node_location(declarator),
+                        );
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -932,7 +1021,8 @@ impl TreeSitterAdapter {
                 "preproc_def" | "preproc_function_def" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let symbol = Symbol::new(name, SymbolKind::Macro, self.node_location(name_node));
+                        let symbol =
+                            Symbol::new(name, SymbolKind::Macro, self.node_location(name_node));
                         ast.symbols.push(symbol);
                     }
                 }
@@ -941,12 +1031,22 @@ impl TreeSitterAdapter {
         }
     }
 
-    fn extract_csharp_symbols(&self, ast: &mut NormalizedAst, node: tree_sitter::Node, source: &[u8]) {
+    fn extract_csharp_symbols(
+        &self,
+        ast: &mut NormalizedAst,
+        node: tree_sitter::Node,
+        source: &[u8],
+    ) {
         // Similar to JVM but with C# specific nodes
         self.extract_jvm_symbols(ast, node, source);
     }
 
-    fn extract_ruby_symbols(&self, ast: &mut NormalizedAst, node: tree_sitter::Node, source: &[u8]) {
+    fn extract_ruby_symbols(
+        &self,
+        ast: &mut NormalizedAst,
+        node: tree_sitter::Node,
+        source: &[u8],
+    ) {
         let mut cursor = node.walk();
 
         for child in node.children(&mut cursor) {
@@ -954,7 +1054,8 @@ impl TreeSitterAdapter {
                 "method" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -962,7 +1063,8 @@ impl TreeSitterAdapter {
                 "class" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Class, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Class, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -970,7 +1072,8 @@ impl TreeSitterAdapter {
                 "module" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Module, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Module, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -988,7 +1091,8 @@ impl TreeSitterAdapter {
                 "function_definition" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -996,7 +1100,8 @@ impl TreeSitterAdapter {
                 "class_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Class, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Class, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -1004,7 +1109,8 @@ impl TreeSitterAdapter {
                 "interface_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Interface, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Interface, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -1012,7 +1118,8 @@ impl TreeSitterAdapter {
                 "trait_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Trait, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Trait, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -1022,7 +1129,12 @@ impl TreeSitterAdapter {
         }
     }
 
-    fn extract_swift_symbols(&self, ast: &mut NormalizedAst, node: tree_sitter::Node, source: &[u8]) {
+    fn extract_swift_symbols(
+        &self,
+        ast: &mut NormalizedAst,
+        node: tree_sitter::Node,
+        source: &[u8],
+    ) {
         let mut cursor = node.walk();
 
         for child in node.children(&mut cursor) {
@@ -1030,7 +1142,8 @@ impl TreeSitterAdapter {
                 "function_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -1038,7 +1151,8 @@ impl TreeSitterAdapter {
                 "class_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Class, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Class, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -1046,7 +1160,8 @@ impl TreeSitterAdapter {
                 "struct_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Struct, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Struct, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -1054,7 +1169,8 @@ impl TreeSitterAdapter {
                 "protocol_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Interface, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Interface, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -1062,7 +1178,8 @@ impl TreeSitterAdapter {
                 "enum_declaration" => {
                     if let Some(name_node) = child.child_by_field_name("name") {
                         let name = self.node_text(name_node, source);
-                        let mut symbol = Symbol::new(name, SymbolKind::Enum, self.node_location(name_node));
+                        let mut symbol =
+                            Symbol::new(name, SymbolKind::Enum, self.node_location(name_node));
                         symbol.span = Some(self.node_span(child));
                         ast.symbols.push(symbol);
                     }
@@ -1087,7 +1204,8 @@ impl TreeSitterAdapter {
             if kind_str.contains("function") || kind_str.contains("method") {
                 if let Some(name_node) = child.child_by_field_name("name") {
                     let name = self.node_text(name_node, source);
-                    let mut symbol = Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
+                    let mut symbol =
+                        Symbol::new(name, SymbolKind::Function, self.node_location(name_node));
                     symbol.span = Some(self.node_span(child));
                     ast.symbols.push(symbol);
                 }

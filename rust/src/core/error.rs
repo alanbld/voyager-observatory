@@ -2,8 +2,8 @@
 //!
 //! This module provides structured error handling using thiserror.
 
-use thiserror::Error;
 use std::path::PathBuf;
+use thiserror::Error;
 
 /// Result type alias for encoder operations
 pub type Result<T> = std::result::Result<T, EncoderError>;
@@ -271,13 +271,28 @@ mod tests {
     fn test_all_error_variants_display() {
         // Comprehensive test of all error variant displays
         let errors: Vec<EncoderError> = vec![
-            EncoderError::DirectoryNotFound { path: PathBuf::from("/dir") },
-            EncoderError::FileNotFound { path: PathBuf::from("/file") },
-            EncoderError::InvalidConfig { message: "msg".to_string() },
-            EncoderError::LensNotFound { name: "lens".to_string() },
-            EncoderError::InvalidZoomTarget { target: "target".to_string() },
-            EncoderError::BudgetExceeded { used: 100, budget: 50 },
-            EncoderError::XmlError { message: "xml msg".to_string() },
+            EncoderError::DirectoryNotFound {
+                path: PathBuf::from("/dir"),
+            },
+            EncoderError::FileNotFound {
+                path: PathBuf::from("/file"),
+            },
+            EncoderError::InvalidConfig {
+                message: "msg".to_string(),
+            },
+            EncoderError::LensNotFound {
+                name: "lens".to_string(),
+            },
+            EncoderError::InvalidZoomTarget {
+                target: "target".to_string(),
+            },
+            EncoderError::BudgetExceeded {
+                used: 100,
+                budget: 50,
+            },
+            EncoderError::XmlError {
+                message: "xml msg".to_string(),
+            },
         ];
 
         for err in errors {

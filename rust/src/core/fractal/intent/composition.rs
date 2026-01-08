@@ -8,10 +8,8 @@ use serde::{Deserialize, Serialize};
 use crate::core::fractal::{ContextLayer, FeatureVector};
 
 use super::primitives::{
-    NoiseFilter, NoiseFilterParams,
-    RelevanceScorer, RelevanceScorerParams,
-    ExplorationPlanner, ExplorationPlannerParams,
-    CognitivePrimitive, ConceptType, ScoredElement, PlannedStep,
+    CognitivePrimitive, ConceptType, ExplorationPlanner, ExplorationPlannerParams, NoiseFilter,
+    NoiseFilterParams, PlannedStep, RelevanceScorer, RelevanceScorerParams, ScoredElement,
 };
 
 // =============================================================================
@@ -48,16 +46,19 @@ impl ExplorationIntent {
     /// Get description
     pub fn description(&self) -> &'static str {
         match self {
-            ExplorationIntent::BusinessLogic =>
-                "Focus on calculations, validations, and decision logic",
-            ExplorationIntent::Debugging =>
-                "Focus on error handling, logging, and state changes",
-            ExplorationIntent::Onboarding =>
-                "Focus on architecture, entry points, and documentation",
-            ExplorationIntent::SecurityReview =>
-                "Focus on validation, authentication, and data handling",
-            ExplorationIntent::MigrationAssessment =>
-                "Focus on external dependencies and platform-specific code",
+            ExplorationIntent::BusinessLogic => {
+                "Focus on calculations, validations, and decision logic"
+            }
+            ExplorationIntent::Debugging => "Focus on error handling, logging, and state changes",
+            ExplorationIntent::Onboarding => {
+                "Focus on architecture, entry points, and documentation"
+            }
+            ExplorationIntent::SecurityReview => {
+                "Focus on validation, authentication, and data handling"
+            }
+            ExplorationIntent::MigrationAssessment => {
+                "Focus on external dependencies and platform-specific code"
+            }
         }
     }
 }
@@ -223,21 +224,18 @@ impl IntentComposition {
                     "stub_".to_string(),
                     "fake_".to_string(),
                     "internal_".to_string(),
-                    "__".to_string(),  // Double underscore = private internals
+                    "__".to_string(), // Double underscore = private internals
                 ],
                 // For onboarding, we want to filter:
                 // - Tests (they're examples but can overwhelm)
                 // - Low-level infrastructure (too much detail)
                 // - Logging (not important for understanding)
-                filter_concept_types: vec![
-                    ConceptType::Testing,
-                    ConceptType::Logging,
-                ],
-                min_relevance_threshold: 0.25,  // Higher threshold for cleaner onboarding
+                filter_concept_types: vec![ConceptType::Testing, ConceptType::Logging],
+                min_relevance_threshold: 0.25, // Higher threshold for cleaner onboarding
             },
             RelevanceScorerParams::onboarding(),
             ExplorationPlannerParams {
-                max_elements: 25,  // Slightly more elements for comprehensive onboarding
+                max_elements: 25, // Slightly more elements for comprehensive onboarding
                 time_budget_minutes: 60,
                 min_relevance: 0.3,
                 group_related: true,
@@ -320,7 +318,9 @@ impl IntentComposition {
         let relevant_count = scored.len();
 
         // Step 3: Plan exploration
-        let planned = self.exploration_planner.apply(&scored, &self.planner_params);
+        let planned = self
+            .exploration_planner
+            .apply(&scored, &self.planner_params);
 
         // Convert to output format
         let exploration_path: Vec<ExplorationStep> = planned
@@ -408,12 +408,14 @@ impl IntentComposition {
         let mut insights = Vec::new();
 
         // Insight 1: Concept type distribution
-        let mut type_counts: std::collections::HashMap<ConceptType, usize> = std::collections::HashMap::new();
+        let mut type_counts: std::collections::HashMap<ConceptType, usize> =
+            std::collections::HashMap::new();
         for elem in scored {
             *type_counts.entry(elem.concept_type).or_insert(0) += 1;
         }
 
-        let top_type = type_counts.iter()
+        let top_type = type_counts
+            .iter()
             .max_by_key(|(_, count)| *count)
             .map(|(t, _)| *t);
 
@@ -422,9 +424,7 @@ impl IntentComposition {
         }
 
         // Insight 2: High-relevance elements
-        let high_relevance: Vec<_> = path.iter()
-            .filter(|s| s.relevance_score > 0.8)
-            .collect();
+        let high_relevance: Vec<_> = path.iter().filter(|s| s.relevance_score > 0.8).collect();
 
         if !high_relevance.is_empty() {
             insights.push(format!(
@@ -438,18 +438,19 @@ impl IntentComposition {
             if first.decision == "read" {
                 insights.push(format!(
                     "Recommended starting point: {} ({})",
-                    first.symbol,
-                    first.concept_type
+                    first.symbol, first.concept_type
                 ));
             }
         }
 
         // Insight 4: Time distribution
-        let read_time: u32 = path.iter()
+        let read_time: u32 = path
+            .iter()
             .filter(|s| s.decision == "read")
             .map(|s| s.estimated_minutes)
             .sum();
-        let skim_time: u32 = path.iter()
+        let skim_time: u32 = path
+            .iter()
             .filter(|s| s.decision == "skim")
             .map(|s| s.estimated_minutes)
             .sum();
@@ -512,10 +513,16 @@ mod tests {
         let comp = IntentComposition::business_logic();
 
         // Should filter tests
-        assert!(comp.noise_params.filter_name_patterns.contains(&"test_".to_string()));
+        assert!(comp
+            .noise_params
+            .filter_name_patterns
+            .contains(&"test_".to_string()));
 
         // Should weight calculations high
-        let calc_weight = comp.relevance_params.concept_weights.iter()
+        let calc_weight = comp
+            .relevance_params
+            .concept_weights
+            .iter()
             .find(|(ct, _)| *ct == ConceptType::Calculation)
             .map(|(_, w)| *w);
         assert!(calc_weight.unwrap_or(0.0) > 0.8);
@@ -526,10 +533,16 @@ mod tests {
         let comp = IntentComposition::debugging();
 
         // Should NOT filter logging for debugging
-        assert!(!comp.noise_params.filter_concept_types.contains(&ConceptType::Logging));
+        assert!(!comp
+            .noise_params
+            .filter_concept_types
+            .contains(&ConceptType::Logging));
 
         // Should weight error handling high
-        let error_weight = comp.relevance_params.concept_weights.iter()
+        let error_weight = comp
+            .relevance_params
+            .concept_weights
+            .iter()
             .find(|(ct, _)| *ct == ConceptType::ErrorHandling)
             .map(|(_, w)| *w);
         assert!(error_weight.unwrap_or(0.0) > 0.8);

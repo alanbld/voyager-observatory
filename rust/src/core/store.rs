@@ -9,10 +9,10 @@
 //! - `ContextStore`: Manages file utilities with persistence and privacy
 //! - Integration with `LensManager` via Priority Blend formula
 
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
 
 /// Default EMA alpha coefficient for utility score updates
 /// Higher alpha = more weight on recent feedback, faster adaptation
@@ -163,9 +163,7 @@ impl ContextStore {
 
     /// Get utility score for a file (returns 0.5 default if not found)
     pub fn get_utility_score(&self, path: &str) -> f64 {
-        self.get_utility(path)
-            .map(|u| u.score)
-            .unwrap_or(0.5)
+        self.get_utility(path).map(|u| u.score).unwrap_or(0.5)
     }
 
     /// Report utility for a file
@@ -248,7 +246,8 @@ impl ContextStore {
             std::fs::create_dir_all(parent)?;
         }
 
-        let json = self.to_json()
+        let json = self
+            .to_json()
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
         std::fs::write(path, json)
@@ -310,7 +309,11 @@ mod tests {
         }
 
         // After 10 updates, should be close to 1.0
-        assert!(utility.score > 0.95, "Score should converge to 1.0, got {}", utility.score);
+        assert!(
+            utility.score > 0.95,
+            "Score should converge to 1.0, got {}",
+            utility.score
+        );
     }
 
     #[test]
@@ -323,7 +326,11 @@ mod tests {
         }
 
         // After 10 updates, should be close to 0.0
-        assert!(utility.score < 0.05, "Score should converge to 0.0, got {}", utility.score);
+        assert!(
+            utility.score < 0.05,
+            "Score should converge to 0.0, got {}",
+            utility.score
+        );
     }
 
     #[test]
@@ -335,7 +342,11 @@ mod tests {
             utility.update(0.8, 0.3);
         }
 
-        assert!((utility.score - 0.8).abs() < 0.01, "Should converge to 0.8, got {}", utility.score);
+        assert!(
+            (utility.score - 0.8).abs() < 0.01,
+            "Should converge to 0.8, got {}",
+            utility.score
+        );
     }
 
     #[test]
@@ -349,8 +360,11 @@ mod tests {
         }
 
         // Should be somewhere in the middle, slightly below 0.5 due to order
-        assert!(utility.score > 0.3 && utility.score < 0.7,
-                "Score should be in middle range, got {}", utility.score);
+        assert!(
+            utility.score > 0.3 && utility.score < 0.7,
+            "Score should be in middle range, got {}",
+            utility.score
+        );
     }
 
     #[test]
@@ -475,7 +489,11 @@ mod tests {
         // Blend with static priority 50
         // Score ~1.0, so: (50 * 0.7) + (1.0 * 100 * 0.3) = 35 + 30 = 65
         let blended = store.blend_priority("important.py", 50);
-        assert!(blended >= 60 && blended <= 70, "Expected ~65, got {}", blended);
+        assert!(
+            blended >= 60 && blended <= 70,
+            "Expected ~65, got {}",
+            blended
+        );
     }
 
     #[test]
@@ -490,7 +508,11 @@ mod tests {
         // Blend with static priority 50
         // Score ~0.0, so: (50 * 0.7) + (0.0 * 100 * 0.3) = 35 + 0 = 35
         let blended = store.blend_priority("useless.txt", 50);
-        assert!(blended >= 30 && blended <= 40, "Expected ~35, got {}", blended);
+        assert!(
+            blended >= 30 && blended <= 40,
+            "Expected ~35, got {}",
+            blended
+        );
     }
 
     // ============================================================
@@ -597,7 +619,10 @@ mod tests {
     fn test_default_path() {
         let project_root = Path::new("/home/user/project");
         let store_path = ContextStore::default_path(project_root);
-        assert_eq!(store_path, Path::new("/home/user/project/.pm_encoder/context_store.json"));
+        assert_eq!(
+            store_path,
+            Path::new("/home/user/project/.pm_encoder/context_store.json")
+        );
     }
 
     #[test]
@@ -651,6 +676,10 @@ mod tests {
         }
 
         let score = store.get_utility_score("hot_file.py");
-        assert!(score > 0.55, "Multiple zooms should increase score, got {}", score);
+        assert!(
+            score > 0.55,
+            "Multiple zooms should increase score, got {}",
+            score
+        );
     }
 }

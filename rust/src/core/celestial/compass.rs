@@ -9,7 +9,7 @@
 //! 2. **Exploration Hints**: Based on concept distribution
 //! 3. **Skim Suggestions**: For low-utility (faded) Nebulae
 
-use super::{Nebula, CelestialMap, Star};
+use super::{CelestialMap, Nebula, Star};
 
 // =============================================================================
 // Navigation Suggestion
@@ -68,11 +68,14 @@ impl NavigationSuggestion {
             SuggestionAction::DeepDive => "🏊",
         };
 
-        let target = self.target_path.as_ref()
+        let target = self
+            .target_path
+            .as_ref()
             .map(|p| format!(" → {}", p))
             .unwrap_or_default();
 
-        format!("{} {} [{}]{}: {}",
+        format!(
+            "{} {} [{}]{}: {}",
             icon,
             self.action.verb(),
             self.nebula_name,
@@ -201,13 +204,15 @@ impl NavigationCompass {
         // Handle ungrouped stars if significant
         if !map.ungrouped_stars.is_empty() {
             if let Some(brightest) = self.find_brightest(&map.ungrouped_stars) {
-                suggestions.push(NavigationSuggestion::new(
-                    "Ungrouped",
-                    SuggestionAction::Explore,
-                    "Standalone file with high utility",
-                )
-                .with_target(&brightest.path)
-                .with_priority(3));
+                suggestions.push(
+                    NavigationSuggestion::new(
+                        "Ungrouped",
+                        SuggestionAction::Explore,
+                        "Standalone file with high utility",
+                    )
+                    .with_target(&brightest.path)
+                    .with_priority(3),
+                );
             }
         }
 
@@ -227,12 +232,14 @@ impl NavigationCompass {
             if !self.include_faded {
                 return None;
             }
-            return Some(NavigationSuggestion::new(
-                &nebula.name.name,
-                SuggestionAction::Skim,
-                "Low utility cluster - skim for context only",
-            )
-            .with_priority(2));
+            return Some(
+                NavigationSuggestion::new(
+                    &nebula.name.name,
+                    SuggestionAction::Skim,
+                    "Low utility cluster - skim for context only",
+                )
+                .with_priority(2),
+            );
         }
 
         // Find brightest star
@@ -242,13 +249,19 @@ impl NavigationCompass {
         let (action, reason, priority) = if brightest.brightness >= 0.9 {
             (
                 SuggestionAction::StartHere,
-                format!("Brightest star in {} - excellent entry point", nebula.name.name),
+                format!(
+                    "Brightest star in {} - excellent entry point",
+                    nebula.name.name
+                ),
                 9,
             )
         } else if nebula.cohesion >= 0.8 {
             (
                 SuggestionAction::DeepDive,
-                format!("Highly cohesive {} cluster - deep analysis recommended", nebula.name.name),
+                format!(
+                    "Highly cohesive {} cluster - deep analysis recommended",
+                    nebula.name.name
+                ),
                 7,
             )
         } else if brightest.brightness >= 0.7 {
@@ -265,14 +278,17 @@ impl NavigationCompass {
             )
         };
 
-        Some(NavigationSuggestion::new(&nebula.name.name, action, reason)
-            .with_target(&brightest.path)
-            .with_priority(priority))
+        Some(
+            NavigationSuggestion::new(&nebula.name.name, action, reason)
+                .with_target(&brightest.path)
+                .with_priority(priority),
+        )
     }
 
     /// Find the brightest star in a list.
     fn find_brightest<'a>(&self, stars: &'a [Star]) -> Option<&'a Star> {
-        stars.iter()
+        stars
+            .iter()
             .filter(|s| s.brightness > 0.0)
             .max_by(|a, b| a.brightness.partial_cmp(&b.brightness).unwrap())
     }
@@ -282,20 +298,20 @@ impl NavigationCompass {
         let mut hints = Vec::new();
 
         // Check for entry points
-        let entry_nebulae: Vec<_> = map.nebulae.iter()
+        let entry_nebulae: Vec<_> = map
+            .nebulae
+            .iter()
             .filter(|n| {
                 let name_lower = n.name.name.to_lowercase();
-                name_lower.contains("api") ||
-                name_lower.contains("handler") ||
-                name_lower.contains("endpoint") ||
-                name_lower.contains("cli")
+                name_lower.contains("api")
+                    || name_lower.contains("handler")
+                    || name_lower.contains("endpoint")
+                    || name_lower.contains("cli")
             })
             .collect();
 
         if !entry_nebulae.is_empty() {
-            let names: Vec<_> = entry_nebulae.iter()
-                .map(|n| n.name.name.as_str())
-                .collect();
+            let names: Vec<_> = entry_nebulae.iter().map(|n| n.name.name.as_str()).collect();
             hints.push(ExplorationHint::new(
                 format!("Entry points found: {}", names.join(", ")),
                 HintCategory::EntryPoints,
@@ -321,7 +337,9 @@ impl NavigationCompass {
         }
 
         // Check for test coverage
-        let test_nebulae: Vec<_> = map.nebulae.iter()
+        let test_nebulae: Vec<_> = map
+            .nebulae
+            .iter()
             .filter(|n| n.name.name.to_lowercase().contains("test"))
             .collect();
 
@@ -347,9 +365,13 @@ impl NavigationCompass {
 
         let mut output = String::new();
         output.push_str("\n");
-        output.push_str("================================================================================\n");
+        output.push_str(
+            "================================================================================\n",
+        );
         output.push_str("                         NAVIGATION SUGGESTIONS\n");
-        output.push_str("================================================================================\n\n");
+        output.push_str(
+            "================================================================================\n\n",
+        );
 
         // Navigation suggestions
         if !suggestions.is_empty() {
@@ -379,10 +401,12 @@ impl NavigationCompass {
         }
 
         // Summary
-        let bright_count = suggestions.iter()
+        let bright_count = suggestions
+            .iter()
             .filter(|s| s.action == SuggestionAction::StartHere)
             .count();
-        let skim_count = suggestions.iter()
+        let skim_count = suggestions
+            .iter()
             .filter(|s| s.action == SuggestionAction::Skim)
             .count();
 
@@ -402,7 +426,7 @@ impl NavigationCompass {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::celestial::{NebulaName, NamingStrategy};
+    use crate::core::celestial::{NamingStrategy, NebulaName};
     use crate::core::fractal::semantic::UniversalConceptType;
 
     fn create_test_star(path: &str, brightness: f64) -> Star {

@@ -13,22 +13,34 @@
 //! pm_encoder --server
 //! ```
 
-use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::io::{self, BufRead, Write};
+use std::path::PathBuf;
 
 use crate::core::{
-    ContextEngine, EncoderConfig, ZoomConfig, ZoomTarget, ZoomDepth,
-    SymbolResolver, CallGraphAnalyzer, ZoomSuggestion,
-    ZoomSessionStore, ContextStore, DEFAULT_ALPHA, OutputFormat,
-    SkeletonMode,
-    // Phase 2: Rich Context
-    UsageFinder, RelatedContext,
+    CallGraphAnalyzer,
+    ContextEngine,
+    ContextStore,
+    EncoderConfig,
+    ExplorationIntent,
+    ExplorerConfig,
     // Phase 2 Week 2: Intent-Driven Exploration
-    IntentExplorer, ExplorerConfig, ExplorationIntent,
+    IntentExplorer,
+    OutputFormat,
+    RelatedContext,
+    SkeletonMode,
+    SymbolResolver,
+    // Phase 2: Rich Context
+    UsageFinder,
+    ZoomConfig,
+    ZoomDepth,
+    ZoomSessionStore,
+    ZoomSuggestion,
+    ZoomTarget,
+    DEFAULT_ALPHA,
 };
-use crate::{LensManager, parse_token_budget};
+use crate::{parse_token_budget, LensManager};
 
 // ============================================================================
 // JSON-RPC 2.0 Types
@@ -101,24 +113,30 @@ const INTERNAL_ERROR: i32 = -32603;
 
 /// Create a successful MCP tool response with isError: false
 fn tool_success(id: Value, text: String) -> JsonRpcResponse {
-    JsonRpcResponse::success(id, json!({
-        "content": [{
-            "type": "text",
-            "text": text
-        }],
-        "isError": false
-    }))
+    JsonRpcResponse::success(
+        id,
+        json!({
+            "content": [{
+                "type": "text",
+                "text": text
+            }],
+            "isError": false
+        }),
+    )
 }
 
 /// Create an error MCP tool response with isError: true
 fn tool_error(id: Value, message: String) -> JsonRpcResponse {
-    JsonRpcResponse::success(id, json!({
-        "content": [{
-            "type": "text",
-            "text": message
-        }],
-        "isError": true
-    }))
+    JsonRpcResponse::success(
+        id,
+        json!({
+            "content": [{
+                "type": "text",
+                "text": message
+            }],
+            "isError": true
+        }),
+    )
 }
 
 // ============================================================================
@@ -155,14 +173,14 @@ impl McpServer {
             // Parse and handle request - may return None for notifications
             if let Some(response) = self.handle_request(&line) {
                 // Write response only for requests (not notifications)
-                let response_str = serde_json::to_string(&response)
-                    .unwrap_or_else(|e| {
-                        serde_json::to_string(&JsonRpcResponse::error(
-                            Value::Null,
-                            INTERNAL_ERROR,
-                            format!("Serialization error: {}", e),
-                        )).unwrap()
-                    });
+                let response_str = serde_json::to_string(&response).unwrap_or_else(|e| {
+                    serde_json::to_string(&JsonRpcResponse::error(
+                        Value::Null,
+                        INTERNAL_ERROR,
+                        format!("Serialization error: {}", e),
+                    ))
+                    .unwrap()
+                });
 
                 writeln!(stdout, "{}", response_str)?;
                 stdout.flush()?;
@@ -238,16 +256,19 @@ impl McpServer {
         self.initialized = true;
         eprintln!("[MCP] Initialized");
 
-        JsonRpcResponse::success(id, json!({
-            "protocolVersion": "2024-11-05",
-            "capabilities": {
-                "tools": {}
-            },
-            "serverInfo": {
-                "name": "pm_encoder",
-                "version": crate::version()
-            }
-        }))
+        JsonRpcResponse::success(
+            id,
+            json!({
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": {}
+                },
+                "serverInfo": {
+                    "name": "pm_encoder",
+                    "version": crate::version()
+                }
+            }),
+        )
     }
 
     fn handle_tools_list(&self, id: Value) -> JsonRpcResponse {
@@ -392,11 +413,7 @@ impl McpServer {
         let params = match params {
             Some(p) => p,
             None => {
-                return JsonRpcResponse::error(
-                    id,
-                    INVALID_PARAMS,
-                    "Missing params".to_string(),
-                );
+                return JsonRpcResponse::error(id, INVALID_PARAMS, "Missing params".to_string());
             }
         };
 
@@ -410,11 +427,9 @@ impl McpServer {
             "session_create" => self.tool_session_create(id, arguments),
             "report_utility" => self.tool_report_utility(id, arguments),
             "explore_with_intent" => self.tool_explore_with_intent(id, arguments),
-            _ => JsonRpcResponse::error(
-                id,
-                METHOD_NOT_FOUND,
-                format!("Unknown tool: {}", tool_name),
-            ),
+            _ => {
+                JsonRpcResponse::error(id, METHOD_NOT_FOUND, format!("Unknown tool: {}", tool_name))
+            }
         }
     }
 
@@ -424,15 +439,22 @@ impl McpServer {
 
     #[allow(clippy::field_reassign_with_default)]
     fn tool_get_context(&self, id: Value, args: Value) -> JsonRpcResponse {
-        let path = args.get("path")
+        let path = args
+            .get("path")
             .and_then(|v| v.as_str())
             .map(PathBuf::from)
             .unwrap_or_else(|| self.project_root.clone());
 
         let lens = args.get("lens").and_then(|v| v.as_str());
         let token_budget = args.get("token_budget").and_then(|v| v.as_str());
-        let format = args.get("format").and_then(|v| v.as_str()).unwrap_or("plusminus");
-        let skeleton = args.get("skeleton").and_then(|v| v.as_str()).unwrap_or("auto");
+        let format = args
+            .get("format")
+            .and_then(|v| v.as_str())
+            .unwrap_or("plusminus");
+        let skeleton = args
+            .get("skeleton")
+            .and_then(|v| v.as_str())
+            .unwrap_or("auto");
 
         // TODO: Load project .pm_encoder_config.json when core::EncoderConfig supports Deserialize
         // For now, use defaults - the lens will override patterns anyway
@@ -500,7 +522,8 @@ impl McpServer {
         };
 
         // Parse optional path override (default: server's project_root)
-        let project_root = args.get("path")
+        let project_root = args
+            .get("path")
             .and_then(|v| v.as_str())
             .map(PathBuf::from)
             .unwrap_or_else(|| self.project_root.clone());
@@ -511,7 +534,10 @@ impl McpServer {
             return JsonRpcResponse::error(
                 id,
                 INVALID_PARAMS,
-                format!("Invalid target format '{}'. Expected <type>=<value>", target_str),
+                format!(
+                    "Invalid target format '{}'. Expected <type>=<value>",
+                    target_str
+                ),
             );
         }
 
@@ -530,19 +556,34 @@ impl McpServer {
                     if let Some(dash_pos) = range.find('-') {
                         let start = range[..dash_pos].parse().ok();
                         let end = range[dash_pos + 1..].parse().ok();
-                        ZoomTarget::File { path, start_line: start, end_line: end }
+                        ZoomTarget::File {
+                            path,
+                            start_line: start,
+                            end_line: end,
+                        }
                     } else {
-                        ZoomTarget::File { path, start_line: range.parse().ok(), end_line: None }
+                        ZoomTarget::File {
+                            path,
+                            start_line: range.parse().ok(),
+                            end_line: None,
+                        }
                     }
                 } else {
-                    ZoomTarget::File { path: target_value.to_string(), start_line: None, end_line: None }
+                    ZoomTarget::File {
+                        path: target_value.to_string(),
+                        start_line: None,
+                        end_line: None,
+                    }
                 }
             }
             _ => {
                 return JsonRpcResponse::error(
                     id,
                     INVALID_PARAMS,
-                    format!("Unknown target type '{}'. Use: function, class, module, file", target_type),
+                    format!(
+                        "Unknown target type '{}'. Use: function, class, module, file",
+                        target_type
+                    ),
                 );
             }
         };
@@ -604,7 +645,8 @@ impl McpServer {
                 let mut callees: Vec<ZoomSuggestion> = Vec::new();
                 if !valid_calls.is_empty() {
                     let mut seen = std::collections::HashSet::new();
-                    callees = valid_calls.iter()
+                    callees = valid_calls
+                        .iter()
                         .filter(|(call, _)| {
                             if let Some(ref orig) = resolved_name {
                                 if &call.name == orig {
@@ -617,10 +659,14 @@ impl McpServer {
                         .collect();
 
                     if !callees.is_empty() {
-                        let menu_items: Vec<String> = callees.iter()
+                        let menu_items: Vec<String> = callees
+                            .iter()
                             .map(|s| format!("  {}", s.to_xml()))
                             .collect();
-                        output.push_str(&format!("\n<zoom_menu>\n{}\n</zoom_menu>", menu_items.join("\n")));
+                        output.push_str(&format!(
+                            "\n<zoom_menu>\n{}\n</zoom_menu>",
+                            menu_items.join("\n")
+                        ));
                     }
                 }
 
@@ -630,8 +676,8 @@ impl McpServer {
                     let callers = usage_finder.find_usages(
                         name,
                         &project_root,
-                        None,  // definition_path - let it search everywhere
-                        None,  // definition_line
+                        None, // definition_path - let it search everywhere
+                        None, // definition_line
                     );
 
                     if !callers.is_empty() || !callees.is_empty() {
@@ -655,7 +701,8 @@ impl McpServer {
 
         match ZoomSessionStore::load(&session_path) {
             Ok(store) => {
-                let sessions: Vec<Value> = store.list_sessions_with_meta()
+                let sessions: Vec<Value> = store
+                    .list_sessions_with_meta()
                     .iter()
                     .map(|(name, is_active, last_accessed)| {
                         json!({
@@ -666,7 +713,10 @@ impl McpServer {
                     })
                     .collect();
 
-                tool_success(id, serde_json::to_string_pretty(&sessions).unwrap_or_default())
+                tool_success(
+                    id,
+                    serde_json::to_string_pretty(&sessions).unwrap_or_default(),
+                )
             }
             Err(e) => tool_error(id, format!("Failed to load sessions: {}", e)),
         }
@@ -695,7 +745,10 @@ impl McpServer {
             }
             store.session_count()
         }) {
-            Ok(count) => tool_success(id, format!("Created session '{}'. Total sessions: {}", name, count)),
+            Ok(count) => tool_success(
+                id,
+                format!("Created session '{}'. Total sessions: {}", name, count),
+            ),
             Err(e) => tool_error(id, format!("Failed to create session: {}", e)),
         }
     }
@@ -730,7 +783,10 @@ impl McpServer {
             }
         };
 
-        let reason = args.get("reason").and_then(|v| v.as_str()).unwrap_or("MCP feedback");
+        let reason = args
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("MCP feedback");
 
         let store_path = ContextStore::default_path(&self.project_root);
         let mut store = ContextStore::load_from_file(&store_path);
@@ -742,7 +798,13 @@ impl McpServer {
         }
 
         let current = store.get_utility_score(path);
-        tool_success(id, format!("Utility reported for '{}': {:.2} → {:.2} ({})", path, utility, current, reason))
+        tool_success(
+            id,
+            format!(
+                "Utility reported for '{}': {:.2} → {:.2} ({})",
+                path, utility, current, reason
+            ),
+        )
     }
 
     fn tool_explore_with_intent(&self, id: Value, args: Value) -> JsonRpcResponse {
@@ -767,24 +829,25 @@ impl McpServer {
         };
 
         // Parse optional path override
-        let project_root = args.get("path")
+        let project_root = args
+            .get("path")
             .and_then(|v| v.as_str())
             .map(PathBuf::from)
             .unwrap_or_else(|| self.project_root.clone());
 
         // Parse optional parameters
-        let include_tests = args.get("include_tests")
+        let include_tests = args
+            .get("include_tests")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        let max_files = args.get("max_files")
+        let max_files = args
+            .get("max_files")
             .and_then(|v| v.as_u64())
             .map(|v| v as usize)
             .unwrap_or(200);
 
-        let format = args.get("format")
-            .and_then(|v| v.as_str())
-            .unwrap_or("xml");
+        let format = args.get("format").and_then(|v| v.as_str()).unwrap_or("xml");
 
         // Build explorer config
         let config = ExplorerConfig {
@@ -847,7 +910,9 @@ mod tests {
     #[test]
     fn test_handle_initialize() {
         let mut server = McpServer::new(PathBuf::from("/tmp"));
-        let resp = server.handle_request(r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#).unwrap();
+        let resp = server
+            .handle_request(r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#)
+            .unwrap();
 
         assert!(resp.error.is_none());
         assert!(server.initialized);
@@ -860,7 +925,9 @@ mod tests {
     #[test]
     fn test_handle_tools_list() {
         let mut server = McpServer::new(PathBuf::from("/tmp"));
-        let resp = server.handle_request(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#).unwrap();
+        let resp = server
+            .handle_request(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
+            .unwrap();
 
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
@@ -870,9 +937,7 @@ mod tests {
         assert_eq!(tools.len(), 6);
 
         // Check tool names
-        let tool_names: Vec<&str> = tools.iter()
-            .map(|t| t["name"].as_str().unwrap())
-            .collect();
+        let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert!(tool_names.contains(&"get_context"));
         assert!(tool_names.contains(&"zoom"));
         assert!(tool_names.contains(&"session_list"));
@@ -893,7 +958,9 @@ mod tests {
     #[test]
     fn test_handle_invalid_version() {
         let mut server = McpServer::new(PathBuf::from("/tmp"));
-        let resp = server.handle_request(r#"{"jsonrpc":"1.0","id":1,"method":"test"}"#).unwrap();
+        let resp = server
+            .handle_request(r#"{"jsonrpc":"1.0","id":1,"method":"test"}"#)
+            .unwrap();
 
         assert!(resp.error.is_some());
         assert_eq!(resp.error.unwrap().code, INVALID_REQUEST);
@@ -902,7 +969,9 @@ mod tests {
     #[test]
     fn test_handle_unknown_method() {
         let mut server = McpServer::new(PathBuf::from("/tmp"));
-        let resp = server.handle_request(r#"{"jsonrpc":"2.0","id":1,"method":"unknown/method"}"#).unwrap();
+        let resp = server
+            .handle_request(r#"{"jsonrpc":"2.0","id":1,"method":"unknown/method"}"#)
+            .unwrap();
 
         assert!(resp.error.is_some());
         assert_eq!(resp.error.unwrap().code, METHOD_NOT_FOUND);
@@ -917,7 +986,9 @@ mod tests {
         assert!(server.initialized);
 
         // Shutdown
-        let resp = server.handle_request(r#"{"jsonrpc":"2.0","id":2,"method":"shutdown"}"#).unwrap();
+        let resp = server
+            .handle_request(r#"{"jsonrpc":"2.0","id":2,"method":"shutdown"}"#)
+            .unwrap();
         assert!(resp.error.is_none());
         assert!(!server.initialized);
     }
@@ -972,7 +1043,11 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_context","arguments":{}}}"#
         ).unwrap();
 
-        assert!(resp.error.is_none(), "Expected success, got error: {:?}", resp.error);
+        assert!(
+            resp.error.is_none(),
+            "Expected success, got error: {:?}",
+            resp.error
+        );
         let result = resp.result.unwrap();
         let content = result["content"][0]["text"].as_str().unwrap();
         assert!(content.contains("test.txt"), "Should contain test file");
@@ -1033,7 +1108,11 @@ mod tests {
         let temp_dir = std::env::temp_dir().join("pm_mcp_test_zoom_fn");
         let _ = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(temp_dir.join("src")).unwrap();
-        fs::write(temp_dir.join("src/lib.rs"), "fn target_func() {\n    println!(\"hello\");\n}\n").unwrap();
+        fs::write(
+            temp_dir.join("src/lib.rs"),
+            "fn target_func() {\n    println!(\"hello\");\n}\n",
+        )
+        .unwrap();
 
         let mut server = McpServer::new(temp_dir.clone());
         let resp = server.handle_request(
@@ -1052,7 +1131,11 @@ mod tests {
         let temp_dir = std::env::temp_dir().join("pm_mcp_test_zoom_class");
         let _ = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(temp_dir.join("src")).unwrap();
-        fs::write(temp_dir.join("src/lib.rs"), "struct MyClass {\n    field: i32,\n}\n").unwrap();
+        fs::write(
+            temp_dir.join("src/lib.rs"),
+            "struct MyClass {\n    field: i32,\n}\n",
+        )
+        .unwrap();
 
         let mut server = McpServer::new(temp_dir.clone());
         let resp = server.handle_request(
@@ -1089,7 +1172,11 @@ mod tests {
         let temp_dir = std::env::temp_dir().join("pm_mcp_test_zoom_range");
         let _ = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(&temp_dir).unwrap();
-        fs::write(temp_dir.join("test.rs"), "line1\nline2\nline3\nline4\nline5\n").unwrap();
+        fs::write(
+            temp_dir.join("test.rs"),
+            "line1\nline2\nline3\nline4\nline5\n",
+        )
+        .unwrap();
 
         let mut server = McpServer::new(temp_dir.clone());
         let resp = server.handle_request(
@@ -1289,9 +1376,11 @@ mod tests {
     #[test]
     fn test_tools_call_missing_name() {
         let mut server = McpServer::new(PathBuf::from("/tmp"));
-        let resp = server.handle_request(
-            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"arguments":{}}}"#
-        ).unwrap();
+        let resp = server
+            .handle_request(
+                r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"arguments":{}}}"#,
+            )
+            .unwrap();
 
         assert!(resp.error.is_some());
     }
@@ -1301,7 +1390,10 @@ mod tests {
         let resp = tool_success(json!(1), "test result".to_string());
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
-        assert!(result["content"][0]["text"].as_str().unwrap().contains("test result"));
+        assert!(result["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("test result"));
     }
 
     #[test]
@@ -1317,7 +1409,9 @@ mod tests {
     #[test]
     fn test_mcp_server_capabilities() {
         let mut server = McpServer::new(PathBuf::from("/tmp"));
-        let resp = server.handle_request(r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#).unwrap();
+        let resp = server
+            .handle_request(r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#)
+            .unwrap();
 
         assert!(resp.error.is_none());
         let result = resp.result.unwrap();
@@ -1420,7 +1514,9 @@ mod tests {
         fs::create_dir_all(temp_dir.join("src")).unwrap();
 
         // Create test files with business logic
-        fs::write(temp_dir.join("src/main.rs"), r#"
+        fs::write(
+            temp_dir.join("src/main.rs"),
+            r#"
 pub fn calculate_total(price: f64, discount: f64) -> f64 {
     price * (1.0 - discount)
 }
@@ -1428,20 +1524,27 @@ pub fn calculate_total(price: f64, discount: f64) -> f64 {
 pub fn validate_input(input: &str) -> bool {
     !input.is_empty()
 }
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let mut server = McpServer::new(temp_dir.clone());
         let resp = server.handle_request(
             r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_with_intent","arguments":{"intent":"business-logic"}}}"#
         ).unwrap();
 
-        assert!(resp.error.is_none(), "Expected success for business-logic explore");
+        assert!(
+            resp.error.is_none(),
+            "Expected success for business-logic explore"
+        );
         let result = resp.result.unwrap();
         let content = result["content"][0]["text"].as_str().unwrap();
 
         // Should contain XML exploration output
-        assert!(content.contains("<exploration") || content.contains("Intent Exploration"),
-            "Should contain exploration output");
+        assert!(
+            content.contains("<exploration") || content.contains("Intent Exploration"),
+            "Should contain exploration output"
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
@@ -1452,7 +1555,9 @@ pub fn validate_input(input: &str) -> bool {
         let _ = fs::remove_dir_all(&temp_dir);
         fs::create_dir_all(temp_dir.join("src")).unwrap();
 
-        fs::write(temp_dir.join("src/lib.rs"), r#"
+        fs::write(
+            temp_dir.join("src/lib.rs"),
+            r#"
 pub fn process_data(data: &str) -> Result<(), String> {
     if data.is_empty() {
         return Err("Empty data".to_string());
@@ -1460,14 +1565,19 @@ pub fn process_data(data: &str) -> Result<(), String> {
     log::info!("Processing: {}", data);
     Ok(())
 }
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let mut server = McpServer::new(temp_dir.clone());
         let resp = server.handle_request(
             r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_with_intent","arguments":{"intent":"debugging"}}}"#
         ).unwrap();
 
-        assert!(resp.error.is_none(), "Expected success for debugging explore");
+        assert!(
+            resp.error.is_none(),
+            "Expected success for debugging explore"
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
@@ -1489,8 +1599,11 @@ pub fn process_data(data: &str) -> Result<(), String> {
         let result = resp.result.unwrap();
         let content = result["content"][0]["text"].as_str().unwrap();
         // JSON output should be parseable
-        assert!(serde_json::from_str::<serde_json::Value>(content).is_ok() || content.contains("intent"),
-            "Should be valid JSON or contain intent field");
+        assert!(
+            serde_json::from_str::<serde_json::Value>(content).is_ok()
+                || content.contains("intent"),
+            "Should be valid JSON or contain intent field"
+        );
 
         // Test text format
         let resp = server.handle_request(
@@ -1535,8 +1648,10 @@ pub fn process_data(data: &str) -> Result<(), String> {
         assert!(resp.error.is_none(), "Empty project should not error");
         let result = resp.result.unwrap();
         let content = result["content"][0]["text"].as_str().unwrap();
-        assert!(content.contains("No source files") || content.contains("exploration"),
-            "Should mention no files or contain exploration output");
+        assert!(
+            content.contains("No source files") || content.contains("exploration"),
+            "Should mention no files or contain exploration output"
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

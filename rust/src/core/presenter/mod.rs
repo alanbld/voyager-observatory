@@ -16,8 +16,8 @@ pub mod transparency;
 pub use emoji_formatter::{EmojiFormatter, Theme};
 pub use transparency::SemanticTransparency;
 
+use crate::core::census::{CensusMetrics, GalaxyCensus, HealthRating};
 use crate::core::orchestrator::DetailLevel;
-use crate::core::census::{GalaxyCensus, HealthRating, CensusMetrics};
 
 // =============================================================================
 // Drift Info (v1.1.0 - Stellar Drift)
@@ -147,7 +147,11 @@ impl IntelligentPresenter {
         };
 
         for insight in insights.iter().take(max_insights) {
-            output.push_str(&format!("  {} {}\n", self.emoji_formatter.bullet(), insight));
+            output.push_str(&format!(
+                "  {} {}\n",
+                self.emoji_formatter.bullet(),
+                insight
+            ));
         }
 
         if insights.len() > max_insights {
@@ -155,7 +159,11 @@ impl IntelligentPresenter {
                 "  {} {} more insight{} available with --detail detailed\n",
                 self.emoji_formatter.hint_emoji(),
                 insights.len() - max_insights,
-                if insights.len() - max_insights == 1 { "" } else { "s" }
+                if insights.len() - max_insights == 1 {
+                    ""
+                } else {
+                    "s"
+                }
             ));
         }
 
@@ -174,11 +182,7 @@ impl IntelligentPresenter {
 
     /// Format a tip for progressive disclosure.
     pub fn format_tip(&self, tip: &str) -> String {
-        format!(
-            "{} Tip: {}\n",
-            self.emoji_formatter.hint_emoji(),
-            tip
-        )
+        format!("{} Tip: {}\n", self.emoji_formatter.hint_emoji(), tip)
     }
 
     /// Format technical details (only if transparency is enabled).
@@ -351,9 +355,7 @@ impl IntelligentPresenter {
             };
             output.push_str(&format!(
                 "  {} Stellar Drift: {:.1}%/year {}\n",
-                drift_health.0,
-                drift.drift_rate_per_year,
-                drift_health.1
+                drift_health.0, drift.drift_rate_per_year, drift_health.1
             ));
 
             // Ancient stars
@@ -370,8 +372,7 @@ impl IntelligentPresenter {
             if drift.new_stars > 0 {
                 output.push_str(&format!(
                     "  🌠 New Stars: {} ({:.0}% of logic units)\n",
-                    drift.new_stars,
-                    drift.new_star_percentage
+                    drift.new_stars, drift.new_star_percentage
                 ));
             }
         }
@@ -433,7 +434,10 @@ impl IntelligentPresenter {
         ));
 
         // Constellation breakdown (if detailed)
-        if matches!(self.detail_level, DetailLevel::Detailed | DetailLevel::Smart) {
+        if matches!(
+            self.detail_level,
+            DetailLevel::Detailed | DetailLevel::Smart
+        ) {
             output.push_str("\n");
             output.push_str(&format!(
                 "{} Constellations ({}):\n",
@@ -450,14 +454,13 @@ impl IntelligentPresenter {
 
                 output.push_str(&format!(
                     "  {} {}: {} stars, {} files\n",
-                    indicator,
-                    path,
-                    constellation.totals.stars.count,
-                    constellation.file_count
+                    indicator, path, constellation.totals.stars.count, constellation.file_count
                 ));
 
                 // Show Red Giants (if any)
-                if !constellation.red_giants.is_empty() && matches!(self.detail_level, DetailLevel::Detailed) {
+                if !constellation.red_giants.is_empty()
+                    && matches!(self.detail_level, DetailLevel::Detailed)
+                {
                     for rg in &constellation.red_giants {
                         output.push_str(&format!(
                             "      {} Red Giant: {}\n",
@@ -498,11 +501,11 @@ impl IntelligentPresenter {
     /// Format dark matter indicator based on severity.
     fn format_dark_matter_indicator(&self, metrics: &CensusMetrics) -> String {
         if metrics.dark_matter.unknown_regions == 0 && metrics.dark_matter.volcanic_regions == 0 {
-            "✨".to_string()  // Clean
+            "✨".to_string() // Clean
         } else if metrics.derived.dark_matter_ratio < 0.05 {
-            "🌑".to_string()  // Minor dark matter
+            "🌑".to_string() // Minor dark matter
         } else {
-            "⚫".to_string()  // Significant dark matter
+            "⚫".to_string() // Significant dark matter
         }
     }
 
@@ -540,7 +543,9 @@ impl IntelligentPresenter {
         }
 
         // Count red giants
-        let red_giant_count: usize = galaxy.constellations.values()
+        let red_giant_count: usize = galaxy
+            .constellations
+            .values()
             .map(|c| c.red_giants.len())
             .sum();
         if red_giant_count > 0 {
@@ -604,18 +609,24 @@ impl IntelligentPresenter {
             output,
             "⏳ Temporal Scan: {} of history analyzed ({} observations by {} observers).",
             years_str, total_observations, observer_count
-        ).ok();
+        )
+        .ok();
 
         // Line 2: Volcanic activity (Supernovas + Tectonic Shifts)
         let volcanic_count = supernovas.len() + tectonic_shifts.len();
         if volcanic_count > 0 {
             if !supernovas.is_empty() {
-                let nova_names: Vec<&str> = supernovas.iter()
+                let nova_names: Vec<&str> = supernovas
+                    .iter()
                     .take(2)
                     .map(|s| s.path.rsplit('/').next().unwrap_or(&s.path))
                     .collect();
                 let nova_summary = if supernovas.len() > 2 {
-                    format!("{} and {} others", nova_names.join(", "), supernovas.len() - 2)
+                    format!(
+                        "{} and {} others",
+                        nova_names.join(", "),
+                        supernovas.len() - 2
+                    )
                 } else {
                     nova_names.join(", ")
                 };
@@ -625,12 +636,16 @@ impl IntelligentPresenter {
                     supernovas.len(),
                     if supernovas.len() == 1 { "" } else { "s" },
                     nova_summary
-                ).ok();
+                )
+                .ok();
             }
 
             if !tectonic_shifts.is_empty() {
                 let shift_count = tectonic_shifts.len();
-                let high_risk_count = tectonic_shifts.iter().filter(|s| s.risk_score > 0.7).count();
+                let high_risk_count = tectonic_shifts
+                    .iter()
+                    .filter(|s| s.risk_score > 0.7)
+                    .count();
                 if high_risk_count > 0 {
                     writeln!(
                         output,
@@ -645,11 +660,16 @@ impl IntelligentPresenter {
                         "🌍 Minor Tectonic Shifts: {} region{} with elevated churn.",
                         shift_count,
                         if shift_count == 1 { "" } else { "s" }
-                    ).ok();
+                    )
+                    .ok();
                 }
             }
         } else {
-            writeln!(output, "🌍 Geological Stability: No volcanic activity detected.").ok();
+            writeln!(
+                output,
+                "🌍 Geological Stability: No volcanic activity detected."
+            )
+            .ok();
         }
 
         // Line 3: Ancient Stars (dormant core files)
@@ -670,7 +690,8 @@ impl IntelligentPresenter {
                         output,
                         "   📜 {} (dormant {} days, {} stars)",
                         file_name, ancient.dormant_days, ancient.star_count
-                    ).ok();
+                    )
+                    .ok();
                 }
             }
         } else if !ancient_stars.is_empty() {
@@ -679,7 +700,8 @@ impl IntelligentPresenter {
                 "📜 {} dormant file{} in archaeological strata (non-core, low priority).",
                 ancient_stars.len(),
                 if ancient_stars.len() == 1 { "" } else { "s" }
-            ).ok();
+            )
+            .ok();
         }
 
         output
@@ -740,10 +762,13 @@ impl IntelligentPresenter {
             return String::from("🔌 No external optics detected.\n");
         }
 
-        writeln!(output, "🔌 External Optics: {} community plugin{} loaded",
+        writeln!(
+            output,
+            "🔌 External Optics: {} community plugin{} loaded",
             plugin_count,
             if plugin_count == 1 { "" } else { "s" }
-        ).ok();
+        )
+        .ok();
 
         // Show plugin names (up to 5)
         let show_count = loaded_plugins.len().min(5);
@@ -762,7 +787,11 @@ impl IntelligentPresenter {
 
         // Sandbox status
         if sandbox_active {
-            writeln!(output, "🛡️ Plugin sandbox: Active (10MB memory, 100ms timeout)").ok();
+            writeln!(
+                output,
+                "🛡️ Plugin sandbox: Active (10MB memory, 100ms timeout)"
+            )
+            .ok();
         } else {
             writeln!(output, "⚠️ Plugin sandbox: Inactive").ok();
         }
@@ -771,8 +800,15 @@ impl IntelligentPresenter {
     }
 
     /// Format plugin summary from a PluginEngine (convenience method).
-    pub fn format_plugin_summary_from_engine(&self, engine: &crate::core::plugins::PluginEngine) -> String {
-        let names: Vec<String> = engine.plugin_names().iter().map(|s| s.to_string()).collect();
+    pub fn format_plugin_summary_from_engine(
+        &self,
+        engine: &crate::core::plugins::PluginEngine,
+    ) -> String {
+        let names: Vec<String> = engine
+            .plugin_names()
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         let sandbox_active = crate::core::plugins::is_plugins_available();
         self.format_plugin_summary(engine.plugin_count(), &names, sandbox_active)
     }
@@ -782,12 +818,12 @@ impl IntelligentPresenter {
         let mut sorted: Vec<_> = languages.to_vec();
         sorted.sort_by(|a, b| b.1.cmp(&a.1));
 
-        let primary = sorted.first()
+        let primary = sorted
+            .first()
             .map(|(lang, _)| format_language_name(lang))
             .unwrap_or_else(|| "Unknown".to_string());
 
-        let secondary = sorted.get(1)
-            .map(|(lang, _)| format_language_name(lang));
+        let secondary = sorted.get(1).map(|(lang, _)| format_language_name(lang));
 
         (primary, secondary)
     }
@@ -851,13 +887,7 @@ mod tests {
     #[test]
     fn test_format_exploration_summary() {
         let presenter = IntelligentPresenter::new();
-        let output = presenter.format_exploration_summary(
-            "business-logic",
-            42,
-            3,
-            2100,
-            0.85,
-        );
+        let output = presenter.format_exploration_summary("business-logic", 42, 3, 2100, 0.85);
 
         assert!(output.contains("Business-logic Exploration"));
         assert!(output.contains("42 files"));
@@ -867,8 +897,7 @@ mod tests {
 
     #[test]
     fn test_format_insights_limited() {
-        let presenter = IntelligentPresenter::new()
-            .with_detail_level(DetailLevel::Summary);
+        let presenter = IntelligentPresenter::new().with_detail_level(DetailLevel::Summary);
 
         let insights = vec![
             "Insight 1".to_string(),
@@ -889,10 +918,8 @@ mod tests {
     #[test]
     fn test_format_starting_point() {
         let presenter = IntelligentPresenter::new();
-        let output = presenter.format_starting_point(
-            "calculate_total",
-            "Core business calculation",
-        );
+        let output =
+            presenter.format_starting_point("calculate_total", "Core business calculation");
 
         assert!(output.contains("calculate_total"));
         assert!(output.contains("Core business calculation"));
@@ -924,7 +951,10 @@ mod tests {
         );
 
         // Verify telescope emoji at start
-        assert!(log.contains("🔭"), "Mission log should contain telescope emoji");
+        assert!(
+            log.contains("🔭"),
+            "Mission log should contain telescope emoji"
+        );
         assert!(log.contains("Observatory pointed at my_project"));
     }
 
@@ -942,7 +972,10 @@ mod tests {
             None,
         );
 
-        assert!(log.contains("✨"), "Mission log should contain notable star emoji");
+        assert!(
+            log.contains("✨"),
+            "Mission log should contain notable star emoji"
+        );
         assert!(log.contains("Two hemispheres detected"));
         assert!(log.contains("Logic: Rust | Interface: TypeScript"));
     }
@@ -1020,7 +1053,10 @@ mod tests {
             None,
         );
 
-        assert!(log.contains("📡"), "Mission log should contain transmit emoji");
+        assert!(
+            log.contains("📡"),
+            "Mission log should contain transmit emoji"
+        );
         assert!(log.contains("Teleporting context sample to LLM base"));
     }
 
@@ -1133,15 +1169,27 @@ mod tests {
     fn test_format_health_indicator() {
         let presenter = IntelligentPresenter::new();
 
-        assert_eq!(presenter.format_health_indicator(&HealthRating::Healthy), "⭐");
-        assert_eq!(presenter.format_health_indicator(&HealthRating::Stable), "✅");
-        assert_eq!(presenter.format_health_indicator(&HealthRating::HighDarkMatter), "⚠️");
-        assert_eq!(presenter.format_health_indicator(&HealthRating::Critical), "🔴");
+        assert_eq!(
+            presenter.format_health_indicator(&HealthRating::Healthy),
+            "⭐"
+        );
+        assert_eq!(
+            presenter.format_health_indicator(&HealthRating::Stable),
+            "✅"
+        );
+        assert_eq!(
+            presenter.format_health_indicator(&HealthRating::HighDarkMatter),
+            "⚠️"
+        );
+        assert_eq!(
+            presenter.format_health_indicator(&HealthRating::Critical),
+            "🔴"
+        );
     }
 
     #[test]
     fn test_governance_report_contains_header() {
-        use crate::core::census::{GalaxyCensus, CelestialCensus};
+        use crate::core::census::{CelestialCensus, GalaxyCensus};
 
         let presenter = IntelligentPresenter::new();
         let mut galaxy = GalaxyCensus::new(".".to_string());
@@ -1155,7 +1203,7 @@ mod tests {
 
     #[test]
     fn test_governance_report_shows_stars() {
-        use crate::core::census::{GalaxyCensus, CensusMetrics, StarMetrics};
+        use crate::core::census::{CensusMetrics, GalaxyCensus, StarMetrics};
 
         let presenter = IntelligentPresenter::new();
         let mut galaxy = GalaxyCensus::new(".".to_string());
@@ -1182,7 +1230,7 @@ mod tests {
 
     #[test]
     fn test_governance_report_shows_nebulae() {
-        use crate::core::census::{GalaxyCensus, CensusMetrics, NebulaeMetrics};
+        use crate::core::census::{CensusMetrics, GalaxyCensus, NebulaeMetrics};
 
         let presenter = IntelligentPresenter::new();
         let mut galaxy = GalaxyCensus::new(".".to_string());
@@ -1201,12 +1249,12 @@ mod tests {
         let report = presenter.format_governance_report(&galaxy);
 
         assert!(report.contains("Nebulae (Docs)"));
-        assert!(report.contains("70 lines"));  // 50 + 20
+        assert!(report.contains("70 lines")); // 50 + 20
     }
 
     #[test]
     fn test_governance_report_shows_dark_matter() {
-        use crate::core::census::{GalaxyCensus, CensusMetrics, DarkMatterMetrics};
+        use crate::core::census::{CensusMetrics, DarkMatterMetrics, GalaxyCensus};
 
         let presenter = IntelligentPresenter::new();
         let mut galaxy = GalaxyCensus::new(".".to_string());
@@ -1232,7 +1280,7 @@ mod tests {
 
     #[test]
     fn test_governance_report_recommendations() {
-        use crate::core::census::{GalaxyCensus, CensusMetrics, DarkMatterMetrics};
+        use crate::core::census::{CensusMetrics, DarkMatterMetrics, GalaxyCensus};
 
         let presenter = IntelligentPresenter::new();
         let mut galaxy = GalaxyCensus::new(".".to_string());
@@ -1259,7 +1307,7 @@ mod tests {
 
     #[test]
     fn test_governance_report_healthy_codebase() {
-        use crate::core::census::{GalaxyCensus, CensusMetrics, NebulaeMetrics, StarMetrics};
+        use crate::core::census::{CensusMetrics, GalaxyCensus, NebulaeMetrics, StarMetrics};
 
         let presenter = IntelligentPresenter::new();
         let mut galaxy = GalaxyCensus::new(".".to_string());
@@ -1296,13 +1344,13 @@ mod tests {
     #[cfg(feature = "temporal")]
     mod temporal_tests {
         use super::*;
-        use crate::core::temporal::{Supernova, TectonicShift, AncientStar};
+        use crate::core::temporal::{AncientStar, Supernova, TectonicShift};
 
         #[test]
         fn test_temporal_narrative_contains_time_emoji() {
             let presenter = IntelligentPresenter::new();
             let narrative = presenter.format_temporal_narrative(
-                730,  // 2 years
+                730, // 2 years
                 500,
                 5,
                 &[],
@@ -1321,7 +1369,7 @@ mod tests {
         fn test_temporal_narrative_short_history_shows_days() {
             let presenter = IntelligentPresenter::new();
             let narrative = presenter.format_temporal_narrative(
-                45,  // Less than a year
+                45, // Less than a year
                 20,
                 2,
                 &[],
@@ -1336,24 +1384,15 @@ mod tests {
         #[test]
         fn test_temporal_narrative_supernovas() {
             let presenter = IntelligentPresenter::new();
-            let supernovas = vec![
-                Supernova {
-                    path: "src/core/engine.rs".to_string(),
-                    observations_30d: 35,
-                    observer_count: 3,
-                    lines_changed: 1000,
-                    warning: "High activity".to_string(),
-                },
-            ];
+            let supernovas = vec![Supernova {
+                path: "src/core/engine.rs".to_string(),
+                observations_30d: 35,
+                observer_count: 3,
+                lines_changed: 1000,
+                warning: "High activity".to_string(),
+            }];
 
-            let narrative = presenter.format_temporal_narrative(
-                365,
-                100,
-                3,
-                &supernovas,
-                &[],
-                &[],
-            );
+            let narrative = presenter.format_temporal_narrative(365, 100, 3, &supernovas, &[], &[]);
 
             assert!(narrative.contains("🌋"), "Should contain volcano emoji");
             assert!(narrative.contains("Volcanic Activity"));
@@ -1388,40 +1427,24 @@ mod tests {
                 },
             ];
 
-            let narrative = presenter.format_temporal_narrative(
-                200,
-                150,
-                4,
-                &supernovas,
-                &[],
-                &[],
-            );
+            let narrative = presenter.format_temporal_narrative(200, 150, 4, &supernovas, &[], &[]);
 
             assert!(narrative.contains("3 Supernovas"));
-            assert!(narrative.contains("and 1 others"));  // Shows overflow
+            assert!(narrative.contains("and 1 others")); // Shows overflow
         }
 
         #[test]
         fn test_temporal_narrative_tectonic_shifts() {
             let presenter = IntelligentPresenter::new();
-            let shifts = vec![
-                TectonicShift {
-                    path: "src/complex.rs".to_string(),
-                    churn_90d: 15,
-                    dark_matter_ratio: 0.25,
-                    risk_score: 0.8,
-                    reason: "High risk".to_string(),
-                },
-            ];
+            let shifts = vec![TectonicShift {
+                path: "src/complex.rs".to_string(),
+                churn_90d: 15,
+                dark_matter_ratio: 0.25,
+                risk_score: 0.8,
+                reason: "High risk".to_string(),
+            }];
 
-            let narrative = presenter.format_temporal_narrative(
-                400,
-                200,
-                5,
-                &[],
-                &shifts,
-                &[],
-            );
+            let narrative = presenter.format_temporal_narrative(400, 200, 5, &[], &shifts, &[]);
 
             assert!(narrative.contains("Tectonic Stress"));
             assert!(narrative.contains("1 shift"));
@@ -1431,24 +1454,15 @@ mod tests {
         #[test]
         fn test_temporal_narrative_ancient_stars() {
             let presenter = IntelligentPresenter::new();
-            let ancient = vec![
-                AncientStar {
-                    path: "src/core/legacy.rs".to_string(),
-                    age_days: 1000,
-                    dormant_days: 800,
-                    star_count: 10,
-                    is_core: true,
-                },
-            ];
+            let ancient = vec![AncientStar {
+                path: "src/core/legacy.rs".to_string(),
+                age_days: 1000,
+                dormant_days: 800,
+                star_count: 10,
+                is_core: true,
+            }];
 
-            let narrative = presenter.format_temporal_narrative(
-                1000,
-                500,
-                8,
-                &[],
-                &[],
-                &ancient,
-            );
+            let narrative = presenter.format_temporal_narrative(1000, 500, 8, &[], &[], &ancient);
 
             assert!(narrative.contains("📜"), "Should contain scroll emoji");
             assert!(narrative.contains("1 Ancient Star"));
@@ -1463,9 +1477,9 @@ mod tests {
                 365,
                 100,
                 3,
-                &[],  // No supernovas
-                &[],  // No tectonic shifts
-                &[],  // No ancient stars
+                &[], // No supernovas
+                &[], // No tectonic shifts
+                &[], // No ancient stars
             );
 
             assert!(narrative.contains("🌍"), "Should contain earth emoji");
@@ -1476,24 +1490,15 @@ mod tests {
         #[test]
         fn test_temporal_narrative_non_core_ancient() {
             let presenter = IntelligentPresenter::new();
-            let ancient = vec![
-                AncientStar {
-                    path: "tests/old_test.rs".to_string(),
-                    age_days: 900,
-                    dormant_days: 750,
-                    star_count: 2,
-                    is_core: false,  // Not a core file
-                },
-            ];
+            let ancient = vec![AncientStar {
+                path: "tests/old_test.rs".to_string(),
+                age_days: 900,
+                dormant_days: 750,
+                star_count: 2,
+                is_core: false, // Not a core file
+            }];
 
-            let narrative = presenter.format_temporal_narrative(
-                900,
-                200,
-                4,
-                &[],
-                &[],
-                &ancient,
-            );
+            let narrative = presenter.format_temporal_narrative(900, 200, 4, &[], &[], &ancient);
 
             // Should mention dormant files but not as "Ancient Stars"
             assert!(narrative.contains("dormant file"));
@@ -1575,25 +1580,20 @@ mod tests {
 
     #[test]
     fn test_presenter_with_detail_level() {
-        let presenter = IntelligentPresenter::new()
-            .with_detail_level(DetailLevel::Detailed);
+        let presenter = IntelligentPresenter::new().with_detail_level(DetailLevel::Detailed);
         assert_eq!(presenter.detail_level(), DetailLevel::Detailed);
 
-        let presenter2 = IntelligentPresenter::new()
-            .with_detail_level(DetailLevel::Summary);
+        let presenter2 = IntelligentPresenter::new().with_detail_level(DetailLevel::Summary);
         assert_eq!(presenter2.detail_level(), DetailLevel::Summary);
     }
 
     #[test]
     fn test_presenter_with_transparency_enabled() {
-        let presenter = IntelligentPresenter::new()
-            .with_transparency(true);
+        let presenter = IntelligentPresenter::new().with_transparency(true);
 
         // Test that technical details are shown when transparency is enabled
-        let details = presenter.format_technical_details(&[
-            ("Metric", "Value"),
-            ("Another", "Data"),
-        ]);
+        let details =
+            presenter.format_technical_details(&[("Metric", "Value"), ("Another", "Data")]);
 
         // When transparency is enabled, details should be formatted
         assert!(details.contains("Metric") || details.is_empty());
@@ -1601,12 +1601,9 @@ mod tests {
 
     #[test]
     fn test_presenter_with_transparency_disabled() {
-        let presenter = IntelligentPresenter::new()
-            .with_transparency(false);
+        let presenter = IntelligentPresenter::new().with_transparency(false);
 
-        let details = presenter.format_technical_details(&[
-            ("Metric", "Value"),
-        ]);
+        let details = presenter.format_technical_details(&[("Metric", "Value")]);
 
         // Should return empty or minimal when disabled
         assert!(details.is_empty() || !details.contains("─"));
@@ -1641,8 +1638,7 @@ mod tests {
 
     #[test]
     fn test_format_insights_detailed_mode() {
-        let presenter = IntelligentPresenter::new()
-            .with_detail_level(DetailLevel::Detailed);
+        let presenter = IntelligentPresenter::new().with_detail_level(DetailLevel::Detailed);
 
         let insights = vec![
             "Insight 1".to_string(),
@@ -1664,10 +1660,7 @@ mod tests {
     fn test_format_exploration_summary_milliseconds() {
         let presenter = IntelligentPresenter::new();
         let output = presenter.format_exploration_summary(
-            "debug",
-            10,
-            1,
-            500,  // Less than 1 second
+            "debug", 10, 1, 500, // Less than 1 second
             0.9,
         );
 
@@ -1691,7 +1684,7 @@ mod tests {
             100_000,
             10,
             Some("Core"),
-            None,  // No drift info
+            None, // No drift info
         );
 
         // Should contain basic mission log without drift section
@@ -1705,7 +1698,7 @@ mod tests {
         let drift = DriftInfo {
             galaxy_age_days: 730,
             galaxy_age_years: 2.0,
-            drift_rate_per_year: 15.0,  // < 20% = Stable
+            drift_rate_per_year: 15.0, // < 20% = Stable
             ancient_stars: 3,
             core_ancient_stars: 2,
             new_stars: 5,
@@ -1737,7 +1730,7 @@ mod tests {
         let drift = DriftInfo {
             galaxy_age_days: 365,
             galaxy_age_years: 1.0,
-            drift_rate_per_year: 35.0,  // 20-50% = Active
+            drift_rate_per_year: 35.0, // 20-50% = Active
             ancient_stars: 0,
             core_ancient_stars: 0,
             new_stars: 20,
@@ -1766,7 +1759,7 @@ mod tests {
         let drift = DriftInfo {
             galaxy_age_days: 200,
             galaxy_age_years: 0.55,
-            drift_rate_per_year: 75.0,  // 50-100% = Expanding
+            drift_rate_per_year: 75.0, // 50-100% = Expanding
             ancient_stars: 0,
             core_ancient_stars: 0,
             new_stars: 50,
@@ -1794,7 +1787,7 @@ mod tests {
         let drift = DriftInfo {
             galaxy_age_days: 100,
             galaxy_age_years: 0.27,
-            drift_rate_per_year: 150.0,  // > 100% = Volcanic
+            drift_rate_per_year: 150.0, // > 100% = Volcanic
             ancient_stars: 0,
             core_ancient_stars: 0,
             new_stars: 100,
@@ -1821,7 +1814,7 @@ mod tests {
     fn test_mission_log_with_drift_short_age_days() {
         let presenter = IntelligentPresenter::new();
         let drift = DriftInfo {
-            galaxy_age_days: 90,  // Less than a year
+            galaxy_age_days: 90, // Less than a year
             galaxy_age_years: 0.25,
             drift_rate_per_year: 10.0,
             ancient_stars: 0,
@@ -1881,7 +1874,7 @@ mod tests {
             galaxy_age_days: 365,
             galaxy_age_years: 1.0,
             drift_rate_per_year: 20.0,
-            ancient_stars: 0,  // No ancient stars
+            ancient_stars: 0, // No ancient stars
             core_ancient_stars: 0,
             new_stars: 5,
             new_star_percentage: 5.0,
@@ -1912,7 +1905,7 @@ mod tests {
             drift_rate_per_year: 5.0,
             ancient_stars: 5,
             core_ancient_stars: 3,
-            new_stars: 0,  // No new stars
+            new_stars: 0, // No new stars
             new_star_percentage: 0.0,
         };
 
@@ -1943,7 +1936,7 @@ mod tests {
             "project",
             ("Logic: Rust", None),
             "debug",
-            0.6,  // Medium confidence (0.5 < x <= 0.8)
+            0.6, // Medium confidence (0.5 < x <= 0.8)
             25_000,
             50_000,
             5,
@@ -1960,7 +1953,7 @@ mod tests {
             "project",
             ("Logic: Rust", None),
             "minimal",
-            0.3,  // Low confidence (<= 0.5)
+            0.3, // Low confidence (<= 0.5)
             5_000,
             10_000,
             2,
@@ -1975,7 +1968,7 @@ mod tests {
         let presenter = IntelligentPresenter::new();
         let log = presenter.format_mission_log(
             "project",
-            ("Logic: Python", None),  // No secondary
+            ("Logic: Python", None), // No secondary
             "architecture",
             0.8,
             40_000,
@@ -1998,7 +1991,7 @@ mod tests {
             0.5,
             1_000,
             5_000,
-            0,  // Zero points of interest
+            0, // Zero points of interest
             None,
         );
 
@@ -2015,12 +2008,12 @@ mod tests {
             "architecture",
             0.8,
             5_000,
-            0,  // Zero budget
+            0, // Zero budget
             5,
             None,
         );
 
-        assert!(log.contains("0%"));  // Should show 0% usage
+        assert!(log.contains("0%")); // Should show 0% usage
     }
 
     // =========================================================================
@@ -2104,7 +2097,7 @@ mod tests {
         let metrics = CensusMetrics::default();
 
         let indicator = presenter.format_dark_matter_indicator(&metrics);
-        assert_eq!(indicator, "✨");  // Clean
+        assert_eq!(indicator, "✨"); // Clean
     }
 
     #[test]
@@ -2121,12 +2114,12 @@ mod tests {
             parameter_heavy: 0,
         };
         metrics.derived = DerivedMetrics {
-            dark_matter_ratio: 0.03,  // < 0.05
+            dark_matter_ratio: 0.03, // < 0.05
             ..Default::default()
         };
 
         let indicator = presenter.format_dark_matter_indicator(&metrics);
-        assert_eq!(indicator, "🌑");  // Minor
+        assert_eq!(indicator, "🌑"); // Minor
     }
 
     #[test]
@@ -2143,12 +2136,12 @@ mod tests {
             parameter_heavy: 3,
         };
         metrics.derived = DerivedMetrics {
-            dark_matter_ratio: 0.15,  // >= 0.05
+            dark_matter_ratio: 0.15, // >= 0.05
             ..Default::default()
         };
 
         let indicator = presenter.format_dark_matter_indicator(&metrics);
-        assert_eq!(indicator, "⚫");  // Significant
+        assert_eq!(indicator, "⚫"); // Significant
     }
 
     // =========================================================================
@@ -2157,7 +2150,7 @@ mod tests {
 
     #[test]
     fn test_recommendations_low_docs() {
-        use crate::core::census::{GalaxyCensus, CensusMetrics, DerivedMetrics};
+        use crate::core::census::{CensusMetrics, DerivedMetrics, GalaxyCensus};
 
         let presenter = IntelligentPresenter::new();
         let mut galaxy = GalaxyCensus::new(".".to_string());
@@ -2165,7 +2158,7 @@ mod tests {
         let mut metrics = CensusMetrics::default();
         metrics.total_lines = 1000;
         metrics.derived = DerivedMetrics {
-            nebula_ratio: 0.1,  // 10% < 20%
+            nebula_ratio: 0.1, // 10% < 20%
             ..Default::default()
         };
         galaxy.add_file("src/test.rs", metrics);
@@ -2173,21 +2166,23 @@ mod tests {
 
         let recommendations = presenter.generate_recommendations(&galaxy);
 
-        assert!(recommendations.iter().any(|r| r.contains("documentation coverage")));
+        assert!(recommendations
+            .iter()
+            .any(|r| r.contains("documentation coverage")));
     }
 
     #[test]
     fn test_recommendations_high_stellar_density() {
-        use crate::core::census::{GalaxyCensus, CensusMetrics, StarMetrics, NebulaeMetrics};
+        use crate::core::census::{CensusMetrics, GalaxyCensus, NebulaeMetrics, StarMetrics};
 
         let presenter = IntelligentPresenter::new();
         let mut galaxy = GalaxyCensus::new(".".to_string());
 
         // Create metrics with high stellar density (many stars, few lines)
         let mut metrics = CensusMetrics::default();
-        metrics.total_lines = 100;  // Small file
+        metrics.total_lines = 100; // Small file
         metrics.stars = StarMetrics {
-            count: 50,  // 50 stars / 0.1k LOC = 500 stars per 1k LOC (very high)
+            count: 50, // 50 stars / 0.1k LOC = 500 stars per 1k LOC (very high)
             functions: 50,
             methods: 0,
             types: 0,
@@ -2205,12 +2200,14 @@ mod tests {
         let recommendations = presenter.generate_recommendations(&galaxy);
 
         // High stellar density (> 30) should trigger refactoring recommendation
-        assert!(recommendations.iter().any(|r| r.contains("refactoring") || r.contains("stellar density")));
+        assert!(recommendations
+            .iter()
+            .any(|r| r.contains("refactoring") || r.contains("stellar density")));
     }
 
     #[test]
     fn test_recommendations_healthy_codebase() {
-        use crate::core::census::{GalaxyCensus, CensusMetrics, DerivedMetrics, NebulaeMetrics};
+        use crate::core::census::{CensusMetrics, DerivedMetrics, GalaxyCensus, NebulaeMetrics};
 
         let presenter = IntelligentPresenter::new();
         let mut galaxy = GalaxyCensus::new(".".to_string());
@@ -2239,7 +2236,7 @@ mod tests {
 
     #[test]
     fn test_recommendations_red_giants() {
-        use crate::core::census::{GalaxyCensus, ConstellationCensus, CensusMetrics};
+        use crate::core::census::{CensusMetrics, ConstellationCensus, GalaxyCensus};
 
         let presenter = IntelligentPresenter::new();
         let mut galaxy = GalaxyCensus::new(".".to_string());
@@ -2248,7 +2245,9 @@ mod tests {
         let mut constellation = ConstellationCensus::default();
         constellation.red_giants = vec!["big_file.rs".to_string()];
         constellation.file_count = 1;
-        galaxy.constellations.insert("src".to_string(), constellation);
+        galaxy
+            .constellations
+            .insert("src".to_string(), constellation);
 
         let recommendations = presenter.generate_recommendations(&galaxy);
 

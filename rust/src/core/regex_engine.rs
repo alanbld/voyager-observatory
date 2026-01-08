@@ -575,9 +575,7 @@ mod tests {
     #[test]
     fn test_named_captures() {
         let engine = RegexEngine::new();
-        let regex = engine
-            .compile(r"(?P<first>\w+)\s+(?P<last>\w+)")
-            .unwrap();
+        let regex = engine.compile(r"(?P<first>\w+)\s+(?P<last>\w+)").unwrap();
 
         let caps = engine.match_captures(&regex, "John Doe").unwrap();
         assert_eq!(caps.get("first"), Some(&"John".to_string()));

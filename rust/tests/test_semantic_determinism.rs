@@ -4,14 +4,19 @@
 //! identical iteration order across multiple runs. This validates the BTreeMap
 //! migration for deterministic iteration order.
 
+use pm_encoder::core::fractal::clustering::vectorizer::{FeatureType, VectorMetadata};
 use pm_encoder::core::fractal::{
-    ContextLayer, LayerContent, SymbolKind, Visibility, Range, FeatureVector, ZoomLevel,
-    UnifiedSemanticSubstrate, Language,
+    ContextLayer, FeatureVector, Language, LayerContent, Range, SymbolKind,
+    UnifiedSemanticSubstrate, Visibility, ZoomLevel,
 };
-use pm_encoder::core::fractal::clustering::vectorizer::{VectorMetadata, FeatureType};
 
 /// Create a symbol layer with the given properties
-fn create_symbol_layer(name: &str, kind: SymbolKind, signature: &str, doc: Option<&str>) -> ContextLayer {
+fn create_symbol_layer(
+    name: &str,
+    kind: SymbolKind,
+    signature: &str,
+    doc: Option<&str>,
+) -> ContextLayer {
     ContextLayer::new(
         format!("layer_{}", name),
         LayerContent::Symbol {
@@ -22,7 +27,12 @@ fn create_symbol_layer(name: &str, kind: SymbolKind, signature: &str, doc: Optio
             parameters: vec![],
             documentation: doc.map(|s| s.to_string()),
             visibility: Visibility::Public,
-            range: Range { start_line: 1, start_col: 0, end_line: 10, end_col: 0 },
+            range: Range {
+                start_line: 1,
+                start_col: 0,
+                end_line: 10,
+                end_col: 0,
+            },
         },
     )
 }
@@ -43,9 +53,24 @@ fn create_feature_vector(source_id: &str, confidence: f32) -> FeatureVector {
 /// Create a fixed set of mock layers for determinism testing (Python)
 fn create_python_layers() -> (Vec<ContextLayer>, Vec<FeatureVector>) {
     let layers = vec![
-        create_symbol_layer("calculate_total", SymbolKind::Function, "def calculate_total(items: list) -> float", Some("Calculates the total price")),
-        create_symbol_layer("validate_input", SymbolKind::Function, "def validate_input(data: dict) -> bool", None),
-        create_symbol_layer("process_order", SymbolKind::Function, "def process_order(order_id: str) -> Order", Some("Process an order")),
+        create_symbol_layer(
+            "calculate_total",
+            SymbolKind::Function,
+            "def calculate_total(items: list) -> float",
+            Some("Calculates the total price"),
+        ),
+        create_symbol_layer(
+            "validate_input",
+            SymbolKind::Function,
+            "def validate_input(data: dict) -> bool",
+            None,
+        ),
+        create_symbol_layer(
+            "process_order",
+            SymbolKind::Function,
+            "def process_order(order_id: str) -> Order",
+            Some("Process an order"),
+        ),
     ];
     let vectors = vec![
         create_feature_vector("python:calculate_total", 0.9),
@@ -58,9 +83,24 @@ fn create_python_layers() -> (Vec<ContextLayer>, Vec<FeatureVector>) {
 /// Create a fixed set of mock layers for determinism testing (Rust)
 fn create_rust_layers() -> (Vec<ContextLayer>, Vec<FeatureVector>) {
     let layers = vec![
-        create_symbol_layer("calculate_total", SymbolKind::Function, "pub fn calculate_total(items: &[Item]) -> f64", Some("Calculates the total amount")),
-        create_symbol_layer("UserConfig", SymbolKind::Struct, "pub struct UserConfig", None),
-        create_symbol_layer("handle_request", SymbolKind::Function, "pub async fn handle_request(req: Request) -> Response", Some("Handle HTTP request")),
+        create_symbol_layer(
+            "calculate_total",
+            SymbolKind::Function,
+            "pub fn calculate_total(items: &[Item]) -> f64",
+            Some("Calculates the total amount"),
+        ),
+        create_symbol_layer(
+            "UserConfig",
+            SymbolKind::Struct,
+            "pub struct UserConfig",
+            None,
+        ),
+        create_symbol_layer(
+            "handle_request",
+            SymbolKind::Function,
+            "pub async fn handle_request(req: Request) -> Response",
+            Some("Handle HTTP request"),
+        ),
     ];
     let vectors = vec![
         create_feature_vector("rust:calculate_total", 0.95),
@@ -73,8 +113,18 @@ fn create_rust_layers() -> (Vec<ContextLayer>, Vec<FeatureVector>) {
 /// Create a fixed set of mock layers for determinism testing (TypeScript)
 fn create_typescript_layers() -> (Vec<ContextLayer>, Vec<FeatureVector>) {
     let layers = vec![
-        create_symbol_layer("calculateTotal", SymbolKind::Function, "function calculateTotal(items: Item[]): number", Some("Calculates the total price")),
-        create_symbol_layer("IUserConfig", SymbolKind::Interface, "interface IUserConfig", None),
+        create_symbol_layer(
+            "calculateTotal",
+            SymbolKind::Function,
+            "function calculateTotal(items: Item[]): number",
+            Some("Calculates the total price"),
+        ),
+        create_symbol_layer(
+            "IUserConfig",
+            SymbolKind::Interface,
+            "interface IUserConfig",
+            None,
+        ),
     ];
     let vectors = vec![
         create_feature_vector("ts:calculateTotal", 0.85),
@@ -98,9 +148,7 @@ fn test_concept_iteration_order_determinism() {
             Language::Python,
             "service.py",
         );
-        let order: Vec<String> = substrate.concepts()
-            .map(|c| c.name.clone())
-            .collect();
+        let order: Vec<String> = substrate.concepts().map(|c| c.name.clone()).collect();
         concept_orders.push(order);
     }
 
@@ -188,9 +236,7 @@ fn test_merge_determinism() {
         );
         substrate1.merge(substrate2);
 
-        let order: Vec<String> = substrate1.concepts()
-            .map(|c| c.name.clone())
-            .collect();
+        let order: Vec<String> = substrate1.concepts().map(|c| c.name.clone()).collect();
         merged_concept_orders.push(order);
     }
 

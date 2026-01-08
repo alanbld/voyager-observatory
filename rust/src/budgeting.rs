@@ -11,10 +11,10 @@
 //! 3. Tests (tests/, examples/) - If budget remains
 //! 4. Other (docs, scripts) - Lowest priority
 
-use std::path::Path;
+use crate::core::engine::FileTier;
 use crate::lenses::LensManager;
 use crate::truncate_structure;
-use crate::core::engine::FileTier;
+use std::path::Path;
 
 /// Threshold for hybrid strategy: files > 10% of budget get auto-truncated
 const HYBRID_THRESHOLD: f64 = 0.10;
@@ -80,13 +80,17 @@ pub fn parse_token_budget(value: &str) -> Result<usize, String> {
     // Check for suffix
     let last_char = value.chars().last().unwrap();
     let (number_part, multiplier) = match last_char {
-        'k' | 'K' => (&value[..value.len()-1], 1_000),
-        'm' | 'M' => (&value[..value.len()-1], 1_000_000),
+        'k' | 'K' => (&value[..value.len() - 1], 1_000),
+        'm' | 'M' => (&value[..value.len() - 1], 1_000_000),
         _ => (value, 1),
     };
 
-    let number: usize = number_part.parse()
-        .map_err(|_| format!("Invalid token budget format: '{}'. Expected format: 123, 100k, 2M", value))?;
+    let number: usize = number_part.parse().map_err(|_| {
+        format!(
+            "Invalid token budget format: '{}'. Expected format: 123, 100k, 2M",
+            value
+        )
+    })?;
 
     Ok(number * multiplier)
 }
@@ -152,29 +156,46 @@ impl BudgetReport {
         eprintln!("TOKEN BUDGET REPORT");
         eprintln!("{}", "=".repeat(70));
         eprintln!("Budget:     {:>10} tokens", format_number(self.budget));
-        eprintln!("Used:       {:>10} tokens ({:.1}%)",
-            format_number(self.used), self.used_percentage());
+        eprintln!(
+            "Used:       {:>10} tokens ({:.1}%)",
+            format_number(self.used),
+            self.used_percentage()
+        );
         eprintln!("Remaining:  {:>10} tokens", format_number(self.remaining()));
         eprintln!("Estimation: {}", self.estimation_method);
         eprintln!("Strategy:   {}", self.strategy);
         eprintln!();
 
-        let full_count = self.included_files.iter()
+        let full_count = self
+            .included_files
+            .iter()
             .filter(|(_, _, _, m)| m == "full")
             .count();
-        eprintln!("Files included: {} ({} full, {} truncated)",
-            self.selected_count, full_count, self.truncated_count);
-        eprintln!("Files dropped:  {} (lowest priority first)", self.dropped_count);
+        eprintln!(
+            "Files included: {} ({} full, {} truncated)",
+            self.selected_count, full_count, self.truncated_count
+        );
+        eprintln!(
+            "Files dropped:  {} (lowest priority first)",
+            self.dropped_count
+        );
 
         if self.truncated_count > 0 {
             eprintln!();
             eprintln!("Auto-truncated files (structure mode):");
             for (path, priority, tokens, method) in self.included_files.iter().take(5) {
                 if method == "truncated" {
-                    eprintln!("  [P:{:3}] {} ({} tokens)", priority, path, format_number(*tokens));
+                    eprintln!(
+                        "  [P:{:3}] {} ({} tokens)",
+                        priority,
+                        path,
+                        format_number(*tokens)
+                    );
                 }
             }
-            let truncated_list: Vec<_> = self.included_files.iter()
+            let truncated_list: Vec<_> = self
+                .included_files
+                .iter()
                 .filter(|(_, _, _, m)| m == "truncated")
                 .collect();
             if truncated_list.len() > 5 {
@@ -186,7 +207,12 @@ impl BudgetReport {
             eprintln!();
             eprintln!("Dropped files:");
             for (path, priority, tokens) in self.dropped_files.iter().take(10) {
-                eprintln!("  [P:{:3}] {} ({} tokens)", priority, path, format_number(*tokens));
+                eprintln!(
+                    "  [P:{:3}] {} ({} tokens)",
+                    priority,
+                    path,
+                    format_number(*tokens)
+                );
             }
             if self.dropped_files.len() > 10 {
                 eprintln!("  ... and {} more", self.dropped_files.len() - 10);
@@ -242,7 +268,8 @@ pub fn apply_token_budget(
     strategy: &str,
 ) -> (Vec<(String, String)>, BudgetReport) {
     // Step 1: Calculate tokens and get priorities, applying group-based truncation
-    let mut file_data: Vec<FileData> = files.into_iter()
+    let mut file_data: Vec<FileData> = files
+        .into_iter()
         .map(|(path, content)| {
             let path_obj = Path::new(&path);
             let group_config = lens_manager.get_file_group_config(path_obj);
@@ -302,10 +329,12 @@ pub fn apply_token_budget(
         let budget_threshold = (budget as f64 * HYBRID_THRESHOLD) as usize;
         for fd in &mut file_data {
             if fd.tokens > budget_threshold {
-                let (truncated_content, was_truncated) = try_truncate_to_structure(&fd.path, &fd.content);
+                let (truncated_content, was_truncated) =
+                    try_truncate_to_structure(&fd.path, &fd.content);
                 if was_truncated {
                     let path_obj = Path::new(&fd.path);
-                    let new_tokens = TokenEstimator::estimate_file_tokens(path_obj, &truncated_content);
+                    let new_tokens =
+                        TokenEstimator::estimate_file_tokens(path_obj, &truncated_content);
                     fd.content = truncated_content;
                     fd.tokens = new_tokens;
                     fd.method = "truncated".to_string();
@@ -334,14 +363,21 @@ pub fn apply_token_budget(
             // File doesn't fit - apply strategy
             if strategy == "truncate" || strategy == "hybrid" {
                 // Try to truncate to structure mode
-                let (truncated_content, was_truncated) = try_truncate_to_structure(&fd.path, &fd.content);
+                let (truncated_content, was_truncated) =
+                    try_truncate_to_structure(&fd.path, &fd.content);
                 if was_truncated {
                     let path_obj = Path::new(&fd.path);
-                    let new_tokens = TokenEstimator::estimate_file_tokens(path_obj, &truncated_content);
+                    let new_tokens =
+                        TokenEstimator::estimate_file_tokens(path_obj, &truncated_content);
                     if total_tokens + new_tokens <= budget {
                         // Truncated version fits!
                         truncated_count += 1;
-                        included_files.push((fd.path.clone(), fd.priority, new_tokens, "truncated".to_string()));
+                        included_files.push((
+                            fd.path.clone(),
+                            fd.priority,
+                            new_tokens,
+                            "truncated".to_string(),
+                        ));
                         selected.push((fd.path, truncated_content));
                         total_tokens += new_tokens;
                         continue;
@@ -440,7 +476,7 @@ mod tests {
     fn test_drop_strategy_skips_oversized() {
         let lens_manager = LensManager::new();
         let files = vec![
-            ("small.py".to_string(), "x".repeat(100)),  // ~25 tokens
+            ("small.py".to_string(), "x".repeat(100)),   // ~25 tokens
             ("large.py".to_string(), "y".repeat(10000)), // ~2500 tokens
         ];
         let (selected, report) = apply_token_budget(files, 500, &lens_manager, "drop");
@@ -471,11 +507,10 @@ mod tests {
         for i in range(100):
             print(i)
         return True
-"#.to_string();
+"#
+        .to_string();
 
-        let files = vec![
-            ("test.py".to_string(), python_content),
-        ];
+        let files = vec![("test.py".to_string(), python_content)];
 
         // Budget small enough that full file doesn't fit
         let (selected, report) = apply_token_budget(files, 50, &lens_manager, "truncate");
@@ -484,7 +519,13 @@ mod tests {
         assert_eq!(report.strategy, "truncate");
         // The file might fit or not depending on truncation result
         if report.selected_count > 0 {
-            assert!(report.truncated_count > 0 || report.included_files.iter().any(|(_, _, _, m)| m == "truncated"));
+            assert!(
+                report.truncated_count > 0
+                    || report
+                        .included_files
+                        .iter()
+                        .any(|(_, _, _, m)| m == "truncated")
+            );
         }
     }
 
@@ -506,7 +547,8 @@ mod tests {
     def method_three(self):
         """Method three."""
         return 3
-"#.to_string();
+"#
+        .to_string();
 
         let files = vec![
             ("large.py".to_string(), python_content.repeat(10)), // ~10x content
@@ -530,7 +572,8 @@ mod tests {
         let (_, report_drop) = apply_token_budget(files.clone(), 1000, &lens_manager, "drop");
         assert_eq!(report_drop.strategy, "drop");
 
-        let (_, report_truncate) = apply_token_budget(files.clone(), 1000, &lens_manager, "truncate");
+        let (_, report_truncate) =
+            apply_token_budget(files.clone(), 1000, &lens_manager, "truncate");
         assert_eq!(report_truncate.strategy, "truncate");
 
         let (_, report_hybrid) = apply_token_budget(files, 1000, &lens_manager, "hybrid");
@@ -684,9 +727,9 @@ mod tests {
         let _ = lens_manager.apply_lens("architecture");
 
         let files = vec![
-            ("tests/test.py".to_string(), "x".repeat(100)),  // Low priority (tests)
-            ("src/main.py".to_string(), "y".repeat(100)),    // Higher priority
-            ("README.md".to_string(), "z".repeat(100)),      // Medium priority
+            ("tests/test.py".to_string(), "x".repeat(100)), // Low priority (tests)
+            ("src/main.py".to_string(), "y".repeat(100)),   // Higher priority
+            ("README.md".to_string(), "z".repeat(100)),     // Medium priority
         ];
 
         // With limited budget, high priority files should be kept
@@ -729,7 +772,8 @@ mod tests {
         // Create a file that's exactly at 10% threshold
         let python_content = r#"def func():
     pass
-"#.to_string();
+"#
+        .to_string();
 
         let files = vec![
             ("small.py".to_string(), python_content.clone()),
@@ -745,10 +789,10 @@ mod tests {
         let lens_manager = LensManager::new();
         // Create files from different tiers with same size
         let files = vec![
-            ("tests/test_main.py".to_string(), "x".repeat(100)),   // Tests tier
-            ("src/main.rs".to_string(), "y".repeat(100)),          // Core tier
-            ("README.md".to_string(), "z".repeat(100)),            // Other tier
-            ("Cargo.toml".to_string(), "w".repeat(100)),           // Config tier
+            ("tests/test_main.py".to_string(), "x".repeat(100)), // Tests tier
+            ("src/main.rs".to_string(), "y".repeat(100)),        // Core tier
+            ("README.md".to_string(), "z".repeat(100)),          // Other tier
+            ("Cargo.toml".to_string(), "w".repeat(100)),         // Config tier
         ];
 
         // Budget for only 2 files
@@ -774,10 +818,10 @@ mod tests {
         let lens_manager = LensManager::new();
         // Create small files from each tier
         let files = vec![
-            ("docs/guide.md".to_string(), "a".repeat(40)),         // Other (tier 3)
-            ("tests/test.py".to_string(), "b".repeat(40)),         // Tests (tier 2)
-            ("config.toml".to_string(), "c".repeat(40)),           // Config (tier 1)
-            ("src/lib.rs".to_string(), "d".repeat(40)),            // Core (tier 0)
+            ("docs/guide.md".to_string(), "a".repeat(40)), // Other (tier 3)
+            ("tests/test.py".to_string(), "b".repeat(40)), // Tests (tier 2)
+            ("config.toml".to_string(), "c".repeat(40)),   // Config (tier 1)
+            ("src/lib.rs".to_string(), "d".repeat(40)),    // Core (tier 0)
         ];
 
         // Budget for 3 files (drops 1)
@@ -798,7 +842,10 @@ mod tests {
                 // Both fit, also fine
             }
             // Core should always be included if budget allows
-            assert!(has_core || selected_paths.is_empty(), "Core files should be prioritized");
+            assert!(
+                has_core || selected_paths.is_empty(),
+                "Core files should be prioritized"
+            );
         }
     }
 
@@ -943,9 +990,10 @@ mod tests {
         // Apply a lens that might have group-level truncation
         let _ = lens_manager.apply_lens("architecture");
 
-        let files = vec![
-            ("src/main.py".to_string(), "def main():\n    pass".to_string()),
-        ];
+        let files = vec![(
+            "src/main.py".to_string(),
+            "def main():\n    pass".to_string(),
+        )];
 
         let (selected, report) = apply_token_budget(files, 1000, &lens_manager, "drop");
 

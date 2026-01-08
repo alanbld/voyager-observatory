@@ -21,14 +21,15 @@
 //! └── 📈 Drift Rate: 12% / year
 //! ```
 
-use std::collections::{BTreeMap, HashMap};
-use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap};
 
+#[cfg(test)]
+use super::metrics::AgeClassification;
 use super::metrics::{
-    ChronosState, TemporalCensus, FileChurn, ConstellationChurn,
-    AgeClassification, ChurnClassification,
-    AncientStar, Supernova,
+    AncientStar, ChronosState, ChurnClassification, ConstellationChurn, FileChurn, Supernova,
+    TemporalCensus,
 };
 
 // =============================================================================
@@ -124,10 +125,10 @@ pub struct StellarDriftReport {
     pub dormant_star_total: usize,
 
     /// Health indicators
-    pub is_expanding: bool,      // More new stars than ancient
-    pub is_stable: bool,         // Low drift rate
-    pub is_ossifying: bool,      // All ancient, no new
-    pub has_supernovas: bool,    // Destabilizing refactors
+    pub is_expanding: bool, // More new stars than ancient
+    pub is_stable: bool,      // Low drift rate
+    pub is_ossifying: bool,   // All ancient, no new
+    pub has_supernovas: bool, // Destabilizing refactors
 }
 
 // =============================================================================
@@ -177,13 +178,18 @@ impl StellarDriftAnalyzer {
     ) -> StellarDriftReport {
         // If path_prefix is provided, create a prefixed version of star_counts
         let prefixed_star_counts: HashMap<String, usize> = if let Some(prefix) = path_prefix {
-            star_counts.iter()
+            star_counts
+                .iter()
                 .map(|(k, v)| (format!("{}/{}", prefix, k), *v))
                 .collect()
         } else {
             star_counts.clone()
         };
-        let star_counts_ref = if path_prefix.is_some() { &prefixed_star_counts } else { star_counts };
+        let star_counts_ref = if path_prefix.is_some() {
+            &prefixed_star_counts
+        } else {
+            star_counts
+        };
         let now = Utc::now();
         let mut report = StellarDriftReport {
             state: temporal_census.state.clone(),
@@ -194,7 +200,10 @@ impl StellarDriftAnalyzer {
         };
 
         // Handle static galaxy
-        if matches!(temporal_census.state, ChronosState::StaticGalaxy | ChronosState::NoRepository) {
+        if matches!(
+            temporal_census.state,
+            ChronosState::StaticGalaxy | ChronosState::NoRepository
+        ) {
             return report;
         }
 
@@ -202,11 +211,11 @@ impl StellarDriftAnalyzer {
         report.total_stars = star_counts_ref.values().sum();
 
         // Identify ancient stars and new stars
-        let threshold_new = now - Duration::days(self.new_star_threshold as i64);
-        let threshold_ancient = now - Duration::days(self.ancient_star_threshold as i64);
+        let _threshold_new = now - Duration::days(self.new_star_threshold as i64);
+        let _threshold_ancient = now - Duration::days(self.ancient_star_threshold as i64);
         let threshold_drift = now - Duration::days(self.drift_window_days);
 
-        let mut files_in_drift_window = 0;
+        let mut _files_in_drift_window = 0;
         let mut stars_in_drift_window = 0;
 
         for (path, file_churn) in &temporal_census.files {
@@ -224,7 +233,8 @@ impl StellarDriftAnalyzer {
             }
 
             // Check if file is ancient (dormant > 2 years)
-            let dormant_days = file_churn.last_observation
+            let dormant_days = file_churn
+                .last_observation
                 .map(|t| (now - t).num_days().max(0) as u64)
                 .unwrap_or(file_churn.age_days);
 
@@ -248,7 +258,7 @@ impl StellarDriftAnalyzer {
             // Track files in drift window (last 6 months)
             if let Some(last_obs) = file_churn.last_observation {
                 if last_obs > threshold_drift {
-                    files_in_drift_window += 1;
+                    _files_in_drift_window += 1;
                     stars_in_drift_window += star_count;
                 }
             }
@@ -260,9 +270,11 @@ impl StellarDriftAnalyzer {
 
         // Calculate stellar drift percentage
         if report.total_stars > 0 {
-            report.stellar_drift_percent = (stars_in_drift_window as f64 / report.total_stars as f64) * 100.0;
+            report.stellar_drift_percent =
+                (stars_in_drift_window as f64 / report.total_stars as f64) * 100.0;
             // Annualize: if 10% drift in 6 months, that's 20% per year
-            report.drift_rate_per_year = report.stellar_drift_percent * (365.0 / self.drift_window_days as f64);
+            report.drift_rate_per_year =
+                report.stellar_drift_percent * (365.0 / self.drift_window_days as f64);
         }
 
         // Build constellation evolution
@@ -275,7 +287,8 @@ impl StellarDriftAnalyzer {
         // Set health indicators
         report.is_expanding = report.new_star_total > report.ancient_star_total;
         report.is_stable = report.drift_rate_per_year < 20.0; // Less than 20% drift per year
-        report.is_ossifying = report.new_star_total == 0 && report.ancient_star_total > report.total_stars / 2;
+        report.is_ossifying =
+            report.new_star_total == 0 && report.ancient_star_total > report.total_stars / 2;
 
         report
     }
@@ -300,7 +313,11 @@ impl StellarDriftAnalyzer {
                 .parent()
                 .map(|p| {
                     let s = p.to_string_lossy().to_string();
-                    if s.is_empty() { ".".to_string() } else { s }
+                    if s.is_empty() {
+                        ".".to_string()
+                    } else {
+                        s
+                    }
                 })
                 .unwrap_or_else(|| ".".to_string());
 
@@ -320,7 +337,11 @@ impl StellarDriftAnalyzer {
             };
 
             // Normalize the constellation path for lookup
-            let normalized_path = if path.is_empty() { ".".to_string() } else { path.clone() };
+            let normalized_path = if path.is_empty() {
+                ".".to_string()
+            } else {
+                path.clone()
+            };
 
             // Get files in this constellation
             let files_in_constellation = constellation_files.get(&normalized_path);
@@ -368,7 +389,8 @@ impl StellarDriftAnalyzer {
                     evolution.avg_age_days = total_age / matched_file_count as u64;
                 }
 
-                evolution.is_new = youngest_age != u64::MAX && youngest_age <= self.new_star_threshold;
+                evolution.is_new =
+                    youngest_age != u64::MAX && youngest_age <= self.new_star_threshold;
                 evolution.is_ancient = oldest_age >= self.ancient_star_threshold
                     && evolution.new_star_count == 0
                     && evolution.active_star_count == 0;
@@ -408,7 +430,10 @@ impl StellarDriftAnalyzer {
 impl StellarDriftReport {
     /// Check if this is a static galaxy (no drift data)
     pub fn is_static(&self) -> bool {
-        matches!(self.state, ChronosState::StaticGalaxy | ChronosState::NoRepository)
+        matches!(
+            self.state,
+            ChronosState::StaticGalaxy | ChronosState::NoRepository
+        )
     }
 
     /// Get galaxy health description
@@ -536,7 +561,10 @@ mod tests {
     fn test_static_galaxy_report() {
         let report = StellarDriftAnalyzer::static_galaxy_report();
         assert!(report.is_static());
-        assert_eq!(report.health_description(), "Static Galaxy (no drift detected)");
+        assert_eq!(
+            report.health_description(),
+            "Static Galaxy (no drift detected)"
+        );
     }
 
     #[test]
@@ -571,7 +599,10 @@ mod tests {
 
         let mut files = BTreeMap::new();
         files.insert("new_file.rs".to_string(), make_file_churn(30, 5, Some(5)));
-        files.insert("old_file.rs".to_string(), make_file_churn(1000, 0, Some(800)));
+        files.insert(
+            "old_file.rs".to_string(),
+            make_file_churn(1000, 0, Some(800)),
+        );
 
         let temporal_census = TemporalCensus {
             state: ChronosState::Active {
@@ -603,7 +634,10 @@ mod tests {
 
         let mut files = BTreeMap::new();
         // File that hasn't been touched in 3 years
-        files.insert("ancient.rs".to_string(), make_file_churn(1500, 0, Some(1100)));
+        files.insert(
+            "ancient.rs".to_string(),
+            make_file_churn(1500, 0, Some(1100)),
+        );
 
         let temporal_census = TemporalCensus {
             state: ChronosState::Active {
@@ -621,7 +655,10 @@ mod tests {
 
         let report = analyzer.analyze(&temporal_census, &star_counts, None, None);
 
-        assert!(!report.ancient_stars.is_empty(), "Should identify ancient stars");
+        assert!(
+            !report.ancient_stars.is_empty(),
+            "Should identify ancient stars"
+        );
         assert_eq!(report.ancient_star_total, 15);
     }
 
@@ -653,7 +690,10 @@ mod tests {
         let report = analyzer.analyze(&temporal_census, &star_counts, None, None);
 
         assert_eq!(report.total_stars, 20);
-        assert!(report.stellar_drift_percent > 0.0, "Should have positive drift");
+        assert!(
+            report.stellar_drift_percent > 0.0,
+            "Should have positive drift"
+        );
     }
 
     #[test]
@@ -661,7 +701,10 @@ mod tests {
         let analyzer = StellarDriftAnalyzer::new();
 
         let mut files = BTreeMap::new();
-        files.insert("prefix/src/lib.rs".to_string(), make_file_churn(100, 5, Some(10)));
+        files.insert(
+            "prefix/src/lib.rs".to_string(),
+            make_file_churn(100, 5, Some(10)),
+        );
 
         let temporal_census = TemporalCensus {
             state: ChronosState::Active {
@@ -693,15 +736,13 @@ mod tests {
                 observer_count: 5,
             },
             galaxy_age_days: 500,
-            supernovas: vec![
-                Supernova {
-                    path: "hot.rs".to_string(),
-                    observations_30d: 50,
-                    observer_count: 5,
-                    lines_changed: 1000,
-                    warning: "Test".to_string(),
-                },
-            ],
+            supernovas: vec![Supernova {
+                path: "hot.rs".to_string(),
+                observations_30d: 50,
+                observer_count: 5,
+                lines_changed: 1000,
+                warning: "Test".to_string(),
+            }],
             ..Default::default()
         };
 
@@ -740,90 +781,147 @@ mod tests {
             state: ChronosState::StaticGalaxy,
             ..Default::default()
         };
-        assert_eq!(report.health_description(), "Static Galaxy (no drift detected)");
+        assert_eq!(
+            report.health_description(),
+            "Static Galaxy (no drift detected)"
+        );
     }
 
     #[test]
     fn test_health_description_supernovas() {
         let report = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             has_supernovas: true,
             ..Default::default()
         };
-        assert_eq!(report.health_description(), "Volcanic Activity (destabilizing refactors in progress)");
+        assert_eq!(
+            report.health_description(),
+            "Volcanic Activity (destabilizing refactors in progress)"
+        );
     }
 
     #[test]
     fn test_health_description_ossifying() {
         let report = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             is_ossifying: true,
             total_stars: 100,
             ancient_star_total: 60,
             new_star_total: 0,
             ..Default::default()
         };
-        assert_eq!(report.health_description(), "Ossifying (ancient core with no new growth)");
+        assert_eq!(
+            report.health_description(),
+            "Ossifying (ancient core with no new growth)"
+        );
     }
 
     #[test]
     fn test_health_description_expanding() {
         let report = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             is_expanding: true,
             ..Default::default()
         };
-        assert_eq!(report.health_description(), "Expanding (active development with new features)");
+        assert_eq!(
+            report.health_description(),
+            "Expanding (active development with new features)"
+        );
     }
 
     #[test]
     fn test_health_description_stable() {
         let report = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             is_stable: true,
             ..Default::default()
         };
-        assert_eq!(report.health_description(), "Stable (healthy balance of old and new)");
+        assert_eq!(
+            report.health_description(),
+            "Stable (healthy balance of old and new)"
+        );
     }
 
     #[test]
     fn test_health_description_high_drift() {
         let report = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             // None of the flags set
             ..Default::default()
         };
-        assert_eq!(report.health_description(), "High Drift (significant changes in progress)");
+        assert_eq!(
+            report.health_description(),
+            "High Drift (significant changes in progress)"
+        );
     }
 
     #[test]
     fn test_health_indicator_all_states() {
-        let static_report = StellarDriftReport { state: ChronosState::StaticGalaxy, ..Default::default() };
+        let static_report = StellarDriftReport {
+            state: ChronosState::StaticGalaxy,
+            ..Default::default()
+        };
         assert_eq!(static_report.health_indicator(), "⏳");
 
         let supernova_report = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             has_supernovas: true,
             ..Default::default()
         };
         assert_eq!(supernova_report.health_indicator(), "🔥");
 
         let ossifying_report = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             is_ossifying: true,
             ..Default::default()
         };
         assert_eq!(ossifying_report.health_indicator(), "🪨");
 
         let expanding_report = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             is_expanding: true,
             ..Default::default()
         };
         assert_eq!(expanding_report.health_indicator(), "🌱");
 
         let stable_report = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             is_stable: true,
             ..Default::default()
         };
@@ -832,39 +930,62 @@ mod tests {
 
     #[test]
     fn test_drift_classification() {
-        let static_report = StellarDriftReport { state: ChronosState::StaticGalaxy, ..Default::default() };
+        let static_report = StellarDriftReport {
+            state: ChronosState::StaticGalaxy,
+            ..Default::default()
+        };
         assert_eq!(static_report.drift_classification(), "No Drift Data");
 
         let minimal = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             drift_rate_per_year: 5.0,
             ..Default::default()
         };
         assert_eq!(minimal.drift_classification(), "Minimal Drift");
 
         let low = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             drift_rate_per_year: 15.0,
             ..Default::default()
         };
         assert_eq!(low.drift_classification(), "Low Drift");
 
         let moderate = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             drift_rate_per_year: 35.0,
             ..Default::default()
         };
         assert_eq!(moderate.drift_classification(), "Moderate Drift");
 
         let high = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             drift_rate_per_year: 60.0,
             ..Default::default()
         };
         assert_eq!(high.drift_classification(), "High Drift");
 
         let extreme = StellarDriftReport {
-            state: ChronosState::Active { total_events: 100, galaxy_age_days: 500, observer_count: 5 },
+            state: ChronosState::Active {
+                total_events: 100,
+                galaxy_age_days: 500,
+                observer_count: 5,
+            },
             drift_rate_per_year: 80.0,
             ..Default::default()
         };
@@ -1059,17 +1180,23 @@ mod tests {
 
         let mut files = BTreeMap::new();
         files.insert("src/lib.rs".to_string(), make_file_churn(200, 5, Some(30)));
-        files.insert("src/utils.rs".to_string(), make_file_churn(300, 2, Some(60)));
+        files.insert(
+            "src/utils.rs".to_string(),
+            make_file_churn(300, 2, Some(60)),
+        );
 
         let mut constellations = BTreeMap::new();
-        constellations.insert("src".to_string(), ConstellationChurn {
-            path: "src".to_string(),
-            file_count: 2,
-            churn_90d: 7,
-            avg_age_days: 250,
-            primary_observers: vec![],
-            classification: ChurnClassification::Moderate,
-        });
+        constellations.insert(
+            "src".to_string(),
+            ConstellationChurn {
+                path: "src".to_string(),
+                file_count: 2,
+                churn_90d: 7,
+                avg_age_days: 250,
+                primary_observers: vec![],
+                classification: ChurnClassification::Moderate,
+            },
+        );
 
         let temporal_census = TemporalCensus {
             state: ChronosState::Active {
@@ -1098,14 +1225,17 @@ mod tests {
         let analyzer = StellarDriftAnalyzer::new();
 
         let mut constellations = BTreeMap::new();
-        constellations.insert("src".to_string(), ConstellationChurn {
-            path: "src".to_string(),
-            file_count: 2,
-            churn_90d: 5,
-            avg_age_days: 200,
-            primary_observers: vec![],
-            classification: ChurnClassification::Low,
-        });
+        constellations.insert(
+            "src".to_string(),
+            ConstellationChurn {
+                path: "src".to_string(),
+                file_count: 2,
+                churn_90d: 5,
+                avg_age_days: 200,
+                primary_observers: vec![],
+                classification: ChurnClassification::Low,
+            },
+        );
 
         let temporal_census = TemporalCensus {
             state: ChronosState::Active {
@@ -1226,14 +1356,17 @@ mod tests {
         files.insert("lib.rs".to_string(), make_file_churn(200, 5, Some(30)));
 
         let mut constellations = BTreeMap::new();
-        constellations.insert("".to_string(), ConstellationChurn {
-            path: "".to_string(),
-            file_count: 1,
-            churn_90d: 5,
-            avg_age_days: 200,
-            primary_observers: vec![],
-            classification: ChurnClassification::Moderate,
-        });
+        constellations.insert(
+            "".to_string(),
+            ConstellationChurn {
+                path: "".to_string(),
+                file_count: 1,
+                churn_90d: 5,
+                avg_age_days: 200,
+                primary_observers: vec![],
+                classification: ChurnClassification::Moderate,
+            },
+        );
 
         let temporal_census = TemporalCensus {
             state: ChronosState::Active {
@@ -1261,14 +1394,17 @@ mod tests {
         let analyzer = StellarDriftAnalyzer::new();
 
         let mut constellations = BTreeMap::new();
-        constellations.insert(".".to_string(), ConstellationChurn {
-            path: ".".to_string(),
-            file_count: 1,
-            churn_90d: 5,
-            avg_age_days: 200,
-            primary_observers: vec![],
-            classification: ChurnClassification::Low,
-        });
+        constellations.insert(
+            ".".to_string(),
+            ConstellationChurn {
+                path: ".".to_string(),
+                file_count: 1,
+                churn_90d: 5,
+                avg_age_days: 200,
+                primary_observers: vec![],
+                classification: ChurnClassification::Low,
+            },
+        );
 
         let mut files = BTreeMap::new();
         files.insert("main.rs".to_string(), make_file_churn(200, 5, Some(30)));
@@ -1292,7 +1428,11 @@ mod tests {
 
         // Files at root should be in "." constellation
         let constellation = report.constellations.get(".").unwrap();
-        assert!(constellation.active_star_count > 0 || constellation.new_star_count > 0 || constellation.dormant_star_count > 0);
+        assert!(
+            constellation.active_star_count > 0
+                || constellation.new_star_count > 0
+                || constellation.dormant_star_count > 0
+        );
     }
 
     #[test]

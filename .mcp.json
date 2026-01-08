@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "vo": {
+      "type": "stdio",
+      "command": "/home/albalda/vo/rust/target/release/vo",
+      "args": [
+        "--server",
+        "."
+      ],
+      "env": {}
+    }
+  }
+}

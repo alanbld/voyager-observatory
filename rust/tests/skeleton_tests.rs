@@ -4,8 +4,7 @@
 //! BEFORE the implementation exists. They should fail to compile initially (red phase).
 
 use pm_encoder::core::skeleton::{
-    AdaptiveAllocator, CompressionLevel, Language, Skeletonizer, SkeletonResult,
-    FileAllocation,
+    AdaptiveAllocator, CompressionLevel, FileAllocation, Language, SkeletonResult, Skeletonizer,
 };
 use pm_encoder::core::FileTier;
 
@@ -202,7 +201,9 @@ pub fn retry() {
 
     // Constants should be preserved
     assert!(result.content.contains("pub const MAX_RETRIES: usize = 5"));
-    assert!(result.content.contains("pub const DEFAULT_TIMEOUT: u64 = 30_000"));
+    assert!(result
+        .content
+        .contains("pub const DEFAULT_TIMEOUT: u64 = 30_000"));
     assert!(result.content.contains("static GLOBAL_STATE"));
 
     // Function body should be stripped
@@ -242,9 +243,15 @@ class DataProcessor:
 
     // Class and method signatures should be preserved
     assert!(result.content.contains("class DataProcessor:"));
-    assert!(result.content.contains("def __init__(self, config: Config):"));
-    assert!(result.content.contains("def process(self, data: bytes) -> ProcessedData:"));
-    assert!(result.content.contains("def _validate(self, data: bytes) -> bytes:"));
+    assert!(result
+        .content
+        .contains("def __init__(self, config: Config):"));
+    assert!(result
+        .content
+        .contains("def process(self, data: bytes) -> ProcessedData:"));
+    assert!(result
+        .content
+        .contains("def _validate(self, data: bytes) -> bytes:"));
 
     // Docstrings should be preserved (L1 behavior)
     assert!(result.content.contains("Processes data files"));
@@ -286,8 +293,12 @@ def helper():
     assert!(result.content.contains("from typing import Optional, List"));
 
     // Function signatures should be preserved
-    assert!(result.content.contains("def load_config(path: str) -> dict:"));
-    assert!(result.content.contains("async def fetch_data(url: str) -> bytes:"));
+    assert!(result
+        .content
+        .contains("def load_config(path: str) -> dict:"));
+    assert!(result
+        .content
+        .contains("async def fetch_data(url: str) -> bytes:"));
     assert!(result.content.contains("def helper():"));
 
     // Bodies should be stripped
@@ -354,9 +365,21 @@ fn test_allocator_upgrades_core_first() {
     let config = result.iter().find(|f| f.path == "config.toml").unwrap();
     let tests = result.iter().find(|f| f.path == "tests/test.rs").unwrap();
 
-    assert_eq!(core.level, CompressionLevel::Full, "Core should be upgraded to Full");
-    assert_eq!(config.level, CompressionLevel::Skeleton, "Config should stay Skeleton");
-    assert_eq!(tests.level, CompressionLevel::Skeleton, "Tests should stay Skeleton");
+    assert_eq!(
+        core.level,
+        CompressionLevel::Full,
+        "Core should be upgraded to Full"
+    );
+    assert_eq!(
+        config.level,
+        CompressionLevel::Skeleton,
+        "Config should stay Skeleton"
+    );
+    assert_eq!(
+        tests.level,
+        CompressionLevel::Skeleton,
+        "Tests should stay Skeleton"
+    );
 }
 
 #[test]
@@ -404,9 +427,17 @@ fn test_allocator_drops_other_tier_first() {
     let docs = result.iter().find(|f| f.path == "docs/readme.md").unwrap();
     let tests = result.iter().find(|f| f.path == "tests/test.rs").unwrap();
 
-    assert_eq!(core.level, CompressionLevel::Skeleton, "Core should be Skeleton");
+    assert_eq!(
+        core.level,
+        CompressionLevel::Skeleton,
+        "Core should be Skeleton"
+    );
     assert_eq!(docs.level, CompressionLevel::Drop, "Docs should be Dropped");
-    assert_eq!(tests.level, CompressionLevel::Skeleton, "Tests should be Skeleton");
+    assert_eq!(
+        tests.level,
+        CompressionLevel::Skeleton,
+        "Tests should be Skeleton"
+    );
 }
 
 #[test]
@@ -426,8 +457,16 @@ fn test_allocator_drops_tests_before_core() {
     let core = result.iter().find(|f| f.path == "src/core.rs").unwrap();
     let tests = result.iter().find(|f| f.path == "tests/test.rs").unwrap();
 
-    assert_eq!(core.level, CompressionLevel::Skeleton, "Core should be Skeleton");
-    assert_eq!(tests.level, CompressionLevel::Drop, "Tests should be Dropped");
+    assert_eq!(
+        core.level,
+        CompressionLevel::Skeleton,
+        "Core should be Skeleton"
+    );
+    assert_eq!(
+        tests.level,
+        CompressionLevel::Drop,
+        "Tests should be Dropped"
+    );
 }
 
 #[test]
@@ -464,9 +503,7 @@ fn test_allocator_empty_files() {
 
 #[test]
 fn test_allocator_zero_budget_drops_all() {
-    let files = vec![
-        FileAllocation::new("src/core.rs", FileTier::Core, 100, 10),
-    ];
+    let files = vec![FileAllocation::new("src/core.rs", FileTier::Core, 100, 10)];
 
     let allocator = AdaptiveAllocator::new(0);
     let result = allocator.allocate(files);
@@ -545,7 +582,10 @@ fn another() {
     let result = skeletonizer.skeletonize(input, Language::Rust);
 
     // Fallback: Should return something (first N lines or best effort)
-    assert!(!result.content.is_empty(), "Should not return empty on malformed input");
+    assert!(
+        !result.content.is_empty(),
+        "Should not return empty on malformed input"
+    );
     // Should still try to extract signatures
     assert!(
         result.content.contains("fn broken()") || result.content.contains("fn another()"),

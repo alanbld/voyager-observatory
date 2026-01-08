@@ -135,7 +135,9 @@ impl Data {
         let result = s.skeletonize(input, Language::Rust);
 
         // Derive attributes should be preserved
-        assert!(result.content.contains("#[derive(Debug, Clone, Serialize)]"));
+        assert!(result
+            .content
+            .contains("#[derive(Debug, Clone, Serialize)]"));
         assert!(result.content.contains("pub struct Data"));
     }
 
@@ -221,7 +223,9 @@ fn after_nested() -> i32 {
         assert!(!result.content.contains("break"));
 
         assert!(result.preserved_symbols.contains(&"nested".to_string()));
-        assert!(result.preserved_symbols.contains(&"after_nested".to_string()));
+        assert!(result
+            .preserved_symbols
+            .contains(&"after_nested".to_string()));
     }
 
     #[test]
@@ -344,7 +348,9 @@ class User:
 
         assert!(result.content.contains("class User:"));
         assert!(result.content.contains("Represents a user"));
-        assert!(result.content.contains("def __init__(self, name: str, email: str):"));
+        assert!(result
+            .content
+            .contains("def __init__(self, name: str, email: str):"));
         assert!(!result.content.contains("self.name = name"));
         assert!(!result.content.contains("self._validate()"));
     }
@@ -370,7 +376,9 @@ class Calculator:
         let s = Skeletonizer::new();
         let result = s.skeletonize(input, Language::Python);
 
-        assert!(result.content.contains("def add(self, a: int, b: int) -> int:"));
+        assert!(result
+            .content
+            .contains("def add(self, a: int, b: int) -> int:"));
         assert!(result.content.contains("Add two numbers"));
         assert!(!result.content.contains("result = a + b"));
         assert!(!result.content.contains("self.log"));
@@ -426,7 +434,9 @@ class Outer:
 
         assert!(result.content.contains("class Outer:"));
         assert!(result.content.contains("class Inner:"));
-        assert!(result.content.contains("def inner_method(self, x: int) -> int:"));
+        assert!(result
+            .content
+            .contains("def inner_method(self, x: int) -> int:"));
         assert!(result.content.contains("def outer_method(self) -> Inner:"));
         assert!(!result.content.contains("range(x)"));
         assert!(!result.content.contains("break"));
@@ -445,7 +455,9 @@ def helper_function(data: list) -> dict:
         let s = Skeletonizer::new();
         let result = s.skeletonize(input, Language::Python);
 
-        assert!(result.content.contains("def helper_function(data: list) -> dict:"));
+        assert!(result
+            .content
+            .contains("def helper_function(data: list) -> dict:"));
         assert!(result.content.contains("Convert list to dict"));
         assert!(!result.content.contains("result = {}"));
         assert!(!result.content.contains("for item in data"));
@@ -463,7 +475,9 @@ async def fetch_data(url: str) -> bytes:
         let s = Skeletonizer::new();
         let result = s.skeletonize(input, Language::Python);
 
-        assert!(result.content.contains("async def fetch_data(url: str) -> bytes:"));
+        assert!(result
+            .content
+            .contains("async def fetch_data(url: str) -> bytes:"));
         assert!(result.content.contains("Fetch data from URL"));
         assert!(!result.content.contains("aiohttp.ClientSession"));
     }
@@ -486,7 +500,9 @@ def main():
         assert!(result.content.contains("import os"));
         assert!(result.content.contains("import sys"));
         assert!(result.content.contains("from pathlib import Path"));
-        assert!(result.content.contains("from typing import Optional, List, Dict"));
+        assert!(result
+            .content
+            .contains("from typing import Optional, List, Dict"));
         assert!(result.content.contains("from .config import Config"));
         assert!(result.content.contains("def main():"));
     }
@@ -511,7 +527,9 @@ class Rectangle:
         let result = s.skeletonize(input, Language::Python);
 
         assert!(result.content.contains("class Rectangle:"));
-        assert!(result.content.contains("def __init__(self, width: float, height: float):"));
+        assert!(result
+            .content
+            .contains("def __init__(self, width: float, height: float):"));
         // Properties are just methods at this level
         assert!(result.content.contains("def area(self)"));
     }
@@ -538,7 +556,9 @@ function processData(input: string): ProcessedData {
 
         assert!(result.content.contains("function processData"));
         assert!(!result.content.contains("validate(input)"));
-        assert!(result.preserved_symbols.contains(&"processData".to_string()));
+        assert!(result
+            .preserved_symbols
+            .contains(&"processData".to_string()));
     }
 
     #[test]
@@ -582,7 +602,9 @@ export class UserService {
         let result = s.skeletonize(input, Language::TypeScript);
 
         assert!(result.content.contains("export class UserService"));
-        assert!(result.preserved_symbols.contains(&"UserService".to_string()));
+        assert!(result
+            .preserved_symbols
+            .contains(&"UserService".to_string()));
         // Note: Class body is included but methods inside may not be extracted
     }
 
@@ -603,9 +625,13 @@ interface InternalConfig extends Config {
         let result = s.skeletonize(input, Language::TypeScript);
 
         assert!(result.content.contains("export interface Config"));
-        assert!(result.content.contains("interface InternalConfig extends Config"));
+        assert!(result
+            .content
+            .contains("interface InternalConfig extends Config"));
         assert!(result.preserved_symbols.contains(&"Config".to_string()));
-        assert!(result.preserved_symbols.contains(&"InternalConfig".to_string()));
+        assert!(result
+            .preserved_symbols
+            .contains(&"InternalConfig".to_string()));
     }
 
     #[test]
@@ -715,7 +741,9 @@ func ProcessData(input []byte) ([]byte, error) {
         assert!(result.content.contains("func ProcessData"));
         assert!(!result.content.contains("len(input)"));
         assert!(!result.content.contains("transform(input)"));
-        assert!(result.preserved_symbols.contains(&"ProcessData".to_string()));
+        assert!(result
+            .preserved_symbols
+            .contains(&"ProcessData".to_string()));
     }
 
     #[test]
@@ -919,7 +947,10 @@ fn next_function() {
         let result = s.skeletonize(input, Language::Rust);
 
         // Should fallback to first N lines
-        assert!(!result.content.is_empty(), "Fallback should produce some output");
+        assert!(
+            !result.content.is_empty(),
+            "Fallback should produce some output"
+        );
         // Fallback returns first 50 lines by default
         assert!(result.content.len() <= input.len());
     }

@@ -4,9 +4,7 @@
 //! for multiple programming languages. This is the foundation for Voyager Observatory's
 //! ability to understand code structure beyond raw text.
 
-use pm_encoder::core::{
-    SyntaxRegistry, SyntaxLanguage, SymbolKind, SymbolVisibility,
-};
+use pm_encoder::core::{SymbolKind, SymbolVisibility, SyntaxLanguage, SyntaxRegistry};
 
 // ============================================================================
 // Rust Language Tests
@@ -26,7 +24,9 @@ fn private_helper(x: i32, y: i32) -> i32 {
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::Rust).expect("Failed to parse Rust");
+    let ast = registry
+        .parse(source, SyntaxLanguage::Rust)
+        .expect("Failed to parse Rust");
 
     assert!(ast.symbols.len() >= 2, "Expected at least 2 functions");
 
@@ -61,7 +61,9 @@ struct PrivateData {
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::Rust).expect("Failed to parse Rust");
+    let ast = registry
+        .parse(source, SyntaxLanguage::Rust)
+        .expect("Failed to parse Rust");
 
     // Find public struct
     let point = ast.symbols.iter().find(|s| s.name == "Point");
@@ -97,7 +99,9 @@ impl Point {
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::Rust).expect("Failed to parse Rust");
+    let ast = registry
+        .parse(source, SyntaxLanguage::Rust)
+        .expect("Failed to parse Rust");
 
     // Find trait
     let drawable = ast.symbols.iter().find(|s| s.name == "Drawable");
@@ -105,7 +109,9 @@ impl Point {
     assert_eq!(drawable.unwrap().kind, SymbolKind::Trait);
 
     // Find methods (may appear as nested or top-level depending on extraction)
-    let methods: Vec<_> = ast.symbols.iter()
+    let methods: Vec<_> = ast
+        .symbols
+        .iter()
         .filter(|s| s.kind == SymbolKind::Method || s.kind == SymbolKind::Function)
         .collect();
     assert!(!methods.is_empty(), "Expected to find methods/functions");
@@ -127,7 +133,9 @@ def _private_helper():
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::Python).expect("Failed to parse Python");
+    let ast = registry
+        .parse(source, SyntaxLanguage::Python)
+        .expect("Failed to parse Python");
 
     assert!(ast.symbols.len() >= 2, "Expected at least 2 functions");
 
@@ -157,7 +165,9 @@ class Dog(Animal):
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::Python).expect("Failed to parse Python");
+    let ast = registry
+        .parse(source, SyntaxLanguage::Python)
+        .expect("Failed to parse Python");
 
     let animal = ast.symbols.iter().find(|s| s.name == "Animal");
     assert!(animal.is_some(), "Animal class not found");
@@ -180,12 +190,16 @@ from ..parent import something
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::Python).expect("Failed to parse Python");
+    let ast = registry
+        .parse(source, SyntaxLanguage::Python)
+        .expect("Failed to parse Python");
 
     // Phase 1A: Verify parsing works without errors
     // Import extraction is basic in Phase 1A and will be enhanced
-    assert!(ast.errors.is_empty() || !ast.has_errors(),
-        "Parse should succeed for valid Python import statements");
+    assert!(
+        ast.errors.is_empty() || !ast.has_errors(),
+        "Parse should succeed for valid Python import statements"
+    );
 }
 
 // ============================================================================
@@ -207,7 +221,9 @@ export const arrowFn = (x: number): number => x * 2;
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::TypeScript).expect("Failed to parse TypeScript");
+    let ast = registry
+        .parse(source, SyntaxLanguage::TypeScript)
+        .expect("Failed to parse TypeScript");
 
     let greet = ast.symbols.iter().find(|s| s.name == "greet");
     assert!(greet.is_some(), "greet function not found");
@@ -240,7 +256,9 @@ type Coordinate = { x: number; y: number };
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::TypeScript).expect("Failed to parse TypeScript");
+    let ast = registry
+        .parse(source, SyntaxLanguage::TypeScript)
+        .expect("Failed to parse TypeScript");
 
     // Phase 1A: Verify class extraction works
     let point = ast.symbols.iter().find(|s| s.name == "Point");
@@ -249,8 +267,10 @@ type Coordinate = { x: number; y: number };
 
     // Interface extraction may be enhanced in Phase 1B
     // For now, verify we can at least parse without errors
-    assert!(ast.errors.is_empty() || !ast.has_errors(),
-        "Parse should succeed for valid TypeScript");
+    assert!(
+        ast.errors.is_empty() || !ast.has_errors(),
+        "Parse should succeed for valid TypeScript"
+    );
 }
 
 #[test]
@@ -263,7 +283,9 @@ import defaultExport from 'module';
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::TypeScript).expect("Failed to parse TypeScript");
+    let ast = registry
+        .parse(source, SyntaxLanguage::TypeScript)
+        .expect("Failed to parse TypeScript");
 
     assert!(!ast.imports.is_empty(), "Expected imports to be captured");
 }
@@ -278,17 +300,23 @@ fn test_language_detection_from_extension() {
 
     // Rust file
     let rust_source = "fn main() {}";
-    let ast = registry.parse_file(rust_source, "main.rs").expect("Failed to parse .rs");
+    let ast = registry
+        .parse_file(rust_source, "main.rs")
+        .expect("Failed to parse .rs");
     assert!(!ast.symbols.is_empty() || ast.errors.is_empty());
 
     // Python file
     let py_source = "def main(): pass";
-    let ast = registry.parse_file(py_source, "main.py").expect("Failed to parse .py");
+    let ast = registry
+        .parse_file(py_source, "main.py")
+        .expect("Failed to parse .py");
     assert!(!ast.symbols.is_empty() || ast.errors.is_empty());
 
     // TypeScript file
     let ts_source = "function main() {}";
-    let ast = registry.parse_file(ts_source, "main.ts").expect("Failed to parse .ts");
+    let ast = registry
+        .parse_file(ts_source, "main.ts")
+        .expect("Failed to parse .ts");
     assert!(!ast.symbols.is_empty() || ast.errors.is_empty());
 }
 
@@ -364,7 +392,9 @@ func privateHelper() int {
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::Go).expect("Failed to parse Go");
+    let ast = registry
+        .parse(source, SyntaxLanguage::Go)
+        .expect("Failed to parse Go");
 
     // Check for functions
     let greet = ast.symbols.iter().find(|s| s.name == "Greet");
@@ -400,7 +430,9 @@ public class Point {
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::Java).expect("Failed to parse Java");
+    let ast = registry
+        .parse(source, SyntaxLanguage::Java)
+        .expect("Failed to parse Java");
 
     let point = ast.symbols.iter().find(|s| s.name == "Point");
     assert!(point.is_some(), "Point class not found");
@@ -428,7 +460,9 @@ const multiply = (a, b) => a * b;
 "#;
 
     let registry = SyntaxRegistry::new();
-    let ast = registry.parse(source, SyntaxLanguage::JavaScript).expect("Failed to parse JavaScript");
+    let ast = registry
+        .parse(source, SyntaxLanguage::JavaScript)
+        .expect("Failed to parse JavaScript");
 
     let greet = ast.symbols.iter().find(|s| s.name == "greet");
     assert!(greet.is_some(), "greet function not found");

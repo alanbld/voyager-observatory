@@ -11,12 +11,9 @@ mod temporal_tests {
     use tempfile::TempDir;
 
     use pm_encoder::core::temporal::{
-        ChronosEngine, ChronosState, TemporalCensus,
-        AgeClassification, ChurnClassification,
+        AgeClassification, ChronosEngine, ChronosState, ChurnClassification, TemporalCensus,
     };
-    use pm_encoder::core::temporal::{
-        GeologicalAnalyzer, GeologicalActivity,
-    };
+    use pm_encoder::core::temporal::{GeologicalActivity, GeologicalAnalyzer};
 
     // =========================================================================
     // Test Helpers: Mock Repository Creation
@@ -76,7 +73,10 @@ mod temporal_tests {
     /// Add multiple observations to a file to simulate churn.
     fn add_multiple_observations(dir: &PathBuf, filename: &str, count: usize) {
         for i in 0..count {
-            let content = format!("// Observation {}\nfn main() {{ println!(\"v{}\"); }}", i, i);
+            let content = format!(
+                "// Observation {}\nfn main() {{ println!(\"v{}\"); }}",
+                i, i
+            );
             let message = format!("Observation {} on {}", i, filename);
             add_observation(dir, filename, &content, &message);
         }
@@ -95,7 +95,10 @@ mod temporal_tests {
         add_observation(&path, "main.rs", "fn main() {}", "Initial observation");
 
         let engine = ChronosEngine::new(temp_dir.path());
-        assert!(engine.is_some(), "ChronosEngine should initialize with valid git repo");
+        assert!(
+            engine.is_some(),
+            "ChronosEngine should initialize with valid git repo"
+        );
     }
 
     #[test]
@@ -104,7 +107,10 @@ mod temporal_tests {
         // No git init - just an empty directory
 
         let engine = ChronosEngine::new(temp_dir.path());
-        assert!(engine.is_none(), "ChronosEngine should return None without .git");
+        assert!(
+            engine.is_none(),
+            "ChronosEngine should return None without .git"
+        );
     }
 
     #[test]
@@ -139,10 +145,15 @@ mod temporal_tests {
         }
 
         let mut engine = ChronosEngine::new(temp_dir.path()).unwrap();
-        engine.extract_history().expect("History extraction should succeed");
+        engine
+            .extract_history()
+            .expect("History extraction should succeed");
 
         let census = engine.build_census();
-        assert_eq!(census.total_observations, 5, "Should count all observations");
+        assert_eq!(
+            census.total_observations, 5,
+            "Should count all observations"
+        );
     }
 
     #[test]
@@ -153,10 +164,15 @@ mod temporal_tests {
         add_observation(&path, "main.rs", "fn main() {}", "Initial observation");
 
         let mut engine = ChronosEngine::new(temp_dir.path()).unwrap();
-        engine.extract_history().expect("History extraction should succeed");
+        engine
+            .extract_history()
+            .expect("History extraction should succeed");
 
         let census = engine.build_census();
-        assert!(census.observer_count >= 1, "Should identify at least one observer");
+        assert!(
+            census.observer_count >= 1,
+            "Should identify at least one observer"
+        );
     }
 
     // =========================================================================
@@ -172,12 +188,17 @@ mod temporal_tests {
         add_observation(&path, "ancient.rs", "fn ancient() {}", "Big bang");
 
         let mut engine = ChronosEngine::new(temp_dir.path()).unwrap();
-        engine.extract_history().expect("History extraction should succeed");
+        engine
+            .extract_history()
+            .expect("History extraction should succeed");
 
         let census = engine.build_census();
 
         // Galaxy age should be at least 0 (created just now)
-        assert!(census.galaxy_age_days >= 0, "Galaxy age should be non-negative");
+        assert!(
+            census.galaxy_age_days >= 0,
+            "Galaxy age should be non-negative"
+        );
     }
 
     #[test]
@@ -255,26 +276,32 @@ mod temporal_tests {
     fn test_geological_analyzer_default_thresholds() {
         let analyzer = GeologicalAnalyzer::new();
 
-        assert_eq!(analyzer.tectonic_churn, 10, "Default tectonic churn threshold");
-        assert!((analyzer.tectonic_dark_matter - 0.20).abs() < 0.01, "Default dark matter threshold");
-        assert_eq!(analyzer.ancient_dormant_days, 730, "Default ancient threshold (2 years)");
-        assert_eq!(analyzer.supernova_threshold, 30, "Default supernova threshold");
+        assert_eq!(
+            analyzer.tectonic_churn, 10,
+            "Default tectonic churn threshold"
+        );
+        assert!(
+            (analyzer.tectonic_dark_matter - 0.20).abs() < 0.01,
+            "Default dark matter threshold"
+        );
+        assert_eq!(
+            analyzer.ancient_dormant_days, 730,
+            "Default ancient threshold (2 years)"
+        );
+        assert_eq!(
+            analyzer.supernova_threshold, 30,
+            "Default supernova threshold"
+        );
     }
 
     #[test]
     fn test_geological_activity_stable() {
-        assert_eq!(
-            GeologicalActivity::Stable.description(),
-            "Stable geology"
-        );
+        assert_eq!(GeologicalActivity::Stable.description(), "Stable geology");
     }
 
     #[test]
     fn test_geological_activity_volcanic() {
-        assert_eq!(
-            GeologicalActivity::HighVolcanic.indicator(),
-            "🔥"
-        );
+        assert_eq!(GeologicalActivity::HighVolcanic.indicator(), "🔥");
     }
 
     // =========================================================================
@@ -289,7 +316,9 @@ mod temporal_tests {
         add_observation(&path, "main.rs", "fn main() {}", "Initial");
 
         let mut engine = ChronosEngine::new(temp_dir.path()).unwrap();
-        engine.extract_history().expect("History extraction should succeed");
+        engine
+            .extract_history()
+            .expect("History extraction should succeed");
 
         let state = engine.state();
         assert!(
@@ -311,7 +340,9 @@ mod temporal_tests {
         add_observation(&path, "tests/test.rs", "#[test] fn test() {}", "Add test");
 
         let mut engine = ChronosEngine::new(temp_dir.path()).unwrap();
-        engine.extract_history().expect("History extraction should succeed");
+        engine
+            .extract_history()
+            .expect("History extraction should succeed");
 
         let census = engine.build_census();
 
@@ -332,8 +363,18 @@ mod temporal_tests {
         std::fs::create_dir_all(path.join("src/core")).ok();
 
         // Add initial files
-        add_observation(&path, "src/main.rs", "fn main() { core::run(); }", "Initial main");
-        add_observation(&path, "src/core/mod.rs", "pub fn run() {}", "Add core module");
+        add_observation(
+            &path,
+            "src/main.rs",
+            "fn main() { core::run(); }",
+            "Initial main",
+        );
+        add_observation(
+            &path,
+            "src/core/mod.rs",
+            "pub fn run() {}",
+            "Add core module",
+        );
 
         // Add more observations to main.rs to simulate churn
         for i in 0..5 {
@@ -347,12 +388,17 @@ mod temporal_tests {
 
         // Create and run engine
         let mut engine = ChronosEngine::new(temp_dir.path()).unwrap();
-        engine.extract_history().expect("History extraction should succeed");
+        engine
+            .extract_history()
+            .expect("History extraction should succeed");
 
         let census = engine.build_census();
 
         // Verify basic metrics
-        assert!(census.total_observations >= 7, "Should count all observations");
+        assert!(
+            census.total_observations >= 7,
+            "Should count all observations"
+        );
         assert!(census.observer_count >= 1, "Should have observers");
         assert!(census.galaxy_age_days >= 0, "Should have valid age");
 
@@ -374,10 +420,16 @@ mod temporal_tests {
 
         // Should use celestial terminology, not git jargon
         assert!(!description.contains("git"), "Should not contain 'git'");
-        assert!(!description.contains("commit"), "Should not contain 'commit'");
+        assert!(
+            !description.contains("commit"),
+            "Should not contain 'commit'"
+        );
         assert!(!description.contains("blame"), "Should not contain 'blame'");
 
-        assert!(description.contains("Chronos"), "Should use Chronos terminology");
+        assert!(
+            description.contains("Chronos"),
+            "Should use Chronos terminology"
+        );
     }
 
     #[test]
@@ -387,7 +439,10 @@ mod temporal_tests {
         let static_state = ChronosState::StaticGalaxy;
         let description = temporal_state_description(&static_state);
 
-        assert!(description.contains("Static Galaxy"), "Should describe static galaxy");
+        assert!(
+            description.contains("Static Galaxy"),
+            "Should describe static galaxy"
+        );
     }
 }
 
@@ -397,11 +452,14 @@ mod temporal_tests {
 
 #[cfg(not(feature = "temporal"))]
 mod non_temporal_tests {
-    use pm_encoder::core::temporal::{ChronosState, is_temporal_available};
+    use pm_encoder::core::temporal::{is_temporal_available, ChronosState};
 
     #[test]
     fn test_temporal_not_available() {
-        assert!(!is_temporal_available(), "Temporal should not be available without feature");
+        assert!(
+            !is_temporal_available(),
+            "Temporal should not be available without feature"
+        );
     }
 }
 

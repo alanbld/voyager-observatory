@@ -6,28 +6,26 @@
 //! Build: cargo build --features mcp --bin pm_encoder_mcp
 //! Run:   ./target/debug/pm_encoder_mcp
 
-use std::path::PathBuf;
-use pm_encoder::{
-    ContextEngine, EncoderConfig, LensManager,
-    parse_token_budget, apply_token_budget,
-};
 use pm_encoder::core::{
-    ContextEngine as CoreContextEngine,
-    ZoomConfig, ZoomTarget, ZoomDepth,
-    ContextStore, DEFAULT_ALPHA,
+    ContextEngine as CoreContextEngine, ContextStore, ZoomConfig, ZoomDepth, ZoomTarget,
+    DEFAULT_ALPHA,
+};
+use pm_encoder::{
+    apply_token_budget, parse_token_budget, ContextEngine, EncoderConfig, LensManager,
 };
 use rmcp::{
-    schemars,
-    schemars::JsonSchema,
-    ServerHandler, ServiceExt,
     handler::server::tool::ToolRouter,
     model::{
         CallToolRequestParam, CallToolResult, Content, Implementation, ListToolsResult,
         ServerCapabilities, ServerInfo, Tool, ToolsCapability,
     },
+    schemars,
+    schemars::JsonSchema,
     service::{RequestContext, RoleServer},
+    ServerHandler, ServiceExt,
 };
 use serde::Deserialize;
+use std::path::PathBuf;
 use tokio::io::{stdin, stdout};
 
 /// MCP Server for pm_encoder
@@ -164,7 +162,8 @@ impl PmEncoderServer {
                     })?;
 
                     let strategy = params.budget_strategy.as_deref().unwrap_or("drop");
-                    let (selected, _report) = apply_token_budget(files, budget, &lens_manager, strategy);
+                    let (selected, _report) =
+                        apply_token_budget(files, budget, &lens_manager, strategy);
                     selected
                 } else {
                     files
@@ -200,7 +199,10 @@ impl PmEncoderServer {
         rmcp::handler::server::tool::ToolRoute::new_dyn(tool, |_ctx| {
             Box::pin(async move {
                 let lenses = vec![
-                    ("architecture", "Signatures only - best for understanding structure"),
+                    (
+                        "architecture",
+                        "Signatures only - best for understanding structure",
+                    ),
                     ("debug", "Full content - for debugging and deep analysis"),
                     ("security", "Auth, crypto, validation focus"),
                     ("minimal", "Entry points only - smallest context"),
@@ -418,7 +420,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = PmEncoderServer::new();
 
     // Log to stderr so stdout is clean for MCP protocol
-    eprintln!("pm_encoder MCP Server v{} starting...", pm_encoder::version());
+    eprintln!(
+        "pm_encoder MCP Server v{} starting...",
+        pm_encoder::version()
+    );
 
     // Set up stdio transport for MCP
     let transport = (stdin(), stdout());

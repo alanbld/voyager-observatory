@@ -22,7 +22,9 @@ impl Default for SemanticTransparency {
 impl SemanticTransparency {
     /// Create a new transparency handler (details hidden by default).
     pub fn new() -> Self {
-        Self { show_details: false }
+        Self {
+            show_details: false,
+        }
     }
 
     /// Enable or disable technical details.
@@ -275,13 +277,7 @@ mod tests {
     #[test]
     fn test_format_equivalence_disabled() {
         let transparency = SemanticTransparency::new(); // disabled
-        let output = transparency.format_equivalence(
-            "foo",
-            "Rust",
-            "bar",
-            "Python",
-            0.9,
-        );
+        let output = transparency.format_equivalence("foo", "Rust", "bar", "Python", 0.9);
         assert!(output.is_empty());
     }
 
@@ -307,13 +303,8 @@ mod tests {
     #[test]
     fn test_format_equivalence_low_similarity() {
         let transparency = SemanticTransparency::new().with_details(true);
-        let output = transparency.format_equivalence(
-            "validate",
-            "Go",
-            "check_input",
-            "Python",
-            0.45,
-        );
+        let output =
+            transparency.format_equivalence("validate", "Go", "check_input", "Python", 0.45);
 
         assert!(output.contains("similarity: 0.45"));
     }
@@ -321,11 +312,8 @@ mod tests {
     #[test]
     fn test_format_relevance_disabled() {
         let transparency = SemanticTransparency::new(); // disabled
-        let output = transparency.format_relevance(
-            "main",
-            0.9,
-            &["entry point", "high call count"],
-        );
+        let output =
+            transparency.format_relevance("main", 0.9, &["entry point", "high call count"]);
         assert!(output.is_empty());
     }
 
@@ -346,11 +334,7 @@ mod tests {
     #[test]
     fn test_format_relevance_single_factor() {
         let transparency = SemanticTransparency::new().with_details(true);
-        let output = transparency.format_relevance(
-            "init",
-            0.5,
-            &["initialization function"],
-        );
+        let output = transparency.format_relevance("init", 0.5, &["initialization function"]);
 
         assert!(output.contains("init"));
         assert!(output.contains("0.50"));
@@ -360,11 +344,7 @@ mod tests {
     #[test]
     fn test_format_relevance_empty_factors() {
         let transparency = SemanticTransparency::new().with_details(true);
-        let output = transparency.format_relevance(
-            "unknown",
-            0.1,
-            &[],
-        );
+        let output = transparency.format_relevance("unknown", 0.1, &[]);
 
         assert!(output.contains("unknown"));
         assert!(output.contains("0.10"));
@@ -374,11 +354,7 @@ mod tests {
     #[test]
     fn test_format_filter_decision_disabled() {
         let transparency = SemanticTransparency::new(); // disabled
-        let output = transparency.format_filter_decision(
-            "test_helper",
-            "test file",
-            false,
-        );
+        let output = transparency.format_filter_decision("test_helper", "test file", false);
         assert!(output.is_empty());
     }
 
@@ -399,11 +375,8 @@ mod tests {
     #[test]
     fn test_format_filter_decision_filtered() {
         let transparency = SemanticTransparency::new().with_details(true);
-        let output = transparency.format_filter_decision(
-            "test_helper",
-            "test file excluded by lens",
-            false,
-        );
+        let output =
+            transparency.format_filter_decision("test_helper", "test file excluded by lens", false);
 
         assert!(output.contains("test_helper"));
         assert!(output.contains("[FILTERED]"));
@@ -510,7 +483,7 @@ mod tests {
     fn test_simplify_no_change() {
         let input = "Found 5 relevant functions in the codebase";
         let output = JargonFilter::simplify(input);
-        assert_eq!(output, input);  // No jargon to replace
+        assert_eq!(output, input); // No jargon to replace
     }
 
     #[test]
@@ -545,28 +518,18 @@ mod tests {
         let transparency = SemanticTransparency::new().with_details(true);
 
         // Format multiple details
-        let details = transparency.format_details(&[
-            ("Lens", "Architecture"),
-            ("Intent", "Business Logic"),
-        ]);
+        let details =
+            transparency.format_details(&[("Lens", "Architecture"), ("Intent", "Business Logic")]);
         assert!(!details.is_empty());
 
         // Format equivalence
-        let equiv = transparency.format_equivalence(
-            "getData",
-            "JavaScript",
-            "get_data",
-            "Python",
-            0.92,
-        );
+        let equiv =
+            transparency.format_equivalence("getData", "JavaScript", "get_data", "Python", 0.92);
         assert!(equiv.contains("↔"));
 
         // Format relevance
-        let rel = transparency.format_relevance(
-            "main",
-            0.95,
-            &["entry point", "high connectivity"],
-        );
+        let rel =
+            transparency.format_relevance("main", 0.95, &["entry point", "high connectivity"]);
         assert!(rel.contains("scored"));
 
         // Format filter decision
@@ -584,8 +547,14 @@ mod tests {
         let transparency = SemanticTransparency::new(); // disabled
 
         assert!(transparency.format_details(&[("A", "B")]).is_empty());
-        assert!(transparency.format_equivalence("a", "x", "b", "y", 0.5).is_empty());
-        assert!(transparency.format_relevance("sym", 0.5, &["factor"]).is_empty());
-        assert!(transparency.format_filter_decision("sym", "reason", true).is_empty());
+        assert!(transparency
+            .format_equivalence("a", "x", "b", "y", 0.5)
+            .is_empty());
+        assert!(transparency
+            .format_relevance("sym", 0.5, &["factor"])
+            .is_empty());
+        assert!(transparency
+            .format_filter_decision("sym", "reason", true)
+            .is_empty());
     }
 }

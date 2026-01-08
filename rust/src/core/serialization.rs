@@ -138,8 +138,12 @@ pub fn format_xml_header_attrs(size: u64, mtime: u64, mode: MetadataMode) -> Str
     match mode {
         MetadataMode::None => String::new(),
         MetadataMode::All => {
-            format!(" size=\"{}\" mtime=\"{}\" mtime_human=\"{}\"",
-                size, mtime, format_timestamp_full(mtime))
+            format!(
+                " size=\"{}\" mtime=\"{}\" mtime_human=\"{}\"",
+                size,
+                mtime,
+                format_timestamp_full(mtime)
+            )
         }
         MetadataMode::SizeOnly => {
             format!(" size=\"{}\"", size)
@@ -222,7 +226,10 @@ impl Serializer for PlusMinusSerializer {
         // Build header with optional brightness indicator and [SKELETON] tag
         let header = if file.compression_level == CompressionLevel::Skeleton {
             if let Some(orig) = file.original_tokens {
-                format!("+++ {}{} [SKELETON] (original: {} tokens)\n", brightness, file.path, orig)
+                format!(
+                    "+++ {}{} [SKELETON] (original: {} tokens)\n",
+                    brightness, file.path, orig
+                )
             } else {
                 format!("+++ {}{} [SKELETON]\n", brightness, file.path)
             }
@@ -372,7 +379,10 @@ impl Serializer for MarkdownSerializer {
         // Build header with optional brightness and [SKELETON] tag
         let header = if file.compression_level == CompressionLevel::Skeleton {
             if let Some(orig) = file.original_tokens {
-                format!("## {}{} [SKELETON] (original: {} tokens)\n\n", brightness, file.path, orig)
+                format!(
+                    "## {}{} [SKELETON] (original: {} tokens)\n\n",
+                    brightness, file.path, orig
+                )
             } else {
                 format!("## {}{} [SKELETON]\n\n", brightness, file.path)
             }
@@ -468,7 +478,10 @@ mod tests {
 
     #[test]
     fn test_xml_escape() {
-        assert_eq!(XmlSerializer::escape_xml("<>&\"'"), "&lt;&gt;&amp;&quot;&apos;");
+        assert_eq!(
+            XmlSerializer::escape_xml("<>&\"'"),
+            "&lt;&gt;&amp;&quot;&apos;"
+        );
     }
 
     #[test]
@@ -631,7 +644,8 @@ mod tests {
         let old_mtime = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs() - (365 * 86400); // 1 year ago
+            .as_secs()
+            - (365 * 86400); // 1 year ago
 
         let result = format_metadata_suffix(5_000, old_mtime, MetadataMode::Auto);
         assert!(result.is_empty());
@@ -643,7 +657,8 @@ mod tests {
         let ancient_mtime = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs() - (6 * 365 * 86400); // 6 years ago
+            .as_secs()
+            - (6 * 365 * 86400); // 6 years ago
 
         let result = format_metadata_suffix(5_000, ancient_mtime, MetadataMode::Auto);
         assert!(!result.contains("S:")); // Small, so no size
@@ -698,8 +713,14 @@ mod tests {
         assert_eq!(MetadataMode::parse("AUTO"), Some(MetadataMode::Auto));
         assert_eq!(MetadataMode::parse("all"), Some(MetadataMode::All));
         assert_eq!(MetadataMode::parse("none"), Some(MetadataMode::None));
-        assert_eq!(MetadataMode::parse("size-only"), Some(MetadataMode::SizeOnly));
-        assert_eq!(MetadataMode::parse("size_only"), Some(MetadataMode::SizeOnly));
+        assert_eq!(
+            MetadataMode::parse("size-only"),
+            Some(MetadataMode::SizeOnly)
+        );
+        assert_eq!(
+            MetadataMode::parse("size_only"),
+            Some(MetadataMode::SizeOnly)
+        );
         assert_eq!(MetadataMode::parse("invalid"), None);
     }
 

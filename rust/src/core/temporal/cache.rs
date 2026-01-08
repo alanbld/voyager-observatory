@@ -16,9 +16,8 @@ use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 // =============================================================================
@@ -174,15 +173,15 @@ impl ChronosCacheManager {
             .map_err(|e| format!("Failed to create cache directory: {}", e))?;
 
         // Serialize
-        let buffer = bincode::serialize(cache)
-            .map_err(|e| format!("Failed to serialize cache: {}", e))?;
+        let buffer =
+            bincode::serialize(cache).map_err(|e| format!("Failed to serialize cache: {}", e))?;
 
         // Write atomically (write to temp, then rename)
         let cache_path = self.cache_path();
         let temp_path = cache_path.with_extension("tmp");
 
-        let mut file = File::create(&temp_path)
-            .map_err(|e| format!("Failed to create cache file: {}", e))?;
+        let mut file =
+            File::create(&temp_path).map_err(|e| format!("Failed to create cache file: {}", e))?;
         file.write_all(&buffer)
             .map_err(|e| format!("Failed to write cache: {}", e))?;
         file.sync_all()
@@ -198,8 +197,7 @@ impl ChronosCacheManager {
     pub fn invalidate(&self) -> Result<(), String> {
         let cache_path = self.cache_path();
         if cache_path.exists() {
-            fs::remove_file(&cache_path)
-                .map_err(|e| format!("Failed to remove cache: {}", e))?;
+            fs::remove_file(&cache_path).map_err(|e| format!("Failed to remove cache: {}", e))?;
         }
         Ok(())
     }
@@ -232,7 +230,9 @@ impl ChronosCacheManager {
             } else {
                 git_dir.join(ref_path)
             };
-            fs::read_to_string(&full_ref_path).ok().map(|s| s.trim().to_string())
+            fs::read_to_string(&full_ref_path)
+                .ok()
+                .map(|s| s.trim().to_string())
         } else {
             // Direct hash
             Some(head_content.trim().to_string())
@@ -248,7 +248,8 @@ impl ChronosCacheManager {
         hit_depth_limit: bool,
         commit_depth: usize,
     ) -> Result<ChronosCache, String> {
-        let git_head_hash = self.get_git_head_hash()
+        let git_head_hash = self
+            .get_git_head_hash()
             .ok_or_else(|| "Failed to get git HEAD hash".to_string())?;
 
         let now = SystemTime::now()
@@ -317,7 +318,10 @@ mod tests {
     #[test]
     fn test_warp_status_description() {
         assert_eq!(WarpStatus::Engaged.description(), "Warp Engaged (cached)");
-        assert_eq!(WarpStatus::Calibrating.description(), "Warp Calibrating (analyzing)");
+        assert_eq!(
+            WarpStatus::Calibrating.description(),
+            "Warp Calibrating (analyzing)"
+        );
         assert_eq!(WarpStatus::Offline.description(), "Warp Offline (no cache)");
     }
 
@@ -444,7 +448,10 @@ mod tests {
 
         // Simulate cache miss scenario
         let cache_miss_status = WarpStatus::Calibrating;
-        assert_eq!(cache_miss_status.description(), "Warp Calibrating (analyzing)");
+        assert_eq!(
+            cache_miss_status.description(),
+            "Warp Calibrating (analyzing)"
+        );
 
         // Verify they are different
         assert_ne!(cache_hit_status, cache_miss_status);
@@ -490,15 +497,16 @@ mod tests {
     #[test]
     fn test_chronos_cache_fields() {
         let mut histories = HashMap::new();
-        histories.insert("src/main.rs".to_string(), vec![
-            CachedObservation {
+        histories.insert(
+            "src/main.rs".to_string(),
+            vec![CachedObservation {
                 timestamp_secs: 1609459200,
                 observer_name: "Alice".to_string(),
                 observer_email_hash: "hash1".to_string(),
                 lines_added: 50,
                 lines_removed: 10,
-            },
-        ]);
+            }],
+        );
 
         let stats = CachedGalaxyStats {
             total_observations: 100,
@@ -863,15 +871,16 @@ mod tests {
         let manager = ChronosCacheManager::new(&temp_dir);
 
         let mut histories = HashMap::new();
-        histories.insert("src/lib.rs".to_string(), vec![
-            CachedObservation {
+        histories.insert(
+            "src/lib.rs".to_string(),
+            vec![CachedObservation {
                 timestamp_secs: 1000000,
                 observer_name: "Test".to_string(),
                 observer_email_hash: "hash".to_string(),
                 lines_added: 10,
                 lines_removed: 5,
-            },
-        ]);
+            }],
+        );
 
         let cache = ChronosCache {
             version: CACHE_VERSION,
@@ -1163,11 +1172,9 @@ mod tests {
         let stats = CachedGalaxyStats::default();
 
         let result = manager.create_cache(
-            histories,
-            stats,
-            100,   // total_observations
-            true,  // hit_depth_limit
-            500,   // commit_depth
+            histories, stats, 100,  // total_observations
+            true, // hit_depth_limit
+            500,  // commit_depth
         );
 
         assert!(result.is_ok());
@@ -1200,13 +1207,8 @@ mod tests {
         // No .git directory
         let manager = ChronosCacheManager::new(&temp_dir);
 
-        let result = manager.create_cache(
-            HashMap::new(),
-            CachedGalaxyStats::default(),
-            0,
-            false,
-            0,
-        );
+        let result =
+            manager.create_cache(HashMap::new(), CachedGalaxyStats::default(), 0, false, 0);
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("git HEAD"));

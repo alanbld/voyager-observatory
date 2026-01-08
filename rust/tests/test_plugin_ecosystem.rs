@@ -13,13 +13,11 @@
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 
-use pm_encoder::core::plugins::{
-    PluginEngine, EngineState,
-    IronSandbox, MEMORY_LIMIT,
-    PluginError, PluginStatus,
-};
 use pm_encoder::core::plugins::bridges::vo_table::{
-    create_vo_table, SharedContributions, PluginContributions,
+    create_vo_table, PluginContributions, SharedContributions,
+};
+use pm_encoder::core::plugins::{
+    EngineState, IronSandbox, PluginEngine, PluginError, PluginStatus, MEMORY_LIMIT,
 };
 
 // =============================================================================
@@ -90,8 +88,11 @@ mod adversarial {
 
         assert!(result.is_err(), "Infinite loop should be stopped");
         // Should terminate relatively quickly (within a few seconds at most)
-        assert!(elapsed < Duration::from_secs(5),
-            "Should terminate quickly, took {:?}", elapsed);
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "Should terminate quickly, took {:?}",
+            elapsed
+        );
 
         match result.unwrap_err() {
             PluginError::TimeoutExceeded => (),
@@ -105,12 +106,14 @@ mod adversarial {
     fn test_infinite_recursion_terminates() {
         let sandbox = create_sandbox();
 
-        let result = sandbox.execute_script(r#"
+        let result = sandbox.execute_script(
+            r#"
             function recurse()
                 recurse()
             end
             recurse()
-        "#);
+        "#,
+        );
 
         assert!(result.is_err(), "Infinite recursion should be stopped");
     }
@@ -127,8 +130,11 @@ mod adversarial {
         let err = result.unwrap_err();
         match err {
             PluginError::LuaError(msg) => {
-                assert!(msg.contains("nil") || msg.contains("os"),
-                    "Error should mention os is nil/missing: {}", msg);
+                assert!(
+                    msg.contains("nil") || msg.contains("os"),
+                    "Error should mention os is nil/missing: {}",
+                    msg
+                );
             }
             _ => (), // Any error is acceptable - sandbox prevented execution
         }
@@ -240,16 +246,25 @@ mod adversarial {
         let sandbox = create_sandbox();
 
         // Execute code that allocates memory
-        sandbox.execute_script(r#"
+        sandbox
+            .execute_script(
+                r#"
             local t = {}
             for i = 1, 1000 do
                 t[i] = string.rep("x", 100)
             end
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
 
         let used = sandbox.memory_used();
         assert!(used > 0, "Should track memory usage: {}", used);
-        assert!(used < MEMORY_LIMIT, "Should be under limit: {}/{}", used, MEMORY_LIMIT);
+        assert!(
+            used < MEMORY_LIMIT,
+            "Should be under limit: {}/{}",
+            used,
+            MEMORY_LIMIT
+        );
     }
 
     /// Environment manipulation should be sandboxed
@@ -258,11 +273,13 @@ mod adversarial {
         let sandbox = create_sandbox();
 
         // Can use rawset on tables, but not escape sandbox
-        let result = sandbox.execute_script(r#"
+        let result = sandbox.execute_script(
+            r#"
             local t = {}
             rawset(t, "key", "value")
             return t.key
-        "#);
+        "#,
+        );
 
         // This should work (rawset on local table is fine)
         assert!(result.is_ok() || result.is_err()); // Either is acceptable based on config
@@ -274,10 +291,12 @@ mod adversarial {
         let sandbox = create_sandbox();
 
         // Metatables should work but not allow escape
-        let result: Result<String, _> = sandbox.execute_script_with_result(r#"
+        let result: Result<String, _> = sandbox.execute_script_with_result(
+            r#"
             local t = setmetatable({}, {__tostring = function() return "safe" end})
             return tostring(t)
-        "#);
+        "#,
+        );
 
         // Should either work safely or be blocked
         match result {
@@ -310,9 +329,9 @@ mod positive {
     fn test_string_operations() {
         let sandbox = create_sandbox();
 
-        let result: String = sandbox.execute_script_with_result(
-            r#"return string.upper("hello world")"#
-        ).unwrap();
+        let result: String = sandbox
+            .execute_script_with_result(r#"return string.upper("hello world")"#)
+            .unwrap();
         assert_eq!(result, "HELLO WORLD");
     }
 
@@ -321,9 +340,9 @@ mod positive {
     fn test_math_operations() {
         let sandbox = create_sandbox();
 
-        let result: f64 = sandbox.execute_script_with_result(
-            "return math.sqrt(144)"
-        ).unwrap();
+        let result: f64 = sandbox
+            .execute_script_with_result("return math.sqrt(144)")
+            .unwrap();
         assert_eq!(result, 12.0);
     }
 
@@ -332,10 +351,14 @@ mod positive {
     fn test_table_operations() {
         let sandbox = create_sandbox();
 
-        let result: i32 = sandbox.execute_script_with_result(r#"
+        let result: i32 = sandbox
+            .execute_script_with_result(
+                r#"
             local t = {1, 2, 3, 4, 5}
             return #t
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
         assert_eq!(result, 5);
     }
 
@@ -364,11 +387,15 @@ mod positive {
         let vo = create_vo_table(sandbox.lua(), contributions.clone()).unwrap();
         sandbox.lua().globals().set("vo", vo).unwrap();
 
-        sandbox.execute_script(r#"
+        sandbox
+            .execute_script(
+                r#"
             vo.log("info", "Test message 1")
             vo.log("warn", "Test message 2")
             vo.log("error", "Test message 3")
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
 
         let contribs = contributions.lock().unwrap();
         assert_eq!(contribs.logs.len(), 3);
@@ -386,12 +413,16 @@ mod positive {
         let vo = create_vo_table(sandbox.lua(), contributions.clone()).unwrap();
         sandbox.lua().globals().set("vo", vo).unwrap();
 
-        sandbox.execute_script(r#"
+        sandbox
+            .execute_script(
+                r#"
             vo.contribute_tag("file_c:10", "tag1")
             vo.contribute_tag("file_a:20", "tag2")
             vo.contribute_tag("file_b:30", "tag3")
             vo.contribute_tag("file_a:20", "tag4")
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
 
         let contribs = contributions.lock().unwrap();
 
@@ -415,7 +446,9 @@ mod positive {
         let vo = create_vo_table(sandbox.lua(), contributions.clone()).unwrap();
         sandbox.lua().globals().set("vo", vo).unwrap();
 
-        sandbox.execute_script(r#"
+        sandbox
+            .execute_script(
+                r#"
             vo.register_metric("test_complexity", function(ast)
                 return {
                     value = 42.5,
@@ -423,7 +456,9 @@ mod positive {
                     explanation = "Test metric value"
                 }
             end)
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
 
         let contribs = contributions.lock().unwrap();
         let metric = contribs.metrics.get("test_complexity").unwrap();
@@ -441,10 +476,14 @@ mod positive {
         let vo = create_vo_table(sandbox.lua(), contributions).unwrap();
         sandbox.lua().globals().set("vo", vo).unwrap();
 
-        let count: i32 = sandbox.execute_script_with_result(r#"
+        let count: i32 = sandbox
+            .execute_script_with_result(
+                r#"
             local matcher = vo.regex("fn\\s+\\w+")
             return matcher("fn foo() fn bar() fn baz()")
-        "#).unwrap();
+        "#,
+            )
+            .unwrap();
 
         assert_eq!(count, 3);
     }
@@ -458,9 +497,9 @@ mod positive {
         let vo = create_vo_table(sandbox.lua(), contributions).unwrap();
         sandbox.lua().globals().set("vo", vo).unwrap();
 
-        let version: String = sandbox.execute_script_with_result(
-            "return vo.api_version"
-        ).unwrap();
+        let version: String = sandbox
+            .execute_script_with_result("return vo.api_version")
+            .unwrap();
 
         assert_eq!(version, "3.0");
     }
@@ -497,13 +536,17 @@ mod integration {
     fn test_engine_execution() {
         let temp = create_test_plugin_dir(&[("test-plugin", "test.lua", true)]);
 
-        write_plugin_content(&temp, "test.lua", r#"
+        write_plugin_content(
+            &temp,
+            "test.lua",
+            r#"
             vo.log("info", "Plugin initialized")
             vo.contribute_tag("src/main.rs:10", "needs-review")
             vo.register_metric("plugin_metric", function(ast)
                 return { value = 100, confidence = 1.0, explanation = "From plugin" }
             end)
-        "#);
+        "#,
+        );
 
         let mut engine = PluginEngine::new();
         engine.add_search_path(temp.path().to_path_buf());
@@ -568,7 +611,10 @@ mod integration {
 
         // Bad plugin should have ExecutionError status
         let plugins = engine.plugins();
-        let bad_plugin = plugins.iter().find(|p| p.entry.name == "bad-plugin").unwrap();
+        let bad_plugin = plugins
+            .iter()
+            .find(|p| p.entry.name == "bad-plugin")
+            .unwrap();
         assert!(matches!(bad_plugin.status, PluginStatus::ExecutionError(_)));
     }
 
@@ -608,17 +654,23 @@ mod integration {
     /// Multiple plugins contribute to same tag node
     #[test]
     fn test_multi_plugin_contributions() {
-        let temp = create_test_plugin_dir(&[
-            ("plugin-1", "p1.lua", true),
-            ("plugin-2", "p2.lua", true),
-        ]);
+        let temp =
+            create_test_plugin_dir(&[("plugin-1", "p1.lua", true), ("plugin-2", "p2.lua", true)]);
 
-        write_plugin_content(&temp, "p1.lua", r#"
+        write_plugin_content(
+            &temp,
+            "p1.lua",
+            r#"
             vo.contribute_tag("shared:node", "from-p1")
-        "#);
-        write_plugin_content(&temp, "p2.lua", r#"
+        "#,
+        );
+        write_plugin_content(
+            &temp,
+            "p2.lua",
+            r#"
             vo.contribute_tag("shared:node", "from-p2")
-        "#);
+        "#,
+        );
 
         let mut engine = PluginEngine::new();
         engine.add_search_path(temp.path().to_path_buf());
@@ -704,7 +756,11 @@ mod regression {
     #[test]
     fn test_comment_only_plugin() {
         let temp = create_test_plugin_dir(&[("comments", "comments.lua", true)]);
-        write_plugin_content(&temp, "comments.lua", "-- Just a comment\n-- Another comment");
+        write_plugin_content(
+            &temp,
+            "comments.lua",
+            "-- Just a comment\n-- Another comment",
+        );
 
         let mut engine = PluginEngine::new();
         engine.add_search_path(temp.path().to_path_buf());
@@ -718,10 +774,9 @@ mod regression {
     fn test_long_string_handling() {
         let sandbox = create_sandbox();
 
-        let result: i32 = sandbox.execute_script_with_result(&format!(
-            "local s = '{}'; return #s",
-            "x".repeat(100000)
-        )).unwrap();
+        let result: i32 = sandbox
+            .execute_script_with_result(&format!("local s = '{}'; return #s", "x".repeat(100000)))
+            .unwrap();
 
         assert_eq!(result, 100000);
     }

@@ -178,7 +178,7 @@ impl ShellPatternRecognizer {
             automation_patterns: vec![
                 Regex::new(r"(?i)cron(tab)?").unwrap(),
                 Regex::new(r"#\s*@(hourly|daily|weekly|monthly|yearly)").unwrap(),
-                Regex::new(r"\d+\s+\d+\s+\*\s+\*\s+\*").unwrap(),  // cron expression
+                Regex::new(r"\d+\s+\d+\s+\*\s+\*\s+\*").unwrap(), // cron expression
                 Regex::new(r"(?i)systemd|systemctl").unwrap(),
                 Regex::new(r"(?i)\bat\s+").unwrap(),
                 Regex::new(r"(?i)\bwatch\s+").unwrap(),
@@ -211,7 +211,7 @@ impl ShellPatternRecognizer {
                 Regex::new(r"(?i)assert|expect").unwrap(),
                 Regex::new(r"(?i)mock|stub|fake").unwrap(),
                 Regex::new(r"(?i)(integration|unit|e2e).*test").unwrap(),
-                Regex::new(r"\[\s*-[a-z]\s+").unwrap(),  // test expressions
+                Regex::new(r"\[\s*-[a-z]\s+").unwrap(), // test expressions
             ],
 
             build_patterns: vec![
@@ -420,7 +420,9 @@ impl ShellPatternRecognizer {
         }
 
         // Extract tools
-        let tools = ["awk", "sed", "jq", "grep", "cut", "sort", "uniq", "xargs", "tr"];
+        let tools = [
+            "awk", "sed", "jq", "grep", "cut", "sort", "uniq", "xargs", "tr",
+        ];
         for tool in tools {
             if content.to_lowercase().contains(tool) {
                 pattern.tools.push(tool.to_string());
@@ -523,7 +525,9 @@ impl ShellPatternRecognizer {
         }
 
         // Extract build tools
-        let tools = ["make", "cmake", "cargo", "npm", "yarn", "go", "mvn", "gradle"];
+        let tools = [
+            "make", "cmake", "cargo", "npm", "yarn", "go", "mvn", "gradle",
+        ];
         for tool in tools {
             if content.to_lowercase().contains(tool) {
                 pattern.tools.push(tool.to_string());

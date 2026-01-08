@@ -9,10 +9,10 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use pm_encoder::core::{
-    ContextEngine, EncoderConfig, ZoomConfig, ZoomTarget, ZoomDepth,
-    SymbolResolver, UsageFinder, RelatedContext, FileTier,
+    ContextEngine, EncoderConfig, FileTier, RelatedContext, SymbolResolver, UsageFinder,
+    ZoomConfig, ZoomDepth, ZoomTarget,
 };
-use pm_encoder::{LensManager, apply_token_budget};
+use pm_encoder::{apply_token_budget, LensManager};
 
 /// Create a test project with Core, Tests, and Config files
 fn create_test_project() -> TempDir {
@@ -37,7 +37,8 @@ pub fn another_function() {
     main_function();
 }
 "#,
-    ).unwrap();
+    )
+    .unwrap();
 
     fs::write(
         root.join("src/utils.rs"),
@@ -52,7 +53,8 @@ pub fn unused_function() {
     // This function is never called
 }
 "#,
-    ).unwrap();
+    )
+    .unwrap();
 
     // Create tests/ directory (Tests tier)
     fs::create_dir_all(root.join("tests")).unwrap();
@@ -68,7 +70,8 @@ fn test_main() {
     main_function();
 }
 "#,
-    ).unwrap();
+    )
+    .unwrap();
 
     // Create Cargo.toml (Config tier)
     fs::write(
@@ -79,13 +82,15 @@ name = "mylib"
 version = "0.1.0"
 edition = "2021"
 "#,
-    ).unwrap();
+    )
+    .unwrap();
 
     // Create README.md (Other tier)
     fs::write(
         root.join("README.md"),
         "# Test Project\n\nA test project for MCP rich context testing.\n",
-    ).unwrap();
+    )
+    .unwrap();
 
     temp_dir
 }
@@ -101,12 +106,7 @@ fn test_zoom_includes_related_context() {
 
     // Find usages of helper_function (should be called by main_function)
     let usage_finder = UsageFinder::new().with_max_results(10);
-    let callers = usage_finder.find_usages(
-        "helper_function",
-        root,
-        Some("src/utils.rs"),
-        None,
-    );
+    let callers = usage_finder.find_usages("helper_function", root, Some("src/utils.rs"), None);
 
     // Should find at least one caller (main_function in lib.rs)
     assert!(
@@ -137,9 +137,15 @@ fn test_related_context_xml_format() {
     let xml = related.to_xml();
 
     // Verify XML structure
-    assert!(xml.contains("<related_context>"), "Should have related_context tag");
+    assert!(
+        xml.contains("<related_context>"),
+        "Should have related_context tag"
+    );
     assert!(xml.contains("<callers"), "Should have callers section");
-    assert!(xml.contains("</related_context>"), "Should close related_context");
+    assert!(
+        xml.contains("</related_context>"),
+        "Should close related_context"
+    );
 }
 
 #[test]
@@ -153,7 +159,7 @@ fn test_find_usages_excludes_definition() {
         "helper_function",
         root,
         Some("src/utils.rs"),
-        Some(4),  // Definition line
+        Some(4), // Definition line
     );
 
     // Should not include the definition itself
@@ -180,10 +186,10 @@ fn test_tiered_budget_prioritizes_core() {
 
     // Create files from different tiers
     let files = vec![
-        ("tests/test_main.rs".to_string(), "test content".repeat(10)),  // Tests tier
-        ("src/lib.rs".to_string(), "lib content".repeat(10)),           // Core tier
-        ("README.md".to_string(), "readme content".repeat(10)),         // Other tier
-        ("Cargo.toml".to_string(), "[package]".to_string()),            // Config tier
+        ("tests/test_main.rs".to_string(), "test content".repeat(10)), // Tests tier
+        ("src/lib.rs".to_string(), "lib content".repeat(10)),          // Core tier
+        ("README.md".to_string(), "readme content".repeat(10)),        // Other tier
+        ("Cargo.toml".to_string(), "[package]".to_string()),           // Config tier
     ];
 
     let lens_manager = LensManager::new();
@@ -201,7 +207,10 @@ fn test_tiered_budget_prioritizes_core() {
         let tests_selected = selected_paths.iter().any(|p| p.starts_with("tests/"));
 
         if tests_selected {
-            assert!(core_selected, "If tests are selected, core should also be selected");
+            assert!(
+                core_selected,
+                "If tests are selected, core should also be selected"
+            );
         }
     }
 }
@@ -218,7 +227,10 @@ fn test_file_tier_classification() {
     assert_eq!(FileTier::classify("package.json", None), FileTier::Config);
 
     // Test files
-    assert_eq!(FileTier::classify("tests/test_main.rs", None), FileTier::Tests);
+    assert_eq!(
+        FileTier::classify("tests/test_main.rs", None),
+        FileTier::Tests
+    );
     assert_eq!(FileTier::classify("test_utils.py", None), FileTier::Tests);
 
     // Other files
@@ -230,9 +242,9 @@ fn test_file_tier_classification() {
 fn test_budget_drops_other_before_core() {
     // Create files with known sizes
     let files = vec![
-        ("docs/readme.md".to_string(), "x".repeat(200)),    // Other: ~50 tokens
-        ("src/main.rs".to_string(), "y".repeat(200)),       // Core: ~50 tokens
-        ("tests/test.rs".to_string(), "z".repeat(200)),     // Tests: ~50 tokens
+        ("docs/readme.md".to_string(), "x".repeat(200)), // Other: ~50 tokens
+        ("src/main.rs".to_string(), "y".repeat(200)),    // Core: ~50 tokens
+        ("tests/test.rs".to_string(), "z".repeat(200)),  // Tests: ~50 tokens
     ];
 
     let lens_manager = LensManager::new();
@@ -244,7 +256,11 @@ fn test_budget_drops_other_before_core() {
     if report.dropped_count > 0 {
         // Core should be kept, Other should be dropped first
         let selected_paths: Vec<&str> = selected.iter().map(|(p, _)| p.as_str()).collect();
-        let dropped_paths: Vec<&str> = report.dropped_files.iter().map(|(p, _, _)| p.as_str()).collect();
+        let dropped_paths: Vec<&str> = report
+            .dropped_files
+            .iter()
+            .map(|(p, _, _)| p.as_str())
+            .collect();
 
         // If something was dropped, Other tier should be dropped before Core
         if dropped_paths.iter().any(|p| p.starts_with("src/")) {

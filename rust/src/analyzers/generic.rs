@@ -4,11 +4,11 @@
 //! Instead of implementing separate analyzers for each language, we configure one
 //! generic analyzer with language-specific patterns.
 
+use super::{AnalysisResult, LanguageAnalyzer};
+use crate::python_style_split;
 use lazy_static::lazy_static;
 use regex::Regex;
-use super::{AnalysisResult, LanguageAnalyzer};
 use std::collections::HashMap;
-use crate::python_style_split;
 
 /// Configuration for a language analyzer (regex patterns)
 #[derive(Clone)]
@@ -181,7 +181,10 @@ impl GenericAnalyzer {
 
         result.markers = markers.into_iter().take(5).collect();
         result.category = category.to_string();
-        result.critical_sections = entry_points.iter().map(|(_, line)| (*line, line + 20)).collect();
+        result.critical_sections = entry_points
+            .iter()
+            .map(|(_, line)| (*line, line + 20))
+            .collect();
 
         result
     }
@@ -196,9 +199,7 @@ impl LanguageAnalyzer for GenericAnalyzer {
     fn supported_extensions(&self) -> &[&str] {
         // Convert Vec<String> to &[&str] - we need to leak the strings for static lifetime
         // This is safe since configs are created once at startup
-        unsafe {
-            std::mem::transmute(self.config.extensions.as_slice())
-        }
+        unsafe { std::mem::transmute(self.config.extensions.as_slice()) }
     }
 
     fn language_name(&self) -> &str {
@@ -317,7 +318,10 @@ mod tests {
 
         assert_eq!(result.language, "JavaScript");
         assert!(result.classes.contains(&"Component".to_string()));
-        assert!(result.functions.contains(&"render".to_string()) || result.functions.contains(&"process".to_string()));
+        assert!(
+            result.functions.contains(&"render".to_string())
+                || result.functions.contains(&"process".to_string())
+        );
     }
 
     #[test]
@@ -400,7 +404,10 @@ mod tests {
         let content = "# TODO: implement this\n# FIXME: broken\ndef foo():\n    pass\n";
         let result = analyzer.analyze(content, "markers.py");
 
-        assert!(!result.markers.is_empty(), "Should detect TODO/FIXME markers");
+        assert!(
+            !result.markers.is_empty(),
+            "Should detect TODO/FIXME markers"
+        );
     }
 
     #[test]

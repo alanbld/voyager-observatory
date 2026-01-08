@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use super::layers::{ContextLayer, ZoomLevel, Range};
+use super::layers::{ContextLayer, Range, ZoomLevel};
 use super::relationships::CallGraph;
 
 /// The main fractal context structure - hierarchical, zoomable.
@@ -82,22 +82,24 @@ impl FractalContext {
 
     /// Get the current focused layer.
     pub fn current(&self) -> Option<&ContextLayer> {
-        self.current_view.focus_id.as_ref()
+        self.current_view
+            .focus_id
+            .as_ref()
             .and_then(|id| self.layers.get(id))
     }
 
     /// Get all layers at a specific zoom level.
     pub fn layers_at_level(&self, level: ZoomLevel) -> Vec<&ContextLayer> {
-        self.layers.values()
-            .filter(|l| l.level == level)
-            .collect()
+        self.layers.values().filter(|l| l.level == level).collect()
     }
 
     /// Get children of a layer.
     pub fn children(&self, layer_id: &str) -> Vec<&ContextLayer> {
         self.get_layer(layer_id)
             .map(|layer| {
-                layer.child_ids.iter()
+                layer
+                    .child_ids
+                    .iter()
                     .filter_map(|id| self.layers.get(id))
                     .collect()
             })
@@ -143,7 +145,10 @@ impl FractalContext {
 
     /// Zoom into the first child of the current layer.
     pub fn zoom_in(&mut self) -> bool {
-        let target_id = self.current_view.focus_id.as_ref()
+        let target_id = self
+            .current_view
+            .focus_id
+            .as_ref()
             .and_then(|id| self.layers.get(id))
             .and_then(|layer| layer.child_ids.first())
             .cloned();
@@ -157,7 +162,10 @@ impl FractalContext {
 
     /// Zoom out to the parent of the current layer.
     pub fn zoom_out(&mut self) -> bool {
-        let target_id = self.current_view.focus_id.as_ref()
+        let target_id = self
+            .current_view
+            .focus_id
+            .as_ref()
             .and_then(|id| self.layers.get(id))
             .and_then(|layer| layer.parent_id.clone());
 
@@ -170,14 +178,20 @@ impl FractalContext {
 
     /// Build a hierarchical view starting from a layer.
     pub fn hierarchical_view(&self, layer_id: &str, max_depth: usize) -> Option<HierarchicalView> {
-        self.get_layer(layer_id).map(|layer| {
-            self.build_hierarchical_view(layer, 0, max_depth)
-        })
+        self.get_layer(layer_id)
+            .map(|layer| self.build_hierarchical_view(layer, 0, max_depth))
     }
 
-    fn build_hierarchical_view(&self, layer: &ContextLayer, depth: usize, max_depth: usize) -> HierarchicalView {
+    fn build_hierarchical_view(
+        &self,
+        layer: &ContextLayer,
+        depth: usize,
+        max_depth: usize,
+    ) -> HierarchicalView {
         let children = if depth < max_depth {
-            layer.child_ids.iter()
+            layer
+                .child_ids
+                .iter()
                 .filter_map(|id| self.layers.get(id))
                 .map(|child| self.build_hierarchical_view(child, depth + 1, max_depth))
                 .collect()
@@ -274,16 +288,12 @@ impl RelationshipGraph {
 
     /// Get all edges from a node.
     pub fn edges_from(&self, node_id: &str) -> Vec<&GraphEdge> {
-        self.edges.iter()
-            .filter(|e| e.source == node_id)
-            .collect()
+        self.edges.iter().filter(|e| e.source == node_id).collect()
     }
 
     /// Get all edges to a node.
     pub fn edges_to(&self, node_id: &str) -> Vec<&GraphEdge> {
-        self.edges.iter()
-            .filter(|e| e.target == node_id)
-            .collect()
+        self.edges.iter().filter(|e| e.target == node_id).collect()
     }
 
     /// Find nodes connected to a given node.
@@ -456,7 +466,8 @@ mod tests {
                 visibility: Visibility::Public,
                 range: Range::default(),
             },
-        ).with_parent(parent_id)
+        )
+        .with_parent(parent_id)
     }
 
     #[test]
@@ -1064,7 +1075,11 @@ mod tests {
         let cluster = SemanticCluster {
             id: "cluster_001".to_string(),
             name: "Auth Functions".to_string(),
-            element_ids: vec!["login".to_string(), "logout".to_string(), "verify".to_string()],
+            element_ids: vec![
+                "login".to_string(),
+                "logout".to_string(),
+                "verify".to_string(),
+            ],
             description: Some("Authentication-related functions".to_string()),
             similarity_threshold: 0.85,
         };
@@ -1131,7 +1146,12 @@ mod tests {
         let view = ZoomView {
             level: ZoomLevel::Symbol,
             focus_id: Some("sym_001".to_string()),
-            visible_range: Some(Range { start_line: 10, start_col: 0, end_line: 50, end_col: 0 }),
+            visible_range: Some(Range {
+                start_line: 10,
+                start_col: 0,
+                end_line: 50,
+                end_col: 0,
+            }),
         };
 
         let cloned = view.clone();
@@ -1162,14 +1182,12 @@ mod tests {
             id: "root".to_string(),
             level: ZoomLevel::Project,
             name: "MyProject".to_string(),
-            children: vec![
-                HierarchicalView {
-                    id: "child".to_string(),
-                    level: ZoomLevel::File,
-                    name: "main.rs".to_string(),
-                    children: vec![],
-                },
-            ],
+            children: vec![HierarchicalView {
+                id: "child".to_string(),
+                level: ZoomLevel::File,
+                name: "main.rs".to_string(),
+                children: vec![],
+            }],
         };
 
         let cloned = view.clone();
