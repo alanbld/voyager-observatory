@@ -1,31 +1,36 @@
-# pm_encoder
+# Voyager Observatory (vo)
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-**pm_encoder** is a context serialization tool for LLM workflows. It converts codebases into AI-digestible context with intelligent token budgeting.
+**Voyager Observatory (vo)** is a context serialization tool for LLM workflows. It converts codebases into AI-digestible context with intelligent token budgeting and semantic analysis.
 
-### The Twins Architecture
-- **Python v1.7.0** - Reference implementation, feature prototyping
-- **Rust v1.0.0** - High-performance engine, MCP server mode
-- **pm_coach** - Differential testing tool for parity verification
+### Architecture
+- **Rust Engine** - High-performance implementation with MCP server mode
+- **voyager-ast** - Tree-sitter based AST extraction for 10+ languages
+- **Python Legacy** - Reference implementation (deprecated)
 
 ### Key Features
 - Token budgeting with drop/truncate/hybrid strategies
-- Context lenses (architecture, security, debug, minimal)
+- Context lenses (architecture, security, debug, minimal, onboarding)
 - Priority groups for intelligent file selection
 - Streaming mode for low-latency output
 - **MCP Server Mode** - JSON-RPC 2.0 protocol for AI CLI integration
+- **Universal Spectrograph** - 60+ language support for syntax detection
+- **Semantic Analysis** - Call graphs, clustering, intent-driven exploration
 
 ## Quick Start
 
 ```bash
-# Python (reference)
-./pm_encoder.py . --token-budget 100k --lens architecture
+# Build
+cd rust && cargo build --release
 
-# Rust (10x faster)
-./rust/target/release/pm_encoder . --token-budget 100k --lens architecture
+# Basic usage
+./target/release/vo . --token-budget 100k --lens architecture
+
+# With streaming
+./target/release/vo . --stream --token-budget 50k
 ```
 
 ## MCP Server Mode
@@ -34,7 +39,7 @@ The Rust engine supports MCP (Model Context Protocol) for integration with AI CL
 
 ```bash
 # Run as MCP server (JSON-RPC 2.0 over stdio)
-./rust/target/release/pm_encoder --server /path/to/project
+./target/release/vo --server /path/to/project
 ```
 
 **Available Tools:**
@@ -43,14 +48,15 @@ The Rust engine supports MCP (Model Context Protocol) for integration with AI CL
 - `session_list` - List saved zoom sessions
 - `session_create` - Create new zoom session
 - `report_utility` - Report file utility for learning
+- `explore_with_intent` - Intent-driven codebase exploration
 
 **Configuration:**
 ```json
-// ~/.claude/mcp.json or ~/.gemini/settings.json
+// ~/.claude/mcp.json
 {
   "mcpServers": {
-    "pm_encoder": {
-      "command": "/path/to/pm_encoder",
+    "vo": {
+      "command": "/path/to/vo",
       "args": ["--server", "/path/to/project"]
     }
   }
@@ -59,97 +65,81 @@ The Rust engine supports MCP (Model Context Protocol) for integration with AI CL
 
 ## Commands
 
-Common commands detected for this project:
-- `make`
-- `make test`
+```bash
+# Build
+cargo build --release
+
+# Run tests
+cargo test
+
+# Run tests with coverage
+cargo tarpaulin --workspace --out Stdout
+
+# Run specific package tests
+cargo test --package voyager-ast
+```
 
 ## Project Structure
 
 ```
-pm_encoder/
-├── docs/
-│   ├── BLUEPRINT.md
-│   ├── KNOWLEDGE_BASE.md
-│   ├── MULTI_AI_STORY.html
-│   ├── RUST_GROWTH_STRATEGY.md
-│   ├── THE_TURING_AUDIT.md
-│   └── THE_TWINS_ARCHITECTURE.md
-├── examples/
-│   └── plugins/
-│       └── rust_analyzer.py
-├── htmlcov/
-│   ├── class_index.html
-│   ├── coverage_html_cb_bcae5fc4.js
-│   ├── favicon_32_cb_58284776.png
-│   ├── function_index.html
-│   ├── index.html
-│   ├── keybd_closed_cb_ce680311.png
-│   ├── pm_encoder_py.html
-│   ├── status.json
-│   ├── style_cb_a5a05ca4.css
-│   ├── z_a44f0ac069e85531_test_comprehensive_py.html
-│   ├── z_a44f0ac069e85531_test_pm_encoder_py.html
-│   └── z_f7dc1f716e984ff2___init___py.html
-├── LLM/
-│   └── 2025-07-23_sip-4_enhance-pm-encoder-with-sorting.md
+vo/
 ├── rust/
 │   ├── src/
-│   │   ├── bin/
-│   │   └── lib.rs
-│   ├── Cargo.lock
+│   │   ├── bin/vo.rs          # CLI binary
+│   │   ├── lib.rs             # Library root
+│   │   ├── core/              # Core modules
+│   │   │   ├── celestial/     # Navigation, compass, nebula naming
+│   │   │   ├── fractal/       # Semantic analysis, clustering
+│   │   │   ├── spectrograph/  # Language detection (60+ langs)
+│   │   │   └── ...
+│   │   └── ...
+│   ├── voyager-ast/           # AST extraction subcrate
+│   │   ├── src/
+│   │   │   ├── adapters/      # Language adapters (Python, TS, Rust, etc.)
+│   │   │   ├── ir.rs          # Intermediate representation
+│   │   │   ├── registry.rs    # Adapter registry
+│   │   │   └── provider.rs    # AST provider interface
+│   │   └── Cargo.toml
 │   ├── Cargo.toml
-│   └── README.md
-├── scripts/
-│   ├── backup.sh
-│   ├── bootstrap.sh
-│   └── doc_gen.py
-├── test_vectors/
-│   ├── basic_serialization.json
-│   ├── binary_detection.json
-│   ├── large_file_skip.json
-│   ├── python_analyzer.json
-│   └── README.md
-├── tests/
-│   ├── fixtures/
-│   │   ├── edge_cases/
-│   │   ├── javascript/
-│   │   ├── json/
-│   │   ├── markdown/
-│   │   ├── python/
-│   │   ├── rust/
-│   │   ├── shell/
-│   │   └── yaml/
-│   ├── generate_vectors.py
-│   ├── test_comprehensive.py
-│   └── test_pm_encoder.py
-├── CHANGELOG.md
+│   └── Cargo.lock
+├── docs/
 ├── CLAUDE.md
-├── CONTEXT.txt
-├── context_script.sh
-├── CONTRIBUTING.md
-├── GEMINI_INSTRUCTIONS.txt
-├── LICENSE
-├── Makefile
-├── PLUGIN_GUIDE.md
-├── pm_encoder.py
-├── QA_INFRASTRUCTURE.md
-├── README.md
-├── SYSTEM_INSTRUCTIONS.md
-├── TESTING.md
-└── TUTORIAL.md
+└── README.md
 ```
 
-**Statistics:**
-- Files: 50
-- Context size: 41,775 bytes (40.8 KB)
+## Test Coverage
 
-For the complete codebase context, see `CONTEXT.txt` in this directory.
+Current test coverage for key modules:
+
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| voyager-ast | 445 | ~62% |
+| - ir.rs | - | 100% |
+| - error.rs | - | 100% |
+| - typescript_adapter.rs | - | 95.5% |
+| - python_adapter.rs | - | 87.4% |
+| - rust_adapter.rs | - | 78.7% |
+
+## Key Modules
+
+### voyager-ast
+Tree-sitter based AST extraction supporting:
+- Python, TypeScript/JavaScript, Rust
+- Go, Java, C, C++, C#, Ruby
+- HTML, CSS, JSON, Bash
+
+### Spectrograph
+Universal language detection using spectral signatures for 60+ languages.
+
+### Fractal Analysis
+- **Clustering** - Semantic code clustering
+- **Relationships** - Call graph analysis
+- **Intent Explorer** - Goal-driven code navigation
+
+### Celestial Navigation
+- **Compass** - Navigation suggestions
+- **Nebula Namer** - Semantic cluster naming
 
 ---
 
-**Regenerate these files:**
-```bash
-./pm_encoder.py . --init-prompt --init-lens debug --target claude
-```
-
-*Generated by pm_encoder v1.7.0 using the 'debug' lens*
+*Updated: January 2026*
