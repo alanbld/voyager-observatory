@@ -1003,6 +1003,260 @@ mod tests {
     use super::*;
     use crate::core::fractal::Range;
 
+    // === ConceptType tests ===
+
+    #[test]
+    fn test_concept_type_variants() {
+        let _calc = ConceptType::Calculation;
+        let _valid = ConceptType::Validation;
+        let _decision = ConceptType::Decision;
+        let _transform = ConceptType::Transformation;
+        let _error = ConceptType::ErrorHandling;
+        let _logging = ConceptType::Logging;
+        let _config = ConceptType::Configuration;
+        let _testing = ConceptType::Testing;
+        let _infra = ConceptType::Infrastructure;
+        let _unknown = ConceptType::Unknown;
+    }
+
+    #[test]
+    fn test_concept_type_equality() {
+        assert_eq!(ConceptType::Calculation, ConceptType::Calculation);
+        assert_ne!(ConceptType::Calculation, ConceptType::Validation);
+    }
+
+    #[test]
+    fn test_concept_type_from_shell_pattern() {
+        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Deployment), ConceptType::Infrastructure);
+        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::ErrorHandling), ConceptType::ErrorHandling);
+        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::DataProcessing), ConceptType::Transformation);
+        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Monitoring), ConceptType::Logging);
+        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Testing), ConceptType::Testing);
+        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Setup), ConceptType::Configuration);
+        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Security), ConceptType::Validation);
+        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Unknown), ConceptType::Unknown);
+    }
+
+    // === RelevanceScore tests ===
+
+    #[test]
+    fn test_relevance_score_new() {
+        let score = RelevanceScore::new(0.75, "Test explanation");
+        assert!((score.score - 0.75).abs() < 0.001);
+        assert_eq!(score.explanation, "Test explanation");
+        assert!(score.factors.is_empty());
+    }
+
+    #[test]
+    fn test_relevance_score_clamping() {
+        let high = RelevanceScore::new(1.5, "Over max");
+        assert!((high.score - 1.0).abs() < 0.001);
+
+        let low = RelevanceScore::new(-0.5, "Under min");
+        assert!((low.score - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_relevance_score_with_factor() {
+        let score = RelevanceScore::new(0.8, "Test")
+            .with_factor("factor1", 0.3)
+            .with_factor("factor2", 0.5);
+
+        assert_eq!(score.factors.len(), 2);
+        assert_eq!(score.factors[0].0, "factor1");
+        assert!((score.factors[0].1 - 0.3).abs() < 0.001);
+    }
+
+    // === NoiseFilterParams tests ===
+
+    #[test]
+    fn test_noise_filter_params_default() {
+        let params = NoiseFilterParams::default();
+        assert!(params.filter_name_patterns.is_empty());
+        assert!(params.filter_concept_types.is_empty());
+        assert!((params.min_relevance_threshold - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_noise_filter_params_security() {
+        let params = NoiseFilterParams::security();
+        assert!(params.filter_name_patterns.contains(&"test_".to_string()));
+        assert!(params.filter_name_patterns.contains(&"mock_".to_string()));
+        assert!(params.filter_concept_types.contains(&ConceptType::Testing));
+    }
+
+    // === NoiseFilter tests ===
+
+    #[test]
+    fn test_noise_filter_name() {
+        let filter = NoiseFilter;
+        assert_eq!(filter.name(), "NoiseFilter");
+    }
+
+    #[test]
+    fn test_noise_filter_description() {
+        let filter = NoiseFilter;
+        assert!(filter.description().contains("Remove"));
+    }
+
+    // === RelevanceScorerParams tests ===
+
+    #[test]
+    fn test_relevance_scorer_params_default() {
+        let params = RelevanceScorerParams::default();
+        assert!(params.concept_weights.is_empty());
+        assert!(params.dimension_weights.is_none());
+        assert!((params.documentation_boost - 0.1).abs() < 0.001);
+        assert!((params.public_visibility_boost - 0.1).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_relevance_scorer_params_debugging() {
+        let params = RelevanceScorerParams::debugging();
+        let error_weight = params
+            .concept_weights
+            .iter()
+            .find(|(ct, _)| *ct == ConceptType::ErrorHandling)
+            .map(|(_, w)| *w);
+        assert!(error_weight.is_some());
+        assert!((error_weight.unwrap() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_relevance_scorer_params_security() {
+        let params = RelevanceScorerParams::security();
+        let validation_weight = params
+            .concept_weights
+            .iter()
+            .find(|(ct, _)| *ct == ConceptType::Validation)
+            .map(|(_, w)| *w);
+        assert!(validation_weight.is_some());
+        assert!((validation_weight.unwrap() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_relevance_scorer_params_onboarding() {
+        let params = RelevanceScorerParams::onboarding();
+        // Onboarding has higher documentation boost
+        assert!(params.documentation_boost > 0.2);
+    }
+
+    // === RelevanceScorer tests ===
+
+    #[test]
+    fn test_relevance_scorer_name() {
+        let scorer = RelevanceScorer;
+        assert_eq!(scorer.name(), "RelevanceScorer");
+    }
+
+    #[test]
+    fn test_relevance_scorer_description() {
+        let scorer = RelevanceScorer;
+        assert!(scorer.description().contains("Score"));
+    }
+
+    // === ExplorationPlannerParams tests ===
+
+    #[test]
+    fn test_exploration_planner_params_default() {
+        let params = ExplorationPlannerParams::default();
+        assert_eq!(params.max_elements, 20);
+        assert_eq!(params.time_budget_minutes, 30);
+        assert!((params.min_relevance - 0.3).abs() < 0.001);
+        assert!(params.group_related);
+    }
+
+    // === ExplorationPlanner tests ===
+
+    #[test]
+    fn test_exploration_planner_name() {
+        let planner = ExplorationPlanner;
+        assert_eq!(planner.name(), "ExplorationPlanner");
+    }
+
+    #[test]
+    fn test_exploration_planner_description() {
+        let planner = ExplorationPlanner;
+        assert!(planner.description().contains("Plan"));
+    }
+
+    #[test]
+    fn test_exploration_planner_decide() {
+        let (decision, reason) = ExplorationPlanner::decide(0.8);
+        assert_eq!(decision, "read");
+        assert!(reason.contains("High"));
+
+        let (decision, reason) = ExplorationPlanner::decide(0.5);
+        assert_eq!(decision, "skim");
+        assert!(reason.contains("Moderate"));
+
+        let (decision, reason) = ExplorationPlanner::decide(0.2);
+        assert_eq!(decision, "skip");
+        assert!(reason.contains("Low"));
+    }
+
+    #[test]
+    fn test_exploration_planner_estimate_minutes_symbol() {
+        let layer = ContextLayer::new(
+            "s1",
+            LayerContent::Symbol {
+                name: "test".to_string(),
+                kind: SymbolKind::Function,
+                signature: "fn test()".to_string(),
+                return_type: None,
+                parameters: vec![],
+                documentation: Some("Doc".to_string()),
+                visibility: crate::core::fractal::Visibility::Public,
+                range: Range::line_range(1, 40), // 40 lines
+            },
+        );
+
+        let minutes = ExplorationPlanner::estimate_minutes(&layer);
+        // 40 lines / 20 = 2 + 1 (doc bonus) = 3
+        assert_eq!(minutes, 3);
+    }
+
+    #[test]
+    fn test_exploration_planner_estimate_minutes_file() {
+        let layer = ContextLayer::new(
+            "f1",
+            LayerContent::File {
+                path: std::path::PathBuf::from("test.rs"),
+                language: "rust".to_string(),
+                size_bytes: 1000,
+                line_count: 100,
+                symbol_count: 5,
+                imports: vec![],
+            },
+        );
+
+        let minutes = ExplorationPlanner::estimate_minutes(&layer);
+        // 100 lines / 50 = 2
+        assert_eq!(minutes, 2);
+    }
+
+    // === PlannedStep tests ===
+
+    #[test]
+    fn test_planned_step_creation() {
+        let step = PlannedStep {
+            element_idx: 0,
+            path: "src/main.rs".to_string(),
+            symbol: "main".to_string(),
+            decision: "read".to_string(),
+            reason: "Entry point".to_string(),
+            estimated_minutes: 5,
+            relevance_score: 0.9,
+        };
+
+        assert_eq!(step.element_idx, 0);
+        assert_eq!(step.path, "src/main.rs");
+        assert_eq!(step.symbol, "main");
+        assert_eq!(step.decision, "read");
+        assert_eq!(step.estimated_minutes, 5);
+        assert!((step.relevance_score - 0.9).abs() < 0.001);
+    }
+
     fn make_symbol_layer(
         id: &str,
         name: &str,

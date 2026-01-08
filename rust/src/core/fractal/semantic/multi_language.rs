@@ -840,6 +840,458 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    // === ProjectLanguageStats tests ===
+
+    #[test]
+    fn test_project_language_stats_creation() {
+        let stats = ProjectLanguageStats {
+            file_count: 10,
+            line_count: 500,
+            concept_count: 25,
+            type_distribution: HashMap::from([
+                ("Function".to_string(), 15),
+                ("Class".to_string(), 10),
+            ]),
+            key_files: vec!["main.py".to_string(), "utils.py".to_string()],
+        };
+
+        assert_eq!(stats.file_count, 10);
+        assert_eq!(stats.line_count, 500);
+        assert_eq!(stats.concept_count, 25);
+        assert_eq!(stats.type_distribution.len(), 2);
+        assert_eq!(stats.key_files.len(), 2);
+    }
+
+    // === LanguageBreakdown tests ===
+
+    #[test]
+    fn test_language_breakdown_new() {
+        let breakdown = LanguageBreakdown::new();
+        assert!(breakdown.languages.is_empty());
+        assert!(breakdown.primary_language.is_none());
+        assert_eq!(breakdown.total_files, 0);
+        assert_eq!(breakdown.total_concepts, 0);
+    }
+
+    #[test]
+    fn test_language_breakdown_default() {
+        let breakdown = LanguageBreakdown::default();
+        assert!(breakdown.languages.is_empty());
+    }
+
+    #[test]
+    fn test_language_breakdown_sorted_languages() {
+        let mut breakdown = LanguageBreakdown::new();
+
+        breakdown.add_language(
+            Language::Python,
+            ProjectLanguageStats {
+                file_count: 5,
+                line_count: 200,
+                concept_count: 10,
+                type_distribution: HashMap::new(),
+                key_files: vec![],
+            },
+        );
+
+        breakdown.add_language(
+            Language::TypeScript,
+            ProjectLanguageStats {
+                file_count: 10,
+                line_count: 400,
+                concept_count: 30,
+                type_distribution: HashMap::new(),
+                key_files: vec![],
+            },
+        );
+
+        breakdown.add_language(
+            Language::Shell,
+            ProjectLanguageStats {
+                file_count: 2,
+                line_count: 50,
+                concept_count: 5,
+                type_distribution: HashMap::new(),
+                key_files: vec![],
+            },
+        );
+
+        let sorted = breakdown.sorted_languages();
+        // Should be sorted by concept_count descending
+        assert_eq!(sorted[0].1.concept_count, 30); // TypeScript first
+        assert_eq!(sorted[1].1.concept_count, 10); // Python second
+        assert_eq!(sorted[2].1.concept_count, 5);  // Shell third
+    }
+
+    #[test]
+    fn test_language_breakdown_primary_language_updates() {
+        let mut breakdown = LanguageBreakdown::new();
+
+        // Add first language - becomes primary
+        breakdown.add_language(
+            Language::Python,
+            ProjectLanguageStats {
+                file_count: 5,
+                line_count: 200,
+                concept_count: 10,
+                type_distribution: HashMap::new(),
+                key_files: vec![],
+            },
+        );
+        assert_eq!(breakdown.primary_language, Some(Language::Python));
+
+        // Add second language with more concepts - becomes new primary
+        breakdown.add_language(
+            Language::TypeScript,
+            ProjectLanguageStats {
+                file_count: 10,
+                line_count: 400,
+                concept_count: 30,
+                type_distribution: HashMap::new(),
+                key_files: vec![],
+            },
+        );
+        assert_eq!(breakdown.primary_language, Some(Language::TypeScript));
+    }
+
+    // === InsightType tests ===
+
+    #[test]
+    fn test_insight_type_variants() {
+        let _shared = InsightType::SharedConcept;
+        let _call = InsightType::CrossLanguageCall;
+        let _data = InsightType::DataFlow;
+        let _contract = InsightType::SharedContract;
+        let _dup = InsightType::DuplicatedLogic;
+        let _gap = InsightType::ValidationGap;
+    }
+
+    #[test]
+    fn test_insight_type_equality() {
+        assert_eq!(InsightType::SharedConcept, InsightType::SharedConcept);
+        assert_ne!(InsightType::SharedConcept, InsightType::DataFlow);
+    }
+
+    // === CrossLanguageInsight tests ===
+
+    #[test]
+    fn test_cross_language_insight_creation() {
+        let insight = CrossLanguageInsight {
+            insight_type: InsightType::SharedConcept,
+            description: "Test insight".to_string(),
+            related_concepts: vec![ConceptId::new(Language::Python, "test", "test.py")],
+            languages: vec![Language::Python, Language::TypeScript],
+            importance: 0.8,
+        };
+
+        assert_eq!(insight.insight_type, InsightType::SharedConcept);
+        assert_eq!(insight.description, "Test insight");
+        assert_eq!(insight.related_concepts.len(), 1);
+        assert_eq!(insight.languages.len(), 2);
+        assert!((insight.importance - 0.8).abs() < 0.001);
+    }
+
+    // === ReadingDecision tests ===
+
+    #[test]
+    fn test_reading_decision_read_deeply() {
+        let decision = ReadingDecision::ReadDeeply {
+            reason: "Important code".to_string(),
+            focus_points: vec!["Logic".to_string(), "Error handling".to_string()],
+        };
+
+        if let ReadingDecision::ReadDeeply { reason, focus_points } = decision {
+            assert_eq!(reason, "Important code");
+            assert_eq!(focus_points.len(), 2);
+        } else {
+            panic!("Expected ReadDeeply variant");
+        }
+    }
+
+    #[test]
+    fn test_reading_decision_skim() {
+        let decision = ReadingDecision::Skim {
+            reason: "Secondary importance".to_string(),
+            key_patterns: vec!["Entry point".to_string()],
+            time_limit_minutes: 5,
+        };
+
+        if let ReadingDecision::Skim { reason, key_patterns, time_limit_minutes } = decision {
+            assert_eq!(reason, "Secondary importance");
+            assert_eq!(key_patterns.len(), 1);
+            assert_eq!(time_limit_minutes, 5);
+        } else {
+            panic!("Expected Skim variant");
+        }
+    }
+
+    #[test]
+    fn test_reading_decision_read_with_context() {
+        let decision = ReadingDecision::ReadWithContext {
+            reason: "Unfamiliar language".to_string(),
+            language_context: "Python uses indentation".to_string(),
+            prerequisites: vec!["Learn basics".to_string()],
+        };
+
+        if let ReadingDecision::ReadWithContext { reason, language_context, prerequisites } = decision {
+            assert_eq!(reason, "Unfamiliar language");
+            assert!(language_context.contains("Python"));
+            assert_eq!(prerequisites.len(), 1);
+        } else {
+            panic!("Expected ReadWithContext variant");
+        }
+    }
+
+    #[test]
+    fn test_reading_decision_skip() {
+        let decision = ReadingDecision::Skip {
+            reason: "Not relevant".to_string(),
+            alternative: Some("Check other file".to_string()),
+        };
+
+        if let ReadingDecision::Skip { reason, alternative } = decision {
+            assert_eq!(reason, "Not relevant");
+            assert!(alternative.is_some());
+        } else {
+            panic!("Expected Skip variant");
+        }
+    }
+
+    // === EquivalentReference tests ===
+
+    #[test]
+    fn test_equivalent_reference_creation() {
+        let equiv = EquivalentReference {
+            concept_id: ConceptId::new(Language::TypeScript, "validateOrder", "order.ts"),
+            language: Language::TypeScript,
+            name: "validateOrder".to_string(),
+            similarity: 0.95,
+        };
+
+        assert_eq!(equiv.language, Language::TypeScript);
+        assert_eq!(equiv.name, "validateOrder");
+        assert!((equiv.similarity - 0.95).abs() < 0.001);
+    }
+
+    // === CrossLanguageExplorationStep tests ===
+
+    #[test]
+    fn test_cross_language_exploration_step_creation() {
+        let step = CrossLanguageExplorationStep {
+            concept_id: ConceptId::new(Language::Python, "calculate_total", "order.py"),
+            name: "calculate_total".to_string(),
+            language: Language::Python,
+            universal_type: UniversalConceptType::Calculation,
+            file_path: "backend/order.py".to_string(),
+            line_range: (10, 20),
+            relevance_score: 0.85,
+            decision: ReadingDecision::ReadDeeply {
+                reason: "Core logic".to_string(),
+                focus_points: vec![],
+            },
+            equivalents: vec![],
+            estimated_time_minutes: 5,
+            language_tips: vec!["Check type hints".to_string()],
+        };
+
+        assert_eq!(step.name, "calculate_total");
+        assert_eq!(step.language, Language::Python);
+        assert_eq!(step.line_range, (10, 20));
+        assert!((step.relevance_score - 0.85).abs() < 0.001);
+        assert_eq!(step.estimated_time_minutes, 5);
+    }
+
+    // === MultiLanguageExplorationResult tests ===
+
+    #[test]
+    fn test_exploration_result_path_languages() {
+        let result = MultiLanguageExplorationResult {
+            intent: "test".to_string(),
+            project_summary: "Test".to_string(),
+            language_breakdown: LanguageBreakdown::default(),
+            cross_language_insights: vec![],
+            exploration_path: vec![
+                CrossLanguageExplorationStep {
+                    concept_id: ConceptId::new(Language::Python, "func1", "a.py"),
+                    name: "func1".to_string(),
+                    language: Language::Python,
+                    universal_type: UniversalConceptType::Calculation,
+                    file_path: "a.py".to_string(),
+                    line_range: (1, 10),
+                    relevance_score: 0.9,
+                    decision: ReadingDecision::Skip { reason: "test".to_string(), alternative: None },
+                    equivalents: vec![],
+                    estimated_time_minutes: 0,
+                    language_tips: vec![],
+                },
+                CrossLanguageExplorationStep {
+                    concept_id: ConceptId::new(Language::TypeScript, "func2", "b.ts"),
+                    name: "func2".to_string(),
+                    language: Language::TypeScript,
+                    universal_type: UniversalConceptType::Calculation,
+                    file_path: "b.ts".to_string(),
+                    line_range: (1, 10),
+                    relevance_score: 0.8,
+                    decision: ReadingDecision::Skip { reason: "test".to_string(), alternative: None },
+                    equivalents: vec![],
+                    estimated_time_minutes: 0,
+                    language_tips: vec![],
+                },
+            ],
+            estimated_time_minutes: 0,
+            equivalence_classes: vec![],
+        };
+
+        let languages = result.path_languages();
+        assert_eq!(languages.len(), 2);
+    }
+
+    #[test]
+    fn test_exploration_result_steps_for_language() {
+        let result = MultiLanguageExplorationResult {
+            intent: "test".to_string(),
+            project_summary: "Test".to_string(),
+            language_breakdown: LanguageBreakdown::default(),
+            cross_language_insights: vec![],
+            exploration_path: vec![
+                CrossLanguageExplorationStep {
+                    concept_id: ConceptId::new(Language::Python, "func1", "a.py"),
+                    name: "func1".to_string(),
+                    language: Language::Python,
+                    universal_type: UniversalConceptType::Calculation,
+                    file_path: "a.py".to_string(),
+                    line_range: (1, 10),
+                    relevance_score: 0.9,
+                    decision: ReadingDecision::Skip { reason: "test".to_string(), alternative: None },
+                    equivalents: vec![],
+                    estimated_time_minutes: 0,
+                    language_tips: vec![],
+                },
+                CrossLanguageExplorationStep {
+                    concept_id: ConceptId::new(Language::Python, "func2", "b.py"),
+                    name: "func2".to_string(),
+                    language: Language::Python,
+                    universal_type: UniversalConceptType::Calculation,
+                    file_path: "b.py".to_string(),
+                    line_range: (1, 10),
+                    relevance_score: 0.8,
+                    decision: ReadingDecision::Skip { reason: "test".to_string(), alternative: None },
+                    equivalents: vec![],
+                    estimated_time_minutes: 0,
+                    language_tips: vec![],
+                },
+                CrossLanguageExplorationStep {
+                    concept_id: ConceptId::new(Language::TypeScript, "func3", "c.ts"),
+                    name: "func3".to_string(),
+                    language: Language::TypeScript,
+                    universal_type: UniversalConceptType::Calculation,
+                    file_path: "c.ts".to_string(),
+                    line_range: (1, 10),
+                    relevance_score: 0.7,
+                    decision: ReadingDecision::Skip { reason: "test".to_string(), alternative: None },
+                    equivalents: vec![],
+                    estimated_time_minutes: 0,
+                    language_tips: vec![],
+                },
+            ],
+            estimated_time_minutes: 0,
+            equivalence_classes: vec![],
+        };
+
+        let python_steps = result.steps_for_language(Language::Python);
+        assert_eq!(python_steps.len(), 2);
+
+        let ts_steps = result.steps_for_language(Language::TypeScript);
+        assert_eq!(ts_steps.len(), 1);
+    }
+
+    // === MultiLanguageProject tests ===
+
+    #[test]
+    fn test_multi_language_project_new() {
+        let project = MultiLanguageProject::new(PathBuf::from("/test"));
+        assert_eq!(project.root_path, PathBuf::from("/test"));
+        assert!(project.files_by_language.is_empty());
+        assert_eq!(project.total_files, 0);
+    }
+
+    #[test]
+    fn test_multi_language_project_languages() {
+        let mut project = MultiLanguageProject::new(PathBuf::from("/test"));
+        project.files_by_language.insert(Language::Python, vec![PathBuf::from("a.py")]);
+        project.files_by_language.insert(Language::TypeScript, vec![PathBuf::from("b.ts")]);
+
+        let languages = project.languages();
+        assert_eq!(languages.len(), 2);
+    }
+
+    #[test]
+    fn test_multi_language_project_is_multi_language() {
+        let mut project = MultiLanguageProject::new(PathBuf::from("/test"));
+        assert!(!project.is_multi_language());
+
+        project.files_by_language.insert(Language::Python, vec![]);
+        assert!(!project.is_multi_language());
+
+        project.files_by_language.insert(Language::TypeScript, vec![]);
+        assert!(project.is_multi_language());
+    }
+
+    #[test]
+    fn test_multi_language_project_files_for_language() {
+        let mut project = MultiLanguageProject::new(PathBuf::from("/test"));
+        project.files_by_language.insert(
+            Language::Python,
+            vec![PathBuf::from("a.py"), PathBuf::from("b.py")],
+        );
+
+        let files = project.files_for_language(Language::Python);
+        assert_eq!(files.len(), 2);
+
+        let no_files = project.files_for_language(Language::TypeScript);
+        assert!(no_files.is_empty());
+    }
+
+    // === MultiLanguageExplorer tests ===
+
+    #[test]
+    fn test_multi_language_explorer_new() {
+        let explorer = MultiLanguageExplorer::new();
+        // Just verify it creates without panic
+        drop(explorer);
+    }
+
+    #[test]
+    fn test_multi_language_explorer_default() {
+        let explorer = MultiLanguageExplorer::default();
+        drop(explorer);
+    }
+
+    #[test]
+    fn test_multi_language_explorer_get_language_tip() {
+        let explorer = MultiLanguageExplorer::new();
+
+        let python_tip = explorer.get_language_tip(Language::Python);
+        assert!(python_tip.contains("Dynamic"));
+
+        let ts_tip = explorer.get_language_tip(Language::TypeScript);
+        assert!(ts_tip.contains("Type"));
+
+        let shell_tip = explorer.get_language_tip(Language::Shell);
+        assert!(shell_tip.contains("Script"));
+    }
+
+    #[test]
+    fn test_multi_language_explorer_get_language_tips() {
+        let explorer = MultiLanguageExplorer::new();
+
+        let python_tips = explorer.get_language_tips(Language::Python);
+        assert!(!python_tips.is_empty());
+
+        let ts_tips = explorer.get_language_tips(Language::TypeScript);
+        assert!(!ts_tips.is_empty());
+    }
+
     fn create_test_project() -> (TempDir, MultiLanguageProject) {
         let temp = TempDir::new().unwrap();
         let root = temp.path();

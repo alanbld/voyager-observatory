@@ -865,6 +865,265 @@ mod tests {
     use super::*;
     use crate::core::fractal::{Parameter, Range, Visibility};
 
+    // === FeatureType tests ===
+
+    #[test]
+    fn test_feature_type_variants() {
+        let _structural = FeatureType::Structural;
+        let _semantic = FeatureType::Semantic;
+        let _behavioral = FeatureType::Behavioral;
+        let _relational = FeatureType::Relational;
+        let _textual = FeatureType::Textual;
+    }
+
+    #[test]
+    fn test_feature_type_equality() {
+        assert_eq!(FeatureType::Structural, FeatureType::Structural);
+        assert_ne!(FeatureType::Structural, FeatureType::Semantic);
+    }
+
+    #[test]
+    fn test_feature_type_hash() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(FeatureType::Structural);
+        set.insert(FeatureType::Semantic);
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&FeatureType::Structural));
+    }
+
+    // === FeatureVector tests ===
+
+    #[test]
+    fn test_feature_vector_dim() {
+        let vec = FeatureVector {
+            values: vec![0.1, 0.2, 0.3, 0.4],
+            metadata: VectorMetadata {
+                source_id: "test".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![FeatureType::Structural],
+            },
+        };
+        assert_eq!(vec.dim(), 4);
+    }
+
+    #[test]
+    fn test_feature_vector_distance_same() {
+        let vec = FeatureVector {
+            values: vec![0.5, 0.5, 0.5],
+            metadata: VectorMetadata {
+                source_id: "test".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        assert!((vec.distance(&vec) - 0.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_feature_vector_distance_different_dims() {
+        let vec1 = FeatureVector {
+            values: vec![0.5, 0.5],
+            metadata: VectorMetadata {
+                source_id: "a".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        let vec2 = FeatureVector {
+            values: vec![0.5, 0.5, 0.5],
+            metadata: VectorMetadata {
+                source_id: "b".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        assert_eq!(vec1.distance(&vec2), f32::INFINITY);
+    }
+
+    #[test]
+    fn test_feature_vector_distance_euclidean() {
+        let vec1 = FeatureVector {
+            values: vec![0.0, 0.0, 0.0],
+            metadata: VectorMetadata {
+                source_id: "a".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        let vec2 = FeatureVector {
+            values: vec![3.0, 4.0, 0.0],
+            metadata: VectorMetadata {
+                source_id: "b".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        // Distance should be 5 (3-4-5 triangle)
+        assert!((vec1.distance(&vec2) - 5.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_feature_vector_cosine_same() {
+        let vec = FeatureVector {
+            values: vec![1.0, 2.0, 3.0],
+            metadata: VectorMetadata {
+                source_id: "test".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        let similarity = vec.cosine_similarity(&vec);
+        assert!((similarity - 1.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_feature_vector_cosine_different_dims() {
+        let vec1 = FeatureVector {
+            values: vec![0.5, 0.5],
+            metadata: VectorMetadata {
+                source_id: "a".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        let vec2 = FeatureVector {
+            values: vec![0.5, 0.5, 0.5],
+            metadata: VectorMetadata {
+                source_id: "b".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        assert_eq!(vec1.cosine_similarity(&vec2), 0.0);
+    }
+
+    #[test]
+    fn test_feature_vector_cosine_zero_magnitude() {
+        let zero = FeatureVector {
+            values: vec![0.0, 0.0, 0.0],
+            metadata: VectorMetadata {
+                source_id: "a".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        let nonzero = FeatureVector {
+            values: vec![1.0, 2.0, 3.0],
+            metadata: VectorMetadata {
+                source_id: "b".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        assert_eq!(zero.cosine_similarity(&nonzero), 0.0);
+    }
+
+    #[test]
+    fn test_feature_vector_cosine_orthogonal() {
+        let vec1 = FeatureVector {
+            values: vec![1.0, 0.0],
+            metadata: VectorMetadata {
+                source_id: "a".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        let vec2 = FeatureVector {
+            values: vec![0.0, 1.0],
+            metadata: VectorMetadata {
+                source_id: "b".to_string(),
+                layer_type: ZoomLevel::Symbol,
+                confidence: 0.9,
+                feature_types: vec![],
+            },
+        };
+        // Orthogonal vectors have 0 similarity
+        assert!((vec1.cosine_similarity(&vec2) - 0.0).abs() < 0.0001);
+    }
+
+    // === VectorMetadata tests ===
+
+    #[test]
+    fn test_vector_metadata_creation() {
+        let metadata = VectorMetadata {
+            source_id: "layer_123".to_string(),
+            layer_type: ZoomLevel::File,
+            confidence: 0.95,
+            feature_types: vec![FeatureType::Structural, FeatureType::Semantic],
+        };
+        assert_eq!(metadata.source_id, "layer_123");
+        assert_eq!(metadata.layer_type, ZoomLevel::File);
+        assert!((metadata.confidence - 0.95).abs() < 0.001);
+        assert_eq!(metadata.feature_types.len(), 2);
+    }
+
+    // === VectorizerConfig tests ===
+
+    #[test]
+    fn test_vectorizer_config_default() {
+        let config = VectorizerConfig::default();
+        assert!(config.include_structural);
+        assert!(config.include_semantic);
+        assert!(config.include_behavioral);
+        assert!(config.include_textual);
+        assert_eq!(config.fixed_dimension, Some(64));
+    }
+
+    #[test]
+    fn test_vectorizer_config_custom() {
+        let config = VectorizerConfig {
+            include_structural: true,
+            include_semantic: false,
+            include_behavioral: false,
+            include_textual: true,
+            fixed_dimension: Some(32),
+        };
+        assert!(config.include_structural);
+        assert!(!config.include_semantic);
+        assert_eq!(config.fixed_dimension, Some(32));
+    }
+
+    // === SymbolVectorizer tests ===
+
+    #[test]
+    fn test_symbol_vectorizer_new() {
+        let vectorizer = SymbolVectorizer::new();
+        // Just verify it creates without panic
+        drop(vectorizer);
+    }
+
+    #[test]
+    fn test_symbol_vectorizer_default() {
+        let vectorizer = SymbolVectorizer::default();
+        drop(vectorizer);
+    }
+
+    #[test]
+    fn test_symbol_vectorizer_with_config() {
+        let config = VectorizerConfig {
+            include_structural: true,
+            include_semantic: false,
+            include_behavioral: false,
+            include_textual: false,
+            fixed_dimension: Some(16),
+        };
+        let vectorizer = SymbolVectorizer::with_config(config);
+        drop(vectorizer);
+    }
+
     fn create_test_symbol(name: &str, kind: SymbolKind) -> ContextLayer {
         ContextLayer::new(
             format!("sym_{}", name),
