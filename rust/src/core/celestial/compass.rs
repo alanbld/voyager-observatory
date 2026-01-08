@@ -599,4 +599,340 @@ mod tests {
         assert!(output.contains("NAVIGATION SUGGESTIONS"));
         assert!(output.contains("RECOMMENDED EXPLORATION PATH"));
     }
+
+    // =========================================================================
+    // Additional Tests for Comprehensive Coverage
+    // =========================================================================
+
+    #[test]
+    fn test_suggestion_action_verb_all_variants() {
+        assert_eq!(SuggestionAction::StartHere.verb(), "START");
+        assert_eq!(SuggestionAction::Explore.verb(), "EXPLORE");
+        assert_eq!(SuggestionAction::Skim.verb(), "SKIM");
+        assert_eq!(SuggestionAction::Skip.verb(), "SKIP");
+        assert_eq!(SuggestionAction::DeepDive.verb(), "DEEP DIVE");
+    }
+
+    #[test]
+    fn test_navigation_suggestion_with_priority() {
+        let suggestion = NavigationSuggestion::new(
+            "Test Nebula",
+            SuggestionAction::Explore,
+            "Test reason",
+        )
+        .with_priority(10);
+
+        assert_eq!(suggestion.priority, 10);
+    }
+
+    #[test]
+    fn test_navigation_suggestion_default_priority() {
+        let suggestion = NavigationSuggestion::new(
+            "Test Nebula",
+            SuggestionAction::Explore,
+            "Test reason",
+        );
+
+        assert_eq!(suggestion.priority, 5);
+        assert!(suggestion.target_path.is_none());
+    }
+
+    #[test]
+    fn test_navigation_suggestion_display_without_target() {
+        let suggestion = NavigationSuggestion::new(
+            "Service Layer",
+            SuggestionAction::Explore,
+            "Best entry point",
+        );
+
+        let display = suggestion.display();
+        assert!(display.contains("🔍"));
+        assert!(display.contains("EXPLORE"));
+        assert!(display.contains("Service Layer"));
+        assert!(!display.contains("→"));
+    }
+
+    #[test]
+    fn test_suggestion_action_display_icons() {
+        // Test each action produces correct icon
+        let start = NavigationSuggestion::new("n", SuggestionAction::StartHere, "r");
+        assert!(start.display().contains("🌟"));
+
+        let explore = NavigationSuggestion::new("n", SuggestionAction::Explore, "r");
+        assert!(explore.display().contains("🔍"));
+
+        let skim = NavigationSuggestion::new("n", SuggestionAction::Skim, "r");
+        assert!(skim.display().contains("📖"));
+
+        let skip = NavigationSuggestion::new("n", SuggestionAction::Skip, "r");
+        assert!(skip.display().contains("⏭️"));
+
+        let deep = NavigationSuggestion::new("n", SuggestionAction::DeepDive, "r");
+        assert!(deep.display().contains("🏊"));
+    }
+
+    #[test]
+    fn test_hint_category_variants() {
+        // Ensure all variants exist and are distinct
+        let categories = vec![
+            HintCategory::Architecture,
+            HintCategory::EntryPoints,
+            HintCategory::DataFlow,
+            HintCategory::ErrorHandling,
+            HintCategory::Testing,
+        ];
+
+        assert_eq!(categories.len(), 5);
+        assert_eq!(HintCategory::Architecture, HintCategory::Architecture);
+        assert_ne!(HintCategory::Architecture, HintCategory::Testing);
+    }
+
+    #[test]
+    fn test_exploration_hint_new() {
+        let hint = ExplorationHint::new("Follow the data flow", HintCategory::DataFlow);
+
+        assert_eq!(hint.hint, "Follow the data flow");
+        assert_eq!(hint.category, HintCategory::DataFlow);
+    }
+
+    #[test]
+    fn test_navigation_compass_default() {
+        let compass = NavigationCompass::default();
+        assert_eq!(compass.max_suggestions, 10);
+        assert!(compass.include_faded);
+    }
+
+    #[test]
+    fn test_compass_handles_ungrouped_stars() {
+        let compass = NavigationCompass::new();
+
+        let ungrouped = vec![
+            create_test_star("src/standalone.rs", 0.85),
+            create_test_star("src/helper.rs", 0.5),
+        ];
+
+        let map = CelestialMap {
+            nebulae: vec![],
+            ungrouped_stars: ungrouped,
+            total_stars: 2,
+            analysis_time_ms: 10,
+        };
+
+        let suggestions = compass.navigate(&map);
+        assert!(!suggestions.is_empty());
+
+        let ungrouped_suggestion = suggestions.iter().find(|s| s.nebula_name == "Ungrouped");
+        assert!(ungrouped_suggestion.is_some());
+        assert_eq!(
+            ungrouped_suggestion.unwrap().target_path,
+            Some("src/standalone.rs".to_string())
+        );
+    }
+
+    #[test]
+    fn test_compass_deep_dive_high_cohesion() {
+        let compass = NavigationCompass::new();
+
+        // Star with medium brightness but nebula has high cohesion
+        let stars = vec![create_test_star("src/cohesive.rs", 0.75)];
+        let mut nebula = create_test_nebula("Cohesive Module", stars, false);
+        nebula.cohesion = 0.85; // High cohesion triggers DeepDive
+
+        let map = CelestialMap {
+            nebulae: vec![nebula],
+            ungrouped_stars: vec![],
+            total_stars: 1,
+            analysis_time_ms: 10,
+        };
+
+        let suggestions = compass.navigate(&map);
+        assert!(!suggestions.is_empty());
+        assert_eq!(suggestions[0].action, SuggestionAction::DeepDive);
+    }
+
+    #[test]
+    fn test_compass_explore_medium_brightness() {
+        let compass = NavigationCompass::new();
+
+        // Star with medium brightness (0.7-0.9) and low cohesion
+        let stars = vec![create_test_star("src/medium.rs", 0.75)];
+        let mut nebula = create_test_nebula("Medium Module", stars, false);
+        nebula.cohesion = 0.5; // Low cohesion, won't trigger DeepDive
+
+        let map = CelestialMap {
+            nebulae: vec![nebula],
+            ungrouped_stars: vec![],
+            total_stars: 1,
+            analysis_time_ms: 10,
+        };
+
+        let suggestions = compass.navigate(&map);
+        assert!(!suggestions.is_empty());
+        assert_eq!(suggestions[0].action, SuggestionAction::Explore);
+        assert!(suggestions[0].reason.contains("Good entry point"));
+    }
+
+    #[test]
+    fn test_compass_explore_low_brightness() {
+        let compass = NavigationCompass::new();
+
+        // Star with lower brightness (<0.7)
+        let stars = vec![create_test_star("src/basic.rs", 0.5)];
+        let mut nebula = create_test_nebula("Basic Module", stars, false);
+        nebula.cohesion = 0.5;
+
+        let map = CelestialMap {
+            nebulae: vec![nebula],
+            ungrouped_stars: vec![],
+            total_stars: 1,
+            analysis_time_ms: 10,
+        };
+
+        let suggestions = compass.navigate(&map);
+        assert!(!suggestions.is_empty());
+        assert_eq!(suggestions[0].action, SuggestionAction::Explore);
+        assert!(suggestions[0].reason.contains("Entry point for"));
+    }
+
+    #[test]
+    fn test_compass_data_flow_hints() {
+        let compass = NavigationCompass::new();
+
+        let model_stars = vec![create_test_star("src/model/user.rs", 0.8)];
+        let service_stars = vec![create_test_star("src/service/auth.rs", 0.8)];
+
+        let map = CelestialMap {
+            nebulae: vec![
+                create_test_nebula("Data Models", model_stars, false),
+                create_test_nebula("User Service", service_stars, false),
+            ],
+            ungrouped_stars: vec![],
+            total_stars: 2,
+            analysis_time_ms: 10,
+        };
+
+        let hints = compass.generate_hints(&map);
+        let has_data_flow = hints.iter().any(|h| h.category == HintCategory::DataFlow);
+        assert!(has_data_flow);
+    }
+
+    #[test]
+    fn test_compass_empty_map_format() {
+        let compass = NavigationCompass::new();
+
+        let map = CelestialMap {
+            nebulae: vec![],
+            ungrouped_stars: vec![],
+            total_stars: 0,
+            analysis_time_ms: 10,
+        };
+
+        let output = compass.format_display(&map);
+        assert!(output.is_empty());
+    }
+
+    #[test]
+    fn test_find_brightest_no_valid_stars() {
+        let compass = NavigationCompass::new();
+
+        // All stars have 0.0 brightness
+        let stars = vec![
+            create_test_star("src/zero1.rs", 0.0),
+            create_test_star("src/zero2.rs", 0.0),
+        ];
+
+        let nebula = create_test_nebula("Zero Stars", stars, false);
+        let map = CelestialMap {
+            nebulae: vec![nebula],
+            ungrouped_stars: vec![],
+            total_stars: 2,
+            analysis_time_ms: 10,
+        };
+
+        let suggestions = compass.navigate(&map);
+        // No suggestion because no star has brightness > 0.0
+        assert!(suggestions.is_empty());
+    }
+
+    #[test]
+    fn test_compass_suggestions_sorted_by_priority() {
+        let compass = NavigationCompass::new();
+
+        // Create nebulae with different brightness levels
+        let high_stars = vec![create_test_star("src/high.rs", 0.95)];
+        let low_stars = vec![create_test_star("src/low.rs", 0.5)];
+        let mut low_nebula = create_test_nebula("Low Priority", low_stars, false);
+        low_nebula.cohesion = 0.3;
+
+        let map = CelestialMap {
+            nebulae: vec![
+                low_nebula,
+                create_test_nebula("High Priority", high_stars, false),
+            ],
+            ungrouped_stars: vec![],
+            total_stars: 2,
+            analysis_time_ms: 10,
+        };
+
+        let suggestions = compass.navigate(&map);
+        assert!(suggestions.len() >= 2);
+        // Higher priority should come first
+        assert!(suggestions[0].priority >= suggestions[1].priority);
+    }
+
+    #[test]
+    fn test_format_display_summary_counts() {
+        let compass = NavigationCompass::new();
+
+        // Create mix of bright and faded nebulae
+        let bright_stars = vec![create_test_star("src/bright.rs", 0.95)];
+        let faded_stars = vec![create_test_star("src/faded.rs", 0.2)];
+
+        let map = CelestialMap {
+            nebulae: vec![
+                create_test_nebula("Bright Module", bright_stars, false),
+                create_test_nebula("Faded Module", faded_stars, true),
+            ],
+            ungrouped_stars: vec![],
+            total_stars: 2,
+            analysis_time_ms: 10,
+        };
+
+        let output = compass.format_display(&map);
+        assert!(output.contains("bright entry points"));
+        assert!(output.contains("areas to skim"));
+    }
+
+    #[test]
+    fn test_cli_endpoint_hint_detection() {
+        let compass = NavigationCompass::new();
+
+        let cli_stars = vec![create_test_star("src/cli/main.rs", 0.9)];
+
+        let map = CelestialMap {
+            nebulae: vec![create_test_nebula("CLI Interface", cli_stars, false)],
+            ungrouped_stars: vec![],
+            total_stars: 1,
+            analysis_time_ms: 10,
+        };
+
+        let hints = compass.generate_hints(&map);
+        let has_entry_points = hints.iter().any(|h| h.category == HintCategory::EntryPoints);
+        assert!(has_entry_points);
+    }
+
+    #[test]
+    fn test_empty_ungrouped_stars() {
+        let compass = NavigationCompass::new();
+
+        let map = CelestialMap {
+            nebulae: vec![],
+            ungrouped_stars: vec![],
+            total_stars: 0,
+            analysis_time_ms: 10,
+        };
+
+        let suggestions = compass.navigate(&map);
+        assert!(suggestions.is_empty());
+    }
 }
