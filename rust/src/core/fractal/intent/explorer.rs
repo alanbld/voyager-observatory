@@ -564,6 +564,278 @@ mod tests {
     use super::*;
     use std::fs;
 
+    // === ExplorerConfig tests ===
+
+    #[test]
+    fn test_explorer_config_default() {
+        let config = ExplorerConfig::default();
+        assert_eq!(config.max_files, 200);
+        assert_eq!(config.max_file_size, 100_000);
+        assert!(!config.include_tests);
+        assert!(config.include_patterns.is_empty());
+        assert!(!config.ignore_patterns.is_empty());
+    }
+
+    #[test]
+    fn test_explorer_config_default_ignores() {
+        let config = ExplorerConfig::default();
+        assert!(config.ignore_patterns.iter().any(|p| p.contains("node_modules")));
+        assert!(config.ignore_patterns.iter().any(|p| p.contains("target")));
+        assert!(config.ignore_patterns.iter().any(|p| p.contains(".git")));
+    }
+
+    #[test]
+    fn test_explorer_config_custom() {
+        let config = ExplorerConfig {
+            max_files: 50,
+            max_file_size: 50_000,
+            ignore_patterns: vec!["custom/**".to_string()],
+            include_patterns: vec!["src/**".to_string()],
+            include_tests: true,
+        };
+        assert_eq!(config.max_files, 50);
+        assert_eq!(config.max_file_size, 50_000);
+        assert!(config.include_tests);
+        assert_eq!(config.include_patterns.len(), 1);
+    }
+
+    // === truncate_str tests ===
+
+    #[test]
+    fn test_truncate_str_short() {
+        assert_eq!(truncate_str("abc", 10), "abc");
+    }
+
+    #[test]
+    fn test_truncate_str_exact() {
+        assert_eq!(truncate_str("exactly10!", 10), "exactly10!");
+    }
+
+    #[test]
+    fn test_truncate_str_long() {
+        assert_eq!(truncate_str("this is too long", 10), "this is...");
+    }
+
+    #[test]
+    fn test_truncate_str_empty() {
+        assert_eq!(truncate_str("", 10), "");
+    }
+
+    // === IntentExplorer builder tests ===
+
+    #[test]
+    fn test_intent_explorer_new() {
+        let explorer = IntentExplorer::new("/tmp/test");
+        assert_eq!(explorer.project_root, PathBuf::from("/tmp/test"));
+        assert!(!explorer.config.include_tests);
+    }
+
+    #[test]
+    fn test_intent_explorer_include_tests() {
+        let explorer = IntentExplorer::new("/tmp/test").include_tests(true);
+        assert!(explorer.config.include_tests);
+
+        let explorer = IntentExplorer::new("/tmp/test").include_tests(false);
+        assert!(!explorer.config.include_tests);
+    }
+
+    #[test]
+    fn test_intent_explorer_max_files() {
+        let explorer = IntentExplorer::new("/tmp/test").max_files(50);
+        assert_eq!(explorer.config.max_files, 50);
+    }
+
+    #[test]
+    fn test_intent_explorer_with_ignore() {
+        let explorer = IntentExplorer::new("/tmp/test")
+            .with_ignore(vec!["vendor/**".to_string(), "dist/**".to_string()]);
+
+        assert!(explorer.config.ignore_patterns.contains(&"vendor/**".to_string()));
+        assert!(explorer.config.ignore_patterns.contains(&"dist/**".to_string()));
+    }
+
+    #[test]
+    fn test_intent_explorer_chained_builders() {
+        let explorer = IntentExplorer::new("/tmp/test")
+            .include_tests(true)
+            .max_files(100)
+            .with_ignore(vec!["build/**".to_string()]);
+
+        assert!(explorer.config.include_tests);
+        assert_eq!(explorer.config.max_files, 100);
+        assert!(explorer.config.ignore_patterns.contains(&"build/**".to_string()));
+    }
+
+    // === Helper method tests ===
+
+    #[test]
+    fn test_is_source_file() {
+        let explorer = IntentExplorer::new("/tmp");
+
+        // Source files
+        assert!(explorer.is_source_file(Path::new("main.rs")));
+        assert!(explorer.is_source_file(Path::new("app.py")));
+        assert!(explorer.is_source_file(Path::new("index.js")));
+        assert!(explorer.is_source_file(Path::new("app.ts")));
+        assert!(explorer.is_source_file(Path::new("Component.tsx")));
+        assert!(explorer.is_source_file(Path::new("main.go")));
+        assert!(explorer.is_source_file(Path::new("Main.java")));
+        assert!(explorer.is_source_file(Path::new("file.c")));
+        assert!(explorer.is_source_file(Path::new("file.cpp")));
+        assert!(explorer.is_source_file(Path::new("header.h")));
+        assert!(explorer.is_source_file(Path::new("script.rb")));
+        assert!(explorer.is_source_file(Path::new("page.php")));
+        assert!(explorer.is_source_file(Path::new("App.swift")));
+        assert!(explorer.is_source_file(Path::new("Main.kt")));
+        assert!(explorer.is_source_file(Path::new("App.scala")));
+        assert!(explorer.is_source_file(Path::new("Program.cs")));
+
+        // Non-source files
+        assert!(!explorer.is_source_file(Path::new("README.md")));
+        assert!(!explorer.is_source_file(Path::new("config.json")));
+        assert!(!explorer.is_source_file(Path::new("style.css")));
+        assert!(!explorer.is_source_file(Path::new("data.xml")));
+    }
+
+    #[test]
+    fn test_is_test_file() {
+        let explorer = IntentExplorer::new("/tmp");
+
+        // Test files
+        assert!(explorer.is_test_file(Path::new("test_main.py")));
+        assert!(explorer.is_test_file(Path::new("main_test.go")));
+        assert!(explorer.is_test_file(Path::new("app.test.js")));
+        assert!(explorer.is_test_file(Path::new("app.spec.ts")));
+        assert!(explorer.is_test_file(Path::new("src/tests/util.rs")));
+        assert!(explorer.is_test_file(Path::new("TestMain.java")));
+
+        // Non-test files
+        assert!(!explorer.is_test_file(Path::new("main.rs")));
+        assert!(!explorer.is_test_file(Path::new("app.py")));
+        assert!(!explorer.is_test_file(Path::new("index.js")));
+    }
+
+    #[test]
+    fn test_detect_language() {
+        let explorer = IntentExplorer::new("/tmp");
+
+        assert_eq!(explorer.detect_language(Path::new("main.rs")), "rust");
+        assert_eq!(explorer.detect_language(Path::new("app.py")), "python");
+        assert_eq!(explorer.detect_language(Path::new("index.js")), "javascript");
+        assert_eq!(explorer.detect_language(Path::new("app.ts")), "typescript");
+        assert_eq!(explorer.detect_language(Path::new("Component.tsx")), "typescript");
+        assert_eq!(explorer.detect_language(Path::new("Component.jsx")), "javascript");
+        assert_eq!(explorer.detect_language(Path::new("main.go")), "go");
+        assert_eq!(explorer.detect_language(Path::new("Main.java")), "java");
+        assert_eq!(explorer.detect_language(Path::new("file.c")), "c");
+        assert_eq!(explorer.detect_language(Path::new("file.cpp")), "cpp");
+        assert_eq!(explorer.detect_language(Path::new("header.h")), "c");
+        assert_eq!(explorer.detect_language(Path::new("script.rb")), "ruby");
+        assert_eq!(explorer.detect_language(Path::new("page.php")), "php");
+        assert_eq!(explorer.detect_language(Path::new("App.swift")), "swift");
+        assert_eq!(explorer.detect_language(Path::new("Main.kt")), "kotlin");
+    }
+
+    #[test]
+    fn test_detect_language_unknown() {
+        let explorer = IntentExplorer::new("/tmp");
+        assert_eq!(explorer.detect_language(Path::new("data.xyz")), "xyz");
+        assert_eq!(explorer.detect_language(Path::new("Makefile")), "unknown");
+    }
+
+    #[test]
+    fn test_should_ignore() {
+        let explorer = IntentExplorer::new("/tmp");
+
+        // Should ignore
+        assert!(explorer.should_ignore(Path::new("/project/node_modules/pkg/index.js")));
+        assert!(explorer.should_ignore(Path::new("/project/target/debug/main")));
+        assert!(explorer.should_ignore(Path::new("/project/.git/config")));
+
+        // Should not ignore
+        assert!(!explorer.should_ignore(Path::new("/project/src/main.rs")));
+        assert!(!explorer.should_ignore(Path::new("/project/lib/util.py")));
+    }
+
+    // === ExplorationResult output tests ===
+
+    #[test]
+    fn test_exploration_result_to_text_format() {
+        let result = ExplorationResult {
+            intent_result: IntentResult {
+                intent: ExplorationIntent::BusinessLogic,
+                summary: "Test summary".to_string(),
+                total_count: 10,
+                relevant_count: 5,
+                estimated_minutes: 15,
+                exploration_path: vec![],
+                key_insights: vec!["Insight 1".to_string()],
+            },
+            project_root: "/test".to_string(),
+            files_analyzed: 3,
+            symbols_extracted: 10,
+            format_hint: None,
+        };
+
+        let text = result.to_text();
+        assert!(text.contains("=== Intent Exploration: Business Logic ==="));
+        assert!(text.contains("Project: /test"));
+        assert!(text.contains("Test summary"));
+        assert!(text.contains("Insight 1"));
+        assert!(text.contains("Estimated reading time: 15 minutes"));
+    }
+
+    #[test]
+    fn test_exploration_result_to_xml_format() {
+        let result = ExplorationResult {
+            intent_result: IntentResult {
+                intent: ExplorationIntent::Debugging,
+                summary: "Debug summary".to_string(),
+                total_count: 5,
+                relevant_count: 3,
+                estimated_minutes: 10,
+                exploration_path: vec![],
+                key_insights: vec![],
+            },
+            project_root: "/test".to_string(),
+            files_analyzed: 2,
+            symbols_extracted: 5,
+            format_hint: None,
+        };
+
+        let xml = result.to_xml();
+        assert!(xml.contains("<exploration intent=\"debugging\">"));
+        assert!(xml.contains("<summary>"));
+        assert!(xml.contains("Debug summary"));
+        assert!(xml.contains("<files_analyzed>2</files_analyzed>"));
+        assert!(xml.contains("<symbols_extracted>5</symbols_extracted>"));
+        assert!(xml.contains("</exploration>"));
+    }
+
+    #[test]
+    fn test_exploration_result_to_json_format() {
+        let result = ExplorationResult {
+            intent_result: IntentResult {
+                intent: ExplorationIntent::Onboarding,
+                summary: "Onboarding summary".to_string(),
+                total_count: 20,
+                relevant_count: 8,
+                estimated_minutes: 30,
+                exploration_path: vec![],
+                key_insights: vec!["Key insight".to_string()],
+            },
+            project_root: "/project".to_string(),
+            files_analyzed: 5,
+            symbols_extracted: 20,
+            format_hint: Some("json".to_string()),
+        };
+
+        let json = result.to_json();
+        assert!(json.contains("\"summary\": \"Onboarding summary\""));
+        assert!(json.contains("\"files_analyzed\": 5"));
+        assert!(json.contains("\"symbols_extracted\": 20"));
+    }
+
     fn create_test_project() -> PathBuf {
         // Use unique temp directory name with timestamp to avoid race conditions
         let unique_id = std::time::SystemTime::now()
