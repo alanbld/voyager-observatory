@@ -525,4 +525,325 @@ mod tests {
 
         assert_eq!(name.display(), "Service Layer (services)");
     }
+
+    // =========================================================================
+    // Additional Tests for Comprehensive Coverage
+    // =========================================================================
+
+    #[test]
+    fn test_nebula_name_new_defaults() {
+        let name = NebulaName::new("Test", NamingStrategy::ConceptBased);
+
+        assert_eq!(name.name, "Test");
+        assert!(name.subtitle.is_none());
+        assert_eq!(name.strategy, NamingStrategy::ConceptBased);
+        assert!((name.confidence - 0.8).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_nebula_name_with_confidence() {
+        let name = NebulaName::new("Test", NamingStrategy::ConceptBased).with_confidence(0.95);
+
+        assert!((name.confidence - 0.95).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_nebula_name_display_without_subtitle() {
+        let name = NebulaName::new("Service Layer", NamingStrategy::ConceptBased);
+
+        assert_eq!(name.display(), "Service Layer");
+    }
+
+    #[test]
+    fn test_naming_strategy_variants() {
+        assert_eq!(
+            NamingStrategy::ConceptBased,
+            NamingStrategy::ConceptBased
+        );
+        assert_ne!(NamingStrategy::ConceptBased, NamingStrategy::DirectoryBased);
+        assert_ne!(NamingStrategy::PatternBased, NamingStrategy::FileTypeBased);
+        assert_ne!(NamingStrategy::Fallback, NamingStrategy::ConceptBased);
+    }
+
+    #[test]
+    fn test_nebula_namer_default() {
+        let namer = NebulaNamer::default();
+
+        // Default should have concept names
+        assert!(!namer.concept_names.is_empty());
+        // Default should have directory names
+        assert!(!namer.directory_names.is_empty());
+    }
+
+    #[test]
+    fn test_concept_type_name() {
+        let namer = NebulaNamer::new();
+
+        assert_eq!(
+            namer.concept_type_name(UniversalConceptType::Validation),
+            "Input Validation"
+        );
+        assert_eq!(
+            namer.concept_type_name(UniversalConceptType::Service),
+            "Service Layer"
+        );
+        assert_eq!(
+            namer.concept_type_name(UniversalConceptType::Unknown),
+            "Miscellaneous"
+        );
+    }
+
+    #[test]
+    fn test_concept_name_empty_counts() {
+        let namer = NebulaNamer::new();
+
+        let name = namer.name_nebula(&[], &HashMap::new());
+        assert_eq!(name.strategy, NamingStrategy::Fallback);
+    }
+
+    #[test]
+    fn test_concept_name_zero_total() {
+        let namer = NebulaNamer::new();
+
+        let mut concepts = HashMap::new();
+        concepts.insert(UniversalConceptType::Validation, 0);
+        concepts.insert(UniversalConceptType::Service, 0);
+
+        let name = namer.name_nebula(&[], &concepts);
+        assert_eq!(name.strategy, NamingStrategy::Fallback);
+    }
+
+    #[test]
+    fn test_concept_name_unknown_dominant() {
+        let namer = NebulaNamer::new();
+
+        let mut concepts = HashMap::new();
+        concepts.insert(UniversalConceptType::Unknown, 10);
+        concepts.insert(UniversalConceptType::Validation, 2);
+
+        let name = namer.name_nebula(&[], &concepts);
+        // Should not use Unknown as dominant, falls back
+        assert_ne!(name.name, "Miscellaneous");
+    }
+
+    #[test]
+    fn test_concept_name_below_dominance_threshold() {
+        let namer = NebulaNamer::new();
+
+        // Each concept has 30% - below 40% threshold
+        let mut concepts = HashMap::new();
+        concepts.insert(UniversalConceptType::Validation, 3);
+        concepts.insert(UniversalConceptType::Service, 3);
+        concepts.insert(UniversalConceptType::Endpoint, 4);
+
+        // 4/10 = 40%, so this should just barely qualify
+        let name = namer.name_nebula(&[], &concepts);
+        assert_eq!(name.strategy, NamingStrategy::ConceptBased);
+    }
+
+    #[test]
+    fn test_concept_name_far_below_threshold() {
+        let namer = NebulaNamer::new();
+
+        // Each concept has ~25% - below 40% threshold
+        let mut concepts = HashMap::new();
+        concepts.insert(UniversalConceptType::Validation, 3);
+        concepts.insert(UniversalConceptType::Service, 3);
+        concepts.insert(UniversalConceptType::Endpoint, 3);
+        concepts.insert(UniversalConceptType::Testing, 3);
+
+        // 3/12 = 25%, below threshold
+        let name = namer.name_nebula(&[], &concepts);
+        assert_eq!(name.strategy, NamingStrategy::Fallback);
+    }
+
+    #[test]
+    fn test_directory_name_empty_files() {
+        let namer = NebulaNamer::new();
+
+        let name = namer.name_nebula(&[], &HashMap::new());
+        assert_eq!(name.strategy, NamingStrategy::Fallback);
+    }
+
+    #[test]
+    fn test_directory_name_unknown_directory() {
+        let namer = NebulaNamer::new();
+
+        let files = vec![
+            "myfeature/handler.rs".to_string(),
+            "myfeature/service.rs".to_string(),
+            "myfeature/model.rs".to_string(),
+        ];
+
+        let name = namer.name_nebula(&files, &HashMap::new());
+        assert_eq!(name.strategy, NamingStrategy::DirectoryBased);
+        // Unknown directory should be capitalized
+        assert_eq!(name.name, "Myfeature");
+    }
+
+    #[test]
+    fn test_directory_name_coverage_below_threshold() {
+        let namer = NebulaNamer::new();
+
+        // Files in different directories, no common one > 50%
+        let files = vec![
+            "a/file1.rs".to_string(),
+            "b/file2.rs".to_string(),
+            "c/file3.rs".to_string(),
+            "d/file4.rs".to_string(),
+        ];
+
+        let name = namer.name_nebula(&files, &HashMap::new());
+        // No directory has > 50% coverage, falls back
+        assert_eq!(name.strategy, NamingStrategy::Fallback);
+    }
+
+    #[test]
+    fn test_pattern_config_files() {
+        let namer = NebulaNamer::new();
+
+        let files = vec![
+            "config.json".to_string(),
+            "settings.yaml".to_string(),
+            "app.toml".to_string(),
+        ];
+
+        let name = namer.name_nebula(&files, &HashMap::new());
+        assert_eq!(name.name, "Configuration");
+        assert_eq!(name.strategy, NamingStrategy::PatternBased);
+    }
+
+    #[test]
+    fn test_pattern_script_files() {
+        let namer = NebulaNamer::new();
+
+        let files = vec![
+            "build.sh".to_string(),
+            "deploy.sh".to_string(),
+            "test.bash".to_string(),
+        ];
+
+        let name = namer.name_nebula(&files, &HashMap::new());
+        assert_eq!(name.name, "Automation Scripts");
+        assert_eq!(name.strategy, NamingStrategy::PatternBased);
+    }
+
+    #[test]
+    fn test_pattern_migration_files() {
+        let namer = NebulaNamer::new();
+
+        let files = vec![
+            "001_migration.sql".to_string(),
+            "002_migration.sql".to_string(),
+            "003_migrate.sql".to_string(),
+        ];
+
+        let name = namer.name_nebula(&files, &HashMap::new());
+        assert_eq!(name.name, "Schema Migrations");
+        assert_eq!(name.strategy, NamingStrategy::PatternBased);
+    }
+
+    #[test]
+    fn test_capitalize_directory_underscore() {
+        assert_eq!(capitalize_directory("user_handlers"), "User Handlers");
+        assert_eq!(capitalize_directory("data_access_layer"), "Data Access Layer");
+    }
+
+    #[test]
+    fn test_capitalize_directory_hyphen() {
+        assert_eq!(capitalize_directory("api-routes"), "Api Routes");
+        assert_eq!(capitalize_directory("user-auth-service"), "User Auth Service");
+    }
+
+    #[test]
+    fn test_capitalize_directory_single_word() {
+        assert_eq!(capitalize_directory("models"), "Models");
+        assert_eq!(capitalize_directory("services"), "Services");
+    }
+
+    #[test]
+    fn test_all_concept_types_have_names() {
+        let namer = NebulaNamer::new();
+
+        // Test all major concept types
+        let types = vec![
+            UniversalConceptType::Calculation,
+            UniversalConceptType::Validation,
+            UniversalConceptType::Transformation,
+            UniversalConceptType::Decision,
+            UniversalConceptType::DataStructure,
+            UniversalConceptType::Service,
+            UniversalConceptType::Endpoint,
+            UniversalConceptType::DatabaseOperation,
+            UniversalConceptType::Integration,
+            UniversalConceptType::ErrorHandling,
+            UniversalConceptType::Infrastructure,
+            UniversalConceptType::Configuration,
+            UniversalConceptType::Observability,
+            UniversalConceptType::Testing,
+            UniversalConceptType::Unknown,
+        ];
+
+        for concept in types {
+            let name = namer.concept_type_name(concept);
+            assert!(!name.is_empty());
+            assert_ne!(name, "Code"); // Should have a real name
+        }
+    }
+
+    #[test]
+    fn test_directory_names_mapping() {
+        let namer = NebulaNamer::new();
+
+        // Known directories should be mapped
+        assert!(namer.directory_names.contains_key("api"));
+        assert!(namer.directory_names.contains_key("handlers"));
+        assert!(namer.directory_names.contains_key("models"));
+        assert!(namer.directory_names.contains_key("tests"));
+        assert!(namer.directory_names.contains_key("config"));
+    }
+
+    #[test]
+    fn test_concept_priority_over_directory() {
+        let namer = NebulaNamer::new();
+
+        // Both concept and directory should match, but concept takes priority
+        let files = vec![
+            "handlers/user.rs".to_string(),
+            "handlers/order.rs".to_string(),
+        ];
+
+        let mut concepts = HashMap::new();
+        concepts.insert(UniversalConceptType::Validation, 10);
+
+        let name = namer.name_nebula(&files, &concepts);
+        assert_eq!(name.strategy, NamingStrategy::ConceptBased);
+    }
+
+    #[test]
+    fn test_directory_priority_over_pattern() {
+        let namer = NebulaNamer::new();
+
+        // Files in tests directory with test pattern
+        // Directory should take priority over pattern
+        let files = vec![
+            "tests/test_config.py".to_string(),
+            "tests/test_config2.py".to_string(),
+        ];
+
+        let name = namer.name_nebula(&files, &HashMap::new());
+        // Directory-based should win
+        assert_eq!(name.strategy, NamingStrategy::DirectoryBased);
+    }
+
+    #[test]
+    fn test_nebula_name_all_builders_chain() {
+        let name = NebulaName::new("Test", NamingStrategy::ConceptBased)
+            .with_subtitle("subtitle")
+            .with_confidence(0.75);
+
+        assert_eq!(name.name, "Test");
+        assert_eq!(name.subtitle, Some("subtitle".to_string()));
+        assert!((name.confidence - 0.75).abs() < 0.001);
+    }
 }
