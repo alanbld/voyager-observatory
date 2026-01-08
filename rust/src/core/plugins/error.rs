@@ -67,3 +67,86 @@ impl From<mlua::Error> for PluginError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sandbox_violation_display() {
+        let err = PluginError::SandboxViolation("path escape attempt".to_string());
+        assert_eq!(err.to_string(), "Sandbox violation: path escape attempt");
+    }
+
+    #[test]
+    fn test_timeout_exceeded_display() {
+        let err = PluginError::TimeoutExceeded;
+        assert_eq!(err.to_string(), "Plugin execution timeout (>100ms)");
+    }
+
+    #[test]
+    fn test_memory_quota_exceeded_display() {
+        let err = PluginError::MemoryQuotaExceeded;
+        assert_eq!(err.to_string(), "Memory quota exceeded (>10MB)");
+    }
+
+    #[test]
+    fn test_api_version_mismatch_display() {
+        let err = PluginError::ApiVersionMismatch {
+            expected: "1.0".to_string(),
+            actual: "2.0".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "API version mismatch: expected 1.0, got 2.0"
+        );
+    }
+
+    #[test]
+    fn test_invalid_manifest_display() {
+        let err = PluginError::InvalidManifest("missing name field".to_string());
+        assert_eq!(err.to_string(), "Invalid manifest: missing name field");
+    }
+
+    #[test]
+    fn test_plugin_not_found_display() {
+        let err = PluginError::PluginNotFound("my-plugin.lua".to_string());
+        assert_eq!(err.to_string(), "Plugin not found: my-plugin.lua");
+    }
+
+    #[test]
+    fn test_lua_error_display() {
+        let err = PluginError::LuaError("syntax error at line 5".to_string());
+        assert_eq!(err.to_string(), "Lua runtime error: syntax error at line 5");
+    }
+
+    #[test]
+    fn test_registration_failed_display() {
+        let err = PluginError::RegistrationFailed("duplicate name".to_string());
+        assert_eq!(err.to_string(), "Registration failed: duplicate name");
+    }
+
+    #[test]
+    fn test_io_error_from_conversion() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let plugin_err: PluginError = io_err.into();
+        assert!(plugin_err.to_string().contains("file not found"));
+    }
+
+    #[test]
+    fn test_plugin_result_type() {
+        let success: PluginResult<i32> = Ok(42);
+        assert_eq!(success.unwrap(), 42);
+
+        let failure: PluginResult<i32> = Err(PluginError::TimeoutExceeded);
+        assert!(failure.is_err());
+    }
+
+    #[test]
+    fn test_error_debug_impl() {
+        let err = PluginError::SandboxViolation("test".to_string());
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("SandboxViolation"));
+        assert!(debug_str.contains("test"));
+    }
+}

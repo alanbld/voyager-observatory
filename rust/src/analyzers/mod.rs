@@ -73,3 +73,168 @@ pub trait LanguageAnalyzer {
     /// Get language name
     fn language_name(&self) -> &str;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_analysis_result_new() {
+        let result = AnalysisResult::new("rust");
+        assert_eq!(result.language, "rust");
+        assert!(result.classes.is_empty());
+        assert!(result.functions.is_empty());
+        assert!(result.imports.is_empty());
+        assert!(result.entry_points.is_empty());
+        assert!(result.config_keys.is_empty());
+        assert!(result.documentation.is_empty());
+        assert!(result.markers.is_empty());
+        assert_eq!(result.category, "library");
+        assert!(result.critical_sections.is_empty());
+        assert!(result.structure_ranges.is_empty());
+    }
+
+    #[test]
+    fn test_analysis_result_new_different_languages() {
+        let rust = AnalysisResult::new("rust");
+        let python = AnalysisResult::new("python");
+        let javascript = AnalysisResult::new("javascript");
+
+        assert_eq!(rust.language, "rust");
+        assert_eq!(python.language, "python");
+        assert_eq!(javascript.language, "javascript");
+    }
+
+    #[test]
+    fn test_analysis_result_default_category() {
+        let result = AnalysisResult::new("any");
+        assert_eq!(result.category, "library");
+    }
+
+    #[test]
+    fn test_get_analyzer_for_python() {
+        let analyzer = get_analyzer_for_file("test.py");
+        assert!(analyzer.is_some());
+        let a = analyzer.unwrap();
+        assert_eq!(a.language_name(), "Python");
+    }
+
+    #[test]
+    fn test_get_analyzer_for_python_pyw() {
+        let analyzer = get_analyzer_for_file("test.pyw");
+        assert!(analyzer.is_some());
+    }
+
+    #[test]
+    fn test_get_analyzer_for_javascript() {
+        let analyzer = get_analyzer_for_file("test.js");
+        assert!(analyzer.is_some());
+        let a = analyzer.unwrap();
+        assert_eq!(a.language_name(), "JavaScript");
+    }
+
+    #[test]
+    fn test_get_analyzer_for_jsx() {
+        let analyzer = get_analyzer_for_file("Component.jsx");
+        assert!(analyzer.is_some());
+    }
+
+    #[test]
+    fn test_get_analyzer_for_typescript() {
+        let analyzer = get_analyzer_for_file("test.ts");
+        assert!(analyzer.is_some());
+    }
+
+    #[test]
+    fn test_get_analyzer_for_tsx() {
+        let analyzer = get_analyzer_for_file("Component.tsx");
+        assert!(analyzer.is_some());
+    }
+
+    #[test]
+    fn test_get_analyzer_for_mjs() {
+        let analyzer = get_analyzer_for_file("module.mjs");
+        assert!(analyzer.is_some());
+    }
+
+    #[test]
+    fn test_get_analyzer_for_shell() {
+        let sh = get_analyzer_for_file("script.sh");
+        let bash = get_analyzer_for_file("script.bash");
+        let zsh = get_analyzer_for_file("script.zsh");
+
+        assert!(sh.is_some());
+        assert!(bash.is_some());
+        assert!(zsh.is_some());
+    }
+
+    #[test]
+    fn test_get_analyzer_for_rust() {
+        let analyzer = get_analyzer_for_file("main.rs");
+        assert!(analyzer.is_some());
+        let a = analyzer.unwrap();
+        assert_eq!(a.language_name(), "Rust");
+    }
+
+    #[test]
+    fn test_get_analyzer_for_markdown() {
+        let md = get_analyzer_for_file("README.md");
+        let markdown = get_analyzer_for_file("doc.markdown");
+
+        assert!(md.is_some());
+        assert!(markdown.is_some());
+    }
+
+    #[test]
+    fn test_get_analyzer_for_json() {
+        let analyzer = get_analyzer_for_file("config.json");
+        assert!(analyzer.is_some());
+    }
+
+    #[test]
+    fn test_get_analyzer_for_yaml() {
+        let yml = get_analyzer_for_file("config.yml");
+        let yaml = get_analyzer_for_file("config.yaml");
+
+        assert!(yml.is_some());
+        assert!(yaml.is_some());
+    }
+
+    #[test]
+    fn test_get_analyzer_for_unknown_extension() {
+        let analyzer = get_analyzer_for_file("data.xyz");
+        assert!(analyzer.is_none());
+    }
+
+    #[test]
+    fn test_get_analyzer_for_no_extension() {
+        let analyzer = get_analyzer_for_file("Makefile");
+        assert!(analyzer.is_none());
+    }
+
+    #[test]
+    fn test_get_analyzer_for_path_with_directories() {
+        let analyzer = get_analyzer_for_file("src/lib/utils.rs");
+        assert!(analyzer.is_some());
+    }
+
+    #[test]
+    fn test_analysis_result_clone() {
+        let mut original = AnalysisResult::new("rust");
+        original.functions.push("main".to_string());
+        original.classes.push("Config".to_string());
+
+        let cloned = original.clone();
+        assert_eq!(cloned.language, "rust");
+        assert_eq!(cloned.functions, vec!["main"]);
+        assert_eq!(cloned.classes, vec!["Config"]);
+    }
+
+    #[test]
+    fn test_analysis_result_debug() {
+        let result = AnalysisResult::new("rust");
+        let debug_str = format!("{:?}", result);
+        assert!(debug_str.contains("rust"));
+        assert!(debug_str.contains("library"));
+    }
+}

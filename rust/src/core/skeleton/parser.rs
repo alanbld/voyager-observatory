@@ -747,4 +747,413 @@ class Foo:
         assert_eq!(estimate_tokens("1234"), 1);
         assert_eq!(estimate_tokens("12345678"), 2);
     }
+
+    // === Skeletonizer configuration tests ===
+
+    #[test]
+    fn test_skeletonizer_new() {
+        let s = Skeletonizer::new();
+        assert!(s.preserve_docstrings);
+        assert_eq!(s.fallback_lines, 50);
+    }
+
+    #[test]
+    fn test_skeletonizer_default() {
+        let s = Skeletonizer::default();
+        assert!(s.preserve_docstrings);
+        assert_eq!(s.fallback_lines, 50);
+    }
+
+    #[test]
+    fn test_skeletonizer_with_docstrings() {
+        let s = Skeletonizer::new().with_docstrings(false);
+        assert!(!s.preserve_docstrings);
+    }
+
+    #[test]
+    fn test_skeletonize_empty_content() {
+        let s = Skeletonizer::new();
+        let result = s.skeletonize("", Language::Rust);
+        assert!(result.content.is_empty());
+        assert_eq!(result.original_tokens, 0);
+    }
+
+    // === Rust-specific tests ===
+
+    #[test]
+    fn test_rust_pub_fn() {
+        let input = "pub fn public_func() {\n    42\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("pub fn public_func()"));
+        assert!(result.preserved_symbols.contains(&"public_func".to_string()));
+    }
+
+    #[test]
+    fn test_rust_async_fn() {
+        let input = "pub async fn async_func() {\n    do_async().await\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("async fn async_func()"));
+    }
+
+    #[test]
+    fn test_rust_struct() {
+        let input = "pub struct Point {\n    x: i32,\n    y: i32,\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("struct Point"));
+        assert!(result.content.contains("x: i32"));
+        assert!(result.preserved_symbols.contains(&"Point".to_string()));
+    }
+
+    #[test]
+    fn test_rust_enum() {
+        let input = "pub enum Color {\n    Red,\n    Green,\n    Blue,\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("enum Color"));
+        assert!(result.preserved_symbols.contains(&"Color".to_string()));
+    }
+
+    #[test]
+    fn test_rust_trait() {
+        let input = "pub trait Animal {\n    fn speak(&self);\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("trait Animal"));
+        assert!(result.preserved_symbols.contains(&"Animal".to_string()));
+    }
+
+    #[test]
+    fn test_rust_impl_block() {
+        let input = "impl Point {\n    fn new() -> Self {\n        Self { x: 0, y: 0 }\n    }\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("impl Point"));
+        assert!(result.content.contains("fn new()"));
+    }
+
+    #[test]
+    fn test_rust_use_statement() {
+        let input = "use std::collections::HashMap;\n\nfn main() {}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("use std::collections::HashMap;"));
+    }
+
+    #[test]
+    fn test_rust_const() {
+        let input = "pub const MAX_SIZE: usize = 100;";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("const MAX_SIZE"));
+        assert!(result.preserved_symbols.contains(&"MAX_SIZE".to_string()));
+    }
+
+    #[test]
+    fn test_rust_static() {
+        let input = "static COUNTER: AtomicUsize = AtomicUsize::new(0);";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("static COUNTER"));
+    }
+
+    #[test]
+    fn test_rust_type_alias() {
+        let input = "pub type Result<T> = std::result::Result<T, Error>;";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("type Result"));
+        assert!(result.preserved_symbols.contains(&"Result".to_string()));
+    }
+
+    #[test]
+    fn test_rust_mod() {
+        let input = "pub mod utils;";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("mod utils"));
+        assert!(result.preserved_symbols.contains(&"utils".to_string()));
+    }
+
+    #[test]
+    fn test_rust_doc_comment() {
+        let input = "/// This is a doc comment\nfn documented() {}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("/// This is a doc comment"));
+    }
+
+    #[test]
+    fn test_rust_doc_comment_disabled() {
+        let input = "/// This is a doc comment\nfn documented() {}";
+        let s = Skeletonizer::new().with_docstrings(false);
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(!result.content.contains("/// This is a doc comment"));
+    }
+
+    #[test]
+    fn test_rust_derive_attribute() {
+        let input = "#[derive(Debug, Clone)]\npub struct Data {}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+        assert!(result.content.contains("#[derive(Debug, Clone)]"));
+    }
+
+    // === Python-specific tests ===
+
+    #[test]
+    fn test_python_simple_function() {
+        let input = "def greet(name):\n    return f'Hello, {name}'";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Python);
+        assert!(result.content.contains("def greet(name):"));
+        assert!(!result.content.contains("return f'Hello"));
+        assert!(result.preserved_symbols.contains(&"greet".to_string()));
+    }
+
+    #[test]
+    fn test_python_async_function() {
+        let input = "async def fetch(url):\n    response = await client.get(url)\n    return response";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Python);
+        assert!(result.content.contains("async def fetch(url):"));
+        assert!(result.preserved_symbols.contains(&"fetch".to_string()));
+    }
+
+    #[test]
+    fn test_python_import() {
+        let input = "import os\nfrom pathlib import Path\n\ndef main(): pass";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Python);
+        assert!(result.content.contains("import os"));
+        assert!(result.content.contains("from pathlib import Path"));
+    }
+
+    #[test]
+    fn test_python_multiline_docstring() {
+        let input = "def func():\n    \"\"\"\n    Multi-line\n    docstring\n    \"\"\"\n    pass";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Python);
+        assert!(result.content.contains("Multi-line"));
+    }
+
+    #[test]
+    fn test_python_single_line_docstring() {
+        let input = "def func():\n    \"\"\"Single line docstring.\"\"\"\n    return 1";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Python);
+        assert!(result.content.contains("Single line docstring"));
+    }
+
+    // === JavaScript/TypeScript tests ===
+
+    #[test]
+    fn test_js_function() {
+        let input = "function greet(name) {\n    return 'Hello ' + name;\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::JavaScript);
+        assert!(result.content.contains("function greet(name)"));
+        assert!(result.preserved_symbols.contains(&"greet".to_string()));
+    }
+
+    #[test]
+    fn test_js_export_function() {
+        let input = "export function helper() {\n    return 42;\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::JavaScript);
+        assert!(result.content.contains("export"));
+        assert!(result.content.contains("function helper"));
+    }
+
+    #[test]
+    fn test_js_async_function() {
+        let input = "async function fetchData() {\n    const res = await fetch(url);\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::JavaScript);
+        assert!(result.content.contains("async function fetchData"));
+    }
+
+    #[test]
+    fn test_js_class() {
+        let input = "class Person {\n    constructor(name) {\n        this.name = name;\n    }\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::JavaScript);
+        assert!(result.content.contains("class Person"));
+        assert!(result.preserved_symbols.contains(&"Person".to_string()));
+    }
+
+    #[test]
+    fn test_js_export_class() {
+        let input = "export class Config {\n    static get() { return {}; }\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::JavaScript);
+        assert!(result.content.contains("export class Config"));
+    }
+
+    #[test]
+    fn test_js_import() {
+        let input = "import { useState } from 'react';\n\nfunction App() {}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::JavaScript);
+        assert!(result.content.contains("import { useState }"));
+    }
+
+    #[test]
+    fn test_ts_interface() {
+        let input = "interface User {\n    name: string;\n    age: number;\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::TypeScript);
+        assert!(result.content.contains("interface User"));
+        assert!(result.preserved_symbols.contains(&"User".to_string()));
+    }
+
+    #[test]
+    fn test_ts_type_alias() {
+        let input = "type StringOrNumber = string | number;";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::TypeScript);
+        assert!(result.content.contains("type StringOrNumber"));
+        assert!(result.preserved_symbols.contains(&"StringOrNumber".to_string()));
+    }
+
+    #[test]
+    fn test_ts_export_interface() {
+        let input = "export interface Config {\n    debug: boolean;\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::TypeScript);
+        assert!(result.content.contains("export interface Config"));
+    }
+
+    // === Go tests ===
+
+    #[test]
+    fn test_go_package() {
+        let input = "package main\n\nfunc main() {}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Go);
+        assert!(result.content.contains("package main"));
+    }
+
+    #[test]
+    fn test_go_import_single() {
+        let input = "package main\n\nimport \"fmt\"\n\nfunc main() {}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Go);
+        assert!(result.content.contains("import \"fmt\""));
+    }
+
+    #[test]
+    fn test_go_import_block() {
+        let input = "package main\n\nimport (\n    \"fmt\"\n    \"os\"\n)\n\nfunc main() {}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Go);
+        assert!(result.content.contains("import ("));
+        assert!(result.content.contains("\"fmt\""));
+        assert!(result.content.contains("\"os\""));
+    }
+
+    #[test]
+    fn test_go_function() {
+        let input = "func greet(name string) string {\n    return \"Hello \" + name\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Go);
+        assert!(result.content.contains("func greet"));
+        assert!(result.preserved_symbols.contains(&"greet".to_string()));
+    }
+
+    #[test]
+    fn test_go_method() {
+        let input = "func (p *Person) Name() string {\n    return p.name\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Go);
+        assert!(result.content.contains("func (p *Person) Name()"));
+        assert!(result.preserved_symbols.contains(&"Name".to_string()));
+    }
+
+    #[test]
+    fn test_go_struct() {
+        let input = "type Person struct {\n    Name string\n    Age  int\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Go);
+        assert!(result.content.contains("type Person struct"));
+        assert!(result.preserved_symbols.contains(&"Person".to_string()));
+    }
+
+    #[test]
+    fn test_go_interface() {
+        let input = "type Reader interface {\n    Read(p []byte) (n int, err error)\n}";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Go);
+        assert!(result.content.contains("type Reader interface"));
+        assert!(result.preserved_symbols.contains(&"Reader".to_string()));
+    }
+
+    #[test]
+    fn test_go_const_block() {
+        let input = "const (\n    MaxSize = 100\n    MinSize = 1\n)";
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Go);
+        assert!(result.content.contains("const ("));
+        assert!(result.content.contains("MaxSize"));
+    }
+
+    // === Token estimation tests ===
+
+    #[test]
+    fn test_estimate_tokens_empty() {
+        assert_eq!(estimate_tokens(""), 0);
+    }
+
+    #[test]
+    fn test_estimate_tokens_small() {
+        assert_eq!(estimate_tokens("abc"), 0); // 3/4 = 0
+    }
+
+    #[test]
+    fn test_estimate_tokens_large() {
+        let content = "a".repeat(1000);
+        assert_eq!(estimate_tokens(&content), 250);
+    }
+
+    // === SkeletonResult tests ===
+
+    #[test]
+    fn test_skeleton_result_compression() {
+        let input = r#"
+pub struct Config {
+    name: String,
+    value: i32,
+}
+
+impl Config {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            value: 0,
+        }
+    }
+
+    pub fn set_value(&mut self, val: i32) {
+        self.value = val;
+    }
+}
+"#;
+        let s = Skeletonizer::new();
+        let result = s.skeletonize(input, Language::Rust);
+
+        // Skeleton should be smaller than original
+        assert!(result.skeleton_tokens <= result.original_tokens);
+    }
+
+    #[test]
+    fn test_fallback_mechanism() {
+        // This would require crafting input that causes brace mismatch
+        // which triggers the fallback. Hard to test directly without exposing fallback.
+        let s = Skeletonizer::new();
+        // Normal input should not trigger fallback
+        let result = s.skeletonize("fn test() {}", Language::Rust);
+        assert!(!result.content.is_empty());
+    }
 }

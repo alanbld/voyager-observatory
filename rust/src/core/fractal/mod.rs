@@ -212,6 +212,206 @@ mod integration_tests {
     use super::*;
     use std::path::PathBuf;
 
+    // === Re-export Validation Tests ===
+
+    #[test]
+    fn test_layer_types_re_export() {
+        // Verify LayerContent variants are accessible
+        let _content = LayerContent::Project {
+            name: "test".to_string(),
+            description: None,
+            root_path: None,
+            file_count: 0,
+            dependencies: vec![],
+        };
+    }
+
+    #[test]
+    fn test_zoom_level_variants() {
+        // All ZoomLevel variants should be accessible
+        let _project = ZoomLevel::Project;
+        let _module = ZoomLevel::Module;
+        let _file = ZoomLevel::File;
+        let _symbol = ZoomLevel::Symbol;
+        let _block = ZoomLevel::Block;
+        let _line = ZoomLevel::Line;
+        let _expression = ZoomLevel::Expression;
+        let _token = ZoomLevel::Token;
+    }
+
+    #[test]
+    fn test_symbol_kind_variants() {
+        // All SymbolKind variants should be accessible
+        let _func = SymbolKind::Function;
+        let _method = SymbolKind::Method;
+        let _class = SymbolKind::Class;
+        let _struct_ = SymbolKind::Struct;
+        let _interface = SymbolKind::Interface;
+        let _trait_ = SymbolKind::Trait;
+        let _enum_ = SymbolKind::Enum;
+        let _constant = SymbolKind::Constant;
+        let _variable = SymbolKind::Variable;
+        let _module = SymbolKind::Module;
+    }
+
+    #[test]
+    fn test_visibility_variants() {
+        let _public = Visibility::Public;
+        let _private = Visibility::Private;
+        let _protected = Visibility::Protected;
+        let _internal = Visibility::Internal;
+    }
+
+    #[test]
+    fn test_block_type_variants() {
+        // Verify BlockType variants are accessible
+        let _if_ = BlockType::If;
+        let _else_ = BlockType::Else;
+        let _for_ = BlockType::For;
+        let _while_ = BlockType::While;
+        let _loop_ = BlockType::Loop;
+        let _match_ = BlockType::Match;
+        let _try_ = BlockType::Try;
+    }
+
+    #[test]
+    fn test_dependency_kind_variants() {
+        let _normal = DependencyKind::Normal;
+        let _dev = DependencyKind::Dev;
+        let _build = DependencyKind::Build;
+        let _optional = DependencyKind::Optional;
+    }
+
+    #[test]
+    fn test_range_line_range() {
+        let range = Range::line_range(5, 15);
+        // Just verify it creates a valid range
+        assert!(range.line_count() > 0);
+    }
+
+    #[test]
+    fn test_import_struct() {
+        let import = Import {
+            module: "std::collections".to_string(),
+            items: vec!["HashMap".to_string(), "HashSet".to_string()],
+            alias: Some("coll".to_string()),
+            line: 1,
+        };
+
+        assert_eq!(import.module, "std::collections");
+        assert_eq!(import.items.len(), 2);
+        assert_eq!(import.alias, Some("coll".to_string()));
+        assert_eq!(import.line, 1);
+    }
+
+    #[test]
+    fn test_parameter_struct() {
+        let param = Parameter {
+            name: "input".to_string(),
+            type_hint: Some("String".to_string()),
+            default_value: Some("\"default\"".to_string()),
+        };
+
+        assert_eq!(param.name, "input");
+        assert_eq!(param.type_hint, Some("String".to_string()));
+        assert!(param.default_value.is_some());
+    }
+
+    #[test]
+    fn test_dependency_struct() {
+        let dep = Dependency {
+            name: "serde".to_string(),
+            version: Some("1.0".to_string()),
+            kind: DependencyKind::Normal,
+        };
+
+        assert_eq!(dep.name, "serde");
+        assert_eq!(dep.version, Some("1.0".to_string()));
+    }
+
+    #[test]
+    fn test_context_layer_creation() {
+        let layer = ContextLayer::new(
+            "layer_001",
+            LayerContent::Module {
+                name: "core".to_string(),
+                path: Some(PathBuf::from("src/core")),
+                file_count: 5,
+                exports: vec!["Engine".to_string()],
+            },
+        );
+
+        assert_eq!(layer.id, "layer_001");
+    }
+
+    #[test]
+    fn test_context_layer_with_parent() {
+        let layer = ContextLayer::new(
+            "layer_001",
+            LayerContent::File {
+                path: PathBuf::from("test.rs"),
+                language: "rust".to_string(),
+                size_bytes: 100,
+                line_count: 10,
+                symbol_count: 2,
+                imports: vec![],
+            },
+        )
+        .with_parent("parent_001");
+
+        // Verify layer was created with parent
+        assert_eq!(layer.id, "layer_001");
+    }
+
+    #[test]
+    fn test_node_type_variants() {
+        let _file = NodeType::File;
+        let _symbol = NodeType::Symbol;
+        let _module = NodeType::Module;
+        let _external = NodeType::External;
+    }
+
+    #[test]
+    fn test_relationship_type_variants() {
+        let _imports = RelationshipType::Imports;
+        let _calls = RelationshipType::Calls;
+        let _contains = RelationshipType::Contains;
+        let _depends = RelationshipType::DependsOn;
+    }
+
+    #[test]
+    fn test_pan_direction_variants() {
+        let _left = PanDirection::Left;
+        let _right = PanDirection::Right;
+    }
+
+    #[test]
+    fn test_sibling_direction_variants() {
+        let _next = SiblingDirection::Next;
+        let _previous = SiblingDirection::Previous;
+    }
+
+    #[test]
+    fn test_call_kind_variants() {
+        let _direct = CallKind::Direct;
+        let _method = CallKind::Method;
+        let _constructor = CallKind::Constructor;
+    }
+
+    #[test]
+    fn test_callable_kind_variants() {
+        let _function = CallableKind::Function;
+        let _method = CallableKind::Method;
+        let _constructor = CallableKind::Constructor;
+        let _closure = CallableKind::Closure;
+    }
+
+    #[test]
+    fn test_cluster_algorithm_variants() {
+        let _kmeans = ClusterAlgorithm::KMeans { k: 5 };
+    }
+
+
     /// Integration test: Build a complete fractal context hierarchy
     #[test]
     fn test_complete_hierarchy() {

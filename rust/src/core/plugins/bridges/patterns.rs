@@ -397,6 +397,7 @@ pub fn create_patterns_table(lua: &Lua) -> LuaResult<Table> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use regex::Regex;
 
     #[test]
     fn test_patterns_table_creation() {
@@ -419,5 +420,476 @@ mod tests {
 
         let tcl_proc: String = patterns.get("tcl_proc").unwrap();
         assert!(tcl_proc.contains("proc"));
+    }
+
+    // === TIER 1: Modern Core Tests ===
+
+    #[test]
+    fn test_rust_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let rust_patterns = [
+            "rust_fn", "rust_struct", "rust_enum", "rust_impl",
+            "rust_trait", "rust_mod", "rust_use", "rust_const",
+            "rust_static", "rust_type",
+        ];
+
+        for name in rust_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_rust_fn_pattern_matches() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+        let pattern: String = patterns.get("rust_fn").unwrap();
+        let re = Regex::new(&pattern).unwrap();
+
+        assert!(re.is_match("fn main()"));
+        assert!(re.is_match("pub fn helper()"));
+        assert!(re.is_match("async fn async_fn()"));
+        assert!(re.is_match("pub async fn pub_async_fn()"));
+    }
+
+    #[test]
+    fn test_python_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let python_patterns = [
+            "python_def", "python_class", "python_import",
+            "python_decorator", "python_async_def",
+        ];
+
+        for name in python_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_python_def_pattern_matches() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+        let pattern: String = patterns.get("python_def").unwrap();
+        let re = Regex::new(&pattern).unwrap();
+
+        assert!(re.is_match("def my_function():"));
+        assert!(re.is_match("async def async_func():"));
+    }
+
+    #[test]
+    fn test_javascript_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let js_patterns = [
+            "js_function", "js_const", "js_let", "js_class",
+            "js_arrow", "js_import", "js_export",
+        ];
+
+        for name in js_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_typescript_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let ts_patterns = ["ts_interface", "ts_type", "ts_enum"];
+
+        for name in ts_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_java_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let java_patterns = [
+            "java_class", "java_interface", "java_method",
+            "java_import", "java_package",
+        ];
+
+        for name in java_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_csharp_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let csharp_patterns = [
+            "csharp_class", "csharp_interface", "csharp_method",
+            "csharp_struct", "csharp_enum",
+        ];
+
+        for name in csharp_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_cpp_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let cpp_patterns = [
+            "cpp_class", "cpp_struct", "cpp_function",
+            "cpp_namespace", "cpp_template",
+        ];
+
+        for name in cpp_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_go_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let go_patterns = [
+            "go_func", "go_type", "go_struct",
+            "go_interface", "go_package", "go_import",
+        ];
+
+        for name in go_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    // === TIER 2: Infrastructure & Automation ===
+
+    #[test]
+    fn test_shell_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let pattern: String = patterns.get("bash_function").unwrap();
+        assert!(Regex::new(&pattern).is_ok());
+
+        let pattern: String = patterns.get("powershell_function").unwrap();
+        assert!(Regex::new(&pattern).is_ok());
+    }
+
+    #[test]
+    fn test_hcl_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let pattern: String = patterns.get("hcl_resource").unwrap();
+        assert!(Regex::new(&pattern).is_ok());
+    }
+
+    #[test]
+    fn test_dockerfile_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let pattern: String = patterns.get("dockerfile_instruction").unwrap();
+        let re = Regex::new(&pattern).unwrap();
+
+        assert!(re.is_match("FROM ubuntu:22.04"));
+        assert!(re.is_match("RUN apt-get update"));
+        assert!(re.is_match("COPY . /app"));
+    }
+
+    // === TIER 3: Ancient Stars (Legacy Kings) ===
+
+    #[test]
+    fn test_cobol_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let cobol_patterns = ["cobol_procedure", "cobol_division"];
+
+        for name in cobol_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_fortran_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let fortran_patterns = [
+            "fortran_subroutine", "fortran_function",
+            "fortran_program", "fortran_module",
+        ];
+
+        for name in fortran_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_pascal_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let pascal_patterns = [
+            "pascal_procedure", "pascal_function",
+            "pascal_program", "pascal_unit",
+        ];
+
+        for name in pascal_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_lisp_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let lisp_patterns = ["lisp_defun", "lisp_defmacro"];
+
+        for name in lisp_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_vhdl_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let vhdl_patterns = ["vhdl_entity", "vhdl_architecture", "vhdl_process"];
+
+        for name in vhdl_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    // === TIER 4: Functional & Logic ===
+
+    #[test]
+    fn test_haskell_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let haskell_patterns = [
+            "haskell_function", "haskell_data",
+            "haskell_newtype", "haskell_class",
+        ];
+
+        for name in haskell_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_elixir_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let elixir_patterns = ["elixir_def", "elixir_defmodule"];
+
+        for name in elixir_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_scala_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let scala_patterns = [
+            "scala_def", "scala_class", "scala_object", "scala_trait",
+        ];
+
+        for name in scala_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_clojure_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let clojure_patterns = ["clojure_defn", "clojure_defmacro"];
+
+        for name in clojure_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    // === TIER 5: Stellar Nurseries (Emerging) ===
+
+    #[test]
+    fn test_zig_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let zig_patterns = ["zig_fn", "zig_const"];
+
+        for name in zig_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_nim_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let nim_patterns = ["nim_proc", "nim_func", "nim_type"];
+
+        for name in nim_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_solidity_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let solidity_patterns = ["solidity_function", "solidity_contract", "solidity_event"];
+
+        for name in solidity_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    // === TIER 6: Scientific & Scripting ===
+
+    #[test]
+    fn test_graphql_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let graphql_patterns = [
+            "graphql_type", "graphql_query",
+            "graphql_mutation", "graphql_interface",
+        ];
+
+        for name in graphql_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_protobuf_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let protobuf_patterns = ["protobuf_message", "protobuf_service", "protobuf_enum"];
+
+        for name in protobuf_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    #[test]
+    fn test_julia_patterns_valid_regex() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+
+        let julia_patterns = ["julia_function", "julia_struct", "julia_macro"];
+
+        for name in julia_patterns {
+            let pattern: String = patterns.get(name).unwrap();
+            assert!(Regex::new(&pattern).is_ok(), "Invalid regex for {}", name);
+        }
+    }
+
+    // === Common Patterns Tests ===
+
+    #[test]
+    fn test_todo_comment_pattern() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+        let pattern: String = patterns.get("todo_comment").unwrap();
+        let re = Regex::new(&pattern).unwrap();
+
+        assert!(re.is_match("// TODO: fix this"));
+        assert!(re.is_match("# TODO: implement later"));
+        assert!(re.is_match("/* TODO: refactor */"));
+    }
+
+    #[test]
+    fn test_url_pattern() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+        let pattern: String = patterns.get("url").unwrap();
+        let re = Regex::new(&pattern).unwrap();
+
+        assert!(re.is_match("https://example.com"));
+        assert!(re.is_match("http://localhost:8080/api"));
+    }
+
+    #[test]
+    fn test_semver_pattern() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+        let pattern: String = patterns.get("semver").unwrap();
+        let re = Regex::new(&pattern).unwrap();
+
+        assert!(re.is_match("1.0.0"));
+        assert!(re.is_match("2.3.4-beta.1"));
+        assert!(re.is_match("1.0.0+build.123"));
+    }
+
+    #[test]
+    fn test_uuid_pattern() {
+        let lua = Lua::new();
+        let patterns = create_patterns_table(&lua).unwrap();
+        let pattern: String = patterns.get("uuid").unwrap();
+        let re = Regex::new(&pattern).unwrap();
+
+        assert!(re.is_match("550e8400-e29b-41d4-a716-446655440000"));
+        assert!(re.is_match("123e4567-e89b-12d3-a456-426614174000"));
+    }
+
+    // === Re-export Tests ===
+
+    #[test]
+    fn test_stellar_library_re_export() {
+        // Test that re-exports from spectrograph work
+        assert!(STELLAR_LIBRARY.get("rust").is_some());
+        assert!(STELLAR_LIBRARY.get("python").is_some());
+        assert!(STELLAR_LIBRARY.get("javascript").is_some());
+    }
+
+    #[test]
+    fn test_hemisphere_re_export() {
+        // Test Hemisphere enum is accessible
+        let _logic = Hemisphere::Logic;
+        let _interface = Hemisphere::Interface;
+        let _automation = Hemisphere::Automation;
     }
 }
