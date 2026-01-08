@@ -474,6 +474,41 @@ impl IntentComposition {
 mod tests {
     use super::*;
 
+    // === ExplorationIntent tests ===
+
+    #[test]
+    fn test_exploration_intent_variants() {
+        let _biz = ExplorationIntent::BusinessLogic;
+        let _debug = ExplorationIntent::Debugging;
+        let _onboard = ExplorationIntent::Onboarding;
+        let _security = ExplorationIntent::SecurityReview;
+        let _migration = ExplorationIntent::MigrationAssessment;
+    }
+
+    #[test]
+    fn test_exploration_intent_equality() {
+        assert_eq!(ExplorationIntent::BusinessLogic, ExplorationIntent::BusinessLogic);
+        assert_ne!(ExplorationIntent::BusinessLogic, ExplorationIntent::Debugging);
+    }
+
+    #[test]
+    fn test_exploration_intent_name() {
+        assert_eq!(ExplorationIntent::BusinessLogic.name(), "Business Logic");
+        assert_eq!(ExplorationIntent::Debugging.name(), "Debugging");
+        assert_eq!(ExplorationIntent::Onboarding.name(), "Onboarding");
+        assert_eq!(ExplorationIntent::SecurityReview.name(), "Security Review");
+        assert_eq!(ExplorationIntent::MigrationAssessment.name(), "Migration Assessment");
+    }
+
+    #[test]
+    fn test_exploration_intent_description() {
+        assert!(ExplorationIntent::BusinessLogic.description().contains("calculation"));
+        assert!(ExplorationIntent::Debugging.description().contains("error"));
+        assert!(ExplorationIntent::Onboarding.description().contains("architecture"));
+        assert!(ExplorationIntent::SecurityReview.description().contains("validation"));
+        assert!(ExplorationIntent::MigrationAssessment.description().contains("dependencies"));
+    }
+
     #[test]
     fn test_intent_from_string() {
         assert_eq!(
@@ -546,5 +581,217 @@ mod tests {
             .find(|(ct, _)| *ct == ConceptType::ErrorHandling)
             .map(|(_, w)| *w);
         assert!(error_weight.unwrap_or(0.0) > 0.8);
+    }
+
+    // === Additional parsing tests ===
+
+    #[test]
+    fn test_intent_from_string_business_logic_variants() {
+        assert_eq!(
+            "business_logic".parse::<ExplorationIntent>().unwrap(),
+            ExplorationIntent::BusinessLogic
+        );
+        assert_eq!(
+            "businesslogic".parse::<ExplorationIntent>().unwrap(),
+            ExplorationIntent::BusinessLogic
+        );
+    }
+
+    #[test]
+    fn test_intent_from_string_debugging_variants() {
+        assert_eq!(
+            "debug".parse::<ExplorationIntent>().unwrap(),
+            ExplorationIntent::Debugging
+        );
+    }
+
+    #[test]
+    fn test_intent_from_string_onboarding_variants() {
+        assert_eq!(
+            "onboarding".parse::<ExplorationIntent>().unwrap(),
+            ExplorationIntent::Onboarding
+        );
+        assert_eq!(
+            "onboard".parse::<ExplorationIntent>().unwrap(),
+            ExplorationIntent::Onboarding
+        );
+        assert_eq!(
+            "learn".parse::<ExplorationIntent>().unwrap(),
+            ExplorationIntent::Onboarding
+        );
+    }
+
+    #[test]
+    fn test_intent_from_string_security_variants() {
+        assert_eq!(
+            "security-review".parse::<ExplorationIntent>().unwrap(),
+            ExplorationIntent::SecurityReview
+        );
+        assert_eq!(
+            "security_review".parse::<ExplorationIntent>().unwrap(),
+            ExplorationIntent::SecurityReview
+        );
+    }
+
+    #[test]
+    fn test_intent_from_string_migration_variants() {
+        assert_eq!(
+            "migration".parse::<ExplorationIntent>().unwrap(),
+            ExplorationIntent::MigrationAssessment
+        );
+        assert_eq!(
+            "migration-assessment".parse::<ExplorationIntent>().unwrap(),
+            ExplorationIntent::MigrationAssessment
+        );
+        assert_eq!(
+            "migrate".parse::<ExplorationIntent>().unwrap(),
+            ExplorationIntent::MigrationAssessment
+        );
+    }
+
+    #[test]
+    fn test_intent_from_string_error_message() {
+        let err = "unknown_intent".parse::<ExplorationIntent>().unwrap_err();
+        assert!(err.contains("Unknown intent"));
+        assert!(err.contains("business-logic"));
+        assert!(err.contains("debugging"));
+    }
+
+    // === ConfiguredPrimitive tests ===
+
+    #[test]
+    fn test_configured_primitive_creation() {
+        let prim = ConfiguredPrimitive {
+            name: "NoiseFilter".to_string(),
+            weight: 1.0,
+        };
+        assert_eq!(prim.name, "NoiseFilter");
+        assert!((prim.weight - 1.0).abs() < 0.001);
+    }
+
+    // === ExplorationStep tests ===
+
+    #[test]
+    fn test_exploration_step_creation() {
+        let step = ExplorationStep {
+            path: "src/main.rs".to_string(),
+            symbol: "main".to_string(),
+            decision: "read".to_string(),
+            reason: "Entry point".to_string(),
+            estimated_minutes: 5,
+            relevance_score: 0.9,
+            concept_type: "Calculation".to_string(),
+        };
+
+        assert_eq!(step.path, "src/main.rs");
+        assert_eq!(step.symbol, "main");
+        assert_eq!(step.decision, "read");
+        assert_eq!(step.estimated_minutes, 5);
+        assert!((step.relevance_score - 0.9).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_exploration_step_from_planned_step() {
+        let planned = PlannedStep {
+            element_idx: 0,
+            path: "test.rs".to_string(),
+            symbol: "func".to_string(),
+            decision: "skim".to_string(),
+            reason: "Moderate relevance".to_string(),
+            estimated_minutes: 3,
+            relevance_score: 0.6,
+        };
+
+        let step: ExplorationStep = planned.into();
+        assert_eq!(step.path, "test.rs");
+        assert_eq!(step.symbol, "func");
+        assert_eq!(step.decision, "skim");
+        assert_eq!(step.concept_type, "unknown");
+    }
+
+    // === IntentResult tests ===
+
+    #[test]
+    fn test_intent_result_creation() {
+        let result = IntentResult {
+            intent: ExplorationIntent::BusinessLogic,
+            summary: "Found 10 elements".to_string(),
+            total_count: 100,
+            relevant_count: 10,
+            estimated_minutes: 30,
+            exploration_path: vec![],
+            key_insights: vec!["Insight 1".to_string()],
+        };
+
+        assert_eq!(result.intent, ExplorationIntent::BusinessLogic);
+        assert_eq!(result.total_count, 100);
+        assert_eq!(result.relevant_count, 10);
+        assert_eq!(result.estimated_minutes, 30);
+        assert_eq!(result.key_insights.len(), 1);
+    }
+
+    // === IntentComposition preset tests ===
+
+    #[test]
+    fn test_onboarding_preset() {
+        let comp = IntentComposition::onboarding();
+        assert_eq!(comp.intent, ExplorationIntent::Onboarding);
+        // Should filter tests
+        assert!(comp.noise_params.filter_concept_types.contains(&ConceptType::Testing));
+        // Should have reasonable time budget
+        assert!(comp.planner_params.time_budget_minutes >= 30);
+    }
+
+    #[test]
+    fn test_security_review_preset() {
+        let comp = IntentComposition::security_review();
+        assert_eq!(comp.intent, ExplorationIntent::SecurityReview);
+        // Should NOT group related for independent review
+        assert!(!comp.planner_params.group_related);
+        // Should filter tests
+        assert!(comp.noise_params.filter_concept_types.contains(&ConceptType::Testing));
+    }
+
+    #[test]
+    fn test_migration_assessment_preset() {
+        let comp = IntentComposition::migration_assessment();
+        assert_eq!(comp.intent, ExplorationIntent::MigrationAssessment);
+        // Should weight infrastructure high
+        let infra_weight = comp
+            .relevance_params
+            .concept_weights
+            .iter()
+            .find(|(ct, _)| *ct == ConceptType::Infrastructure)
+            .map(|(_, w)| *w);
+        assert!(infra_weight.unwrap_or(0.0) > 0.8);
+    }
+
+    #[test]
+    fn test_from_intent_all_variants() {
+        let biz = IntentComposition::from_intent(ExplorationIntent::BusinessLogic);
+        assert_eq!(biz.intent, ExplorationIntent::BusinessLogic);
+
+        let debug = IntentComposition::from_intent(ExplorationIntent::Debugging);
+        assert_eq!(debug.intent, ExplorationIntent::Debugging);
+
+        let onboard = IntentComposition::from_intent(ExplorationIntent::Onboarding);
+        assert_eq!(onboard.intent, ExplorationIntent::Onboarding);
+
+        let security = IntentComposition::from_intent(ExplorationIntent::SecurityReview);
+        assert_eq!(security.intent, ExplorationIntent::SecurityReview);
+
+        let migration = IntentComposition::from_intent(ExplorationIntent::MigrationAssessment);
+        assert_eq!(migration.intent, ExplorationIntent::MigrationAssessment);
+    }
+
+    #[test]
+    fn test_composition_new() {
+        let comp = IntentComposition::new(
+            ExplorationIntent::BusinessLogic,
+            NoiseFilterParams::default(),
+            RelevanceScorerParams::default(),
+            ExplorationPlannerParams::default(),
+        );
+        assert_eq!(comp.intent, ExplorationIntent::BusinessLogic);
     }
 }
