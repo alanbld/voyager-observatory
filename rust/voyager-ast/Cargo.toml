@@ -36,7 +36,7 @@ tree-sitter-cpp = "0.23"
 tree-sitter-java = "0.23"
 tree-sitter-go = "0.23"
 tree-sitter-ruby = "0.23"
-tree-sitter-c-sharp = "0.23"
+tree-sitter-c-sharp = "=0.23.1" # 0.23.2+ ship ABI 15 grammars, incompatible with tree-sitter 0.24 runtime
 tree-sitter-html = "0.23"
 tree-sitter-css = "0.23"
 tree-sitter-json = "0.24"
