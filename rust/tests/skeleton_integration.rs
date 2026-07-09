@@ -2,6 +2,10 @@
 //!
 //! Tests end-to-end skeleton compression via ContextEngine.
 
+// Pre-existing lint debt (see rust/src/lib.rs) - deferred to Phase 1 (N6).
+#![allow(clippy::field_reassign_with_default)]
+#![allow(unused_variables)]
+
 use std::fs;
 use tempfile::TempDir;
 

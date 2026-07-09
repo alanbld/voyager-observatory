@@ -5,6 +5,9 @@
 //! - Two Hemispheres (Logic vs Interface)
 //! - Composition metrics (Stars, Nebulae, Dark Matter)
 
+// Pre-existing lint debt (see rust/src/lib.rs) - deferred to Phase 1 (N6).
+#![allow(unused_imports)]
+
 use pm_encoder::core::metrics::MetricCollector;
 use pm_encoder::core::{
     CelestialCensus, CensusMetrics, DarkMatterMetric, GalaxyCensus, HealthRating,

@@ -35,6 +35,16 @@
 //! }
 //! ```
 
+// Pre-existing lint debt as of the Phase 0 safety pass (REVIEW_ROADMAP.md).
+// See rust/src/lib.rs for the full rationale; cleanup tracked as Phase 1
+// hygiene (N6) in REVIEW_ROADMAP.md.
+#![allow(clippy::len_zero)]
+#![allow(clippy::unnecessary_get_then_check)]
+#![allow(clippy::unnecessary_literal_unwrap)]
+#![allow(clippy::clone_on_copy)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 pub mod adapters;
 pub mod error;
 pub mod ir;

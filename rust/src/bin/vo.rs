@@ -13,6 +13,9 @@
 
 // Exclude from coverage - CLI binary tested via integration tests
 #![cfg_attr(tarpaulin, ignore)]
+// Pre-existing lint debt (see rust/src/lib.rs) - deferred to Phase 1 (N6).
+#![allow(clippy::collapsible_else_if)]
+#![allow(clippy::ptr_arg)]
 
 use clap::{Parser, ValueEnum};
 use pm_encoder::core::{

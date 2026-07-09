@@ -453,10 +453,7 @@ mod tests {
 
         let js_analyzer = create_javascript_analyzer();
         let js_extensions = js_analyzer.supported_extensions();
-        assert_eq!(
-            js_extensions,
-            vec![".js", ".jsx", ".ts", ".tsx", ".mjs"]
-        );
+        assert_eq!(js_extensions, vec![".js", ".jsx", ".ts", ".tsx", ".mjs"]);
         for ext in &js_extensions {
             assert!(ext.starts_with('.'), "corrupted extension: {:?}", ext);
         }

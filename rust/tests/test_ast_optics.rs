@@ -5,6 +5,10 @@
 //! 1. AST-based analysis correctly identifies code structures
 //! 2. Human-facing output remains jargon-free (Telescope philosophy)
 
+// Pre-existing lint debt (see rust/src/lib.rs) - deferred to Phase 1 (N6).
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;

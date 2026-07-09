@@ -9,6 +9,9 @@
 //! Verifies that legacy languages (Simula, Logo, Tcl) are correctly
 //! identified and their Stars are counted in a survey.
 
+// Pre-existing lint debt (see rust/src/lib.rs) - deferred to Phase 1 (N6).
+#![allow(clippy::expect_fun_call)]
+
 use pm_encoder::core::{
     GalaxyCensus, Hemisphere, PatternFallbackAnalyzer, StellarLibrary, STELLAR_LIBRARY,
 };

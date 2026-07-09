@@ -6,6 +6,10 @@
 //! - Exploration history tracking
 //! - Faded nebulae (ignored patterns)
 
+// Pre-existing lint debt (see rust/src/lib.rs) - deferred to Phase 1 (N6).
+#![allow(clippy::len_zero)]
+#![allow(unused_imports)]
+
 use pm_encoder::core::{ExplorationEntry, ObserversJournal};
 use tempfile::TempDir;
 
