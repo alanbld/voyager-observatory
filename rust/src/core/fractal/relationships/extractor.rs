@@ -652,7 +652,7 @@ fn find_matching_brace(content: &str) -> Option<String> {
     let mut string_char = ' ';
     let mut escape_next = false;
 
-    for (i, c) in content.chars().enumerate() {
+    for (i, c) in content.char_indices() {
         if escape_next {
             escape_next = false;
             continue;
@@ -1418,6 +1418,26 @@ fn helper() {}
     #[test]
     fn test_find_matching_brace_with_strings() {
         let code = r#"{ let s = "hello { world }"; }"#;
+        let result = find_matching_brace(code);
+        assert_eq!(result, Some(code.to_string()));
+    }
+
+    #[test]
+    fn test_find_matching_brace_with_emoji_does_not_panic() {
+        // Regression for C6: a char index (from chars().enumerate()) was
+        // used directly as a byte offset into the string. A multi-byte
+        // UTF-8 character before the closing brace throws the byte offset
+        // out of sync with real byte positions, which either panics
+        // ("byte index N is not a char boundary") or silently truncates the
+        // result.
+        let code = "{🚀}";
+        let result = find_matching_brace(code);
+        assert_eq!(result, Some(code.to_string()));
+    }
+
+    #[test]
+    fn test_find_matching_brace_with_comment_emoji_and_accented_identifier() {
+        let code = "{ // 🚀 rocket note\n    let café = 1;\n}";
         let result = find_matching_brace(code);
         assert_eq!(result, Some(code.to_string()));
     }
