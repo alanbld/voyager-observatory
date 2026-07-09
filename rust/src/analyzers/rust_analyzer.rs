@@ -130,8 +130,8 @@ impl LanguageAnalyzer for RustAnalyzer {
         self.analyze_lines(&lines, file_path)
     }
 
-    fn supported_extensions(&self) -> &[&str] {
-        &[".rs"]
+    fn supported_extensions(&self) -> Vec<&str> {
+        vec![".rs"]
     }
 
     fn language_name(&self) -> &str {
@@ -185,7 +185,7 @@ mod tests {
     #[test]
     fn test_supported_extensions() {
         let analyzer = RustAnalyzer::new();
-        assert_eq!(analyzer.supported_extensions(), &[".rs"]);
+        assert_eq!(analyzer.supported_extensions(), vec![".rs"]);
     }
 
     #[test]

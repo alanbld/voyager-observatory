@@ -68,7 +68,7 @@ pub trait LanguageAnalyzer {
     fn analyze(&self, content: &str, file_path: &str) -> AnalysisResult;
 
     /// Get supported file extensions
-    fn supported_extensions(&self) -> &[&str];
+    fn supported_extensions(&self) -> Vec<&str>;
 
     /// Get language name
     fn language_name(&self) -> &str;

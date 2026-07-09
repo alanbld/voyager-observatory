@@ -196,10 +196,8 @@ impl LanguageAnalyzer for GenericAnalyzer {
         self.analyze_lines(&lines, file_path)
     }
 
-    fn supported_extensions(&self) -> &[&str] {
-        // Convert Vec<String> to &[&str] - we need to leak the strings for static lifetime
-        // This is safe since configs are created once at startup
-        unsafe { std::mem::transmute(self.config.extensions.as_slice()) }
+    fn supported_extensions(&self) -> Vec<&str> {
+        self.config.extensions.iter().map(String::as_str).collect()
     }
 
     fn language_name(&self) -> &str {
@@ -443,11 +441,25 @@ mod tests {
 
     #[test]
     fn test_supported_extensions() {
-        // Test supported_extensions method - verify it doesn't panic
+        // Verify every element (not just index 0) round-trips as valid,
+        // correctly-stride string data - a wrong element stride (e.g. the
+        // old &[String]->&[&str] transmute) corrupts everything past index 0.
         let analyzer = create_python_analyzer();
         let extensions = analyzer.supported_extensions();
-        // Just verify we get a non-empty slice back
-        assert!(!extensions.is_empty());
+        assert_eq!(extensions, vec![".py", ".pyw"]);
+        for ext in &extensions {
+            assert!(ext.starts_with('.'), "corrupted extension: {:?}", ext);
+        }
+
+        let js_analyzer = create_javascript_analyzer();
+        let js_extensions = js_analyzer.supported_extensions();
+        assert_eq!(
+            js_extensions,
+            vec![".js", ".jsx", ".ts", ".tsx", ".mjs"]
+        );
+        for ext in &js_extensions {
+            assert!(ext.starts_with('.'), "corrupted extension: {:?}", ext);
+        }
     }
 
     #[test]
