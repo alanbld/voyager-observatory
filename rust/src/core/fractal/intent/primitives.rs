@@ -1021,14 +1021,38 @@ mod tests {
 
     #[test]
     fn test_concept_type_from_shell_pattern() {
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Deployment), ConceptType::Infrastructure);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::ErrorHandling), ConceptType::ErrorHandling);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::DataProcessing), ConceptType::Transformation);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Monitoring), ConceptType::Logging);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Testing), ConceptType::Testing);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Setup), ConceptType::Configuration);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Security), ConceptType::Validation);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Unknown), ConceptType::Unknown);
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Deployment),
+            ConceptType::Infrastructure
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::ErrorHandling),
+            ConceptType::ErrorHandling
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::DataProcessing),
+            ConceptType::Transformation
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Monitoring),
+            ConceptType::Logging
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Testing),
+            ConceptType::Testing
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Setup),
+            ConceptType::Configuration
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Security),
+            ConceptType::Validation
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Unknown),
+            ConceptType::Unknown
+        );
     }
 
     // === RelevanceScore tests ===
@@ -1657,7 +1681,10 @@ mod tests {
 
         let all_elements: Vec<(&ContextLayer, &FeatureVector)> =
             vec![(&layer_a, &vector_a), (&layer_b, &vector_b)];
-        let filtered_indices = vec![(0usize, ConceptType::Calculation), (1usize, ConceptType::Testing)];
+        let filtered_indices = vec![
+            (0usize, ConceptType::Calculation),
+            (1usize, ConceptType::Testing),
+        ];
 
         let scorer = RelevanceScorer;
         let params = RelevanceScorerParams::default();

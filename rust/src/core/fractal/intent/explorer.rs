@@ -579,7 +579,10 @@ mod tests {
     #[test]
     fn test_explorer_config_default_ignores() {
         let config = ExplorerConfig::default();
-        assert!(config.ignore_patterns.iter().any(|p| p.contains("node_modules")));
+        assert!(config
+            .ignore_patterns
+            .iter()
+            .any(|p| p.contains("node_modules")));
         assert!(config.ignore_patterns.iter().any(|p| p.contains("target")));
         assert!(config.ignore_patterns.iter().any(|p| p.contains(".git")));
     }
@@ -650,8 +653,14 @@ mod tests {
         let explorer = IntentExplorer::new("/tmp/test")
             .with_ignore(vec!["vendor/**".to_string(), "dist/**".to_string()]);
 
-        assert!(explorer.config.ignore_patterns.contains(&"vendor/**".to_string()));
-        assert!(explorer.config.ignore_patterns.contains(&"dist/**".to_string()));
+        assert!(explorer
+            .config
+            .ignore_patterns
+            .contains(&"vendor/**".to_string()));
+        assert!(explorer
+            .config
+            .ignore_patterns
+            .contains(&"dist/**".to_string()));
     }
 
     #[test]
@@ -663,7 +672,10 @@ mod tests {
 
         assert!(explorer.config.include_tests);
         assert_eq!(explorer.config.max_files, 100);
-        assert!(explorer.config.ignore_patterns.contains(&"build/**".to_string()));
+        assert!(explorer
+            .config
+            .ignore_patterns
+            .contains(&"build/**".to_string()));
     }
 
     // === Helper method tests ===
@@ -721,10 +733,19 @@ mod tests {
 
         assert_eq!(explorer.detect_language(Path::new("main.rs")), "rust");
         assert_eq!(explorer.detect_language(Path::new("app.py")), "python");
-        assert_eq!(explorer.detect_language(Path::new("index.js")), "javascript");
+        assert_eq!(
+            explorer.detect_language(Path::new("index.js")),
+            "javascript"
+        );
         assert_eq!(explorer.detect_language(Path::new("app.ts")), "typescript");
-        assert_eq!(explorer.detect_language(Path::new("Component.tsx")), "typescript");
-        assert_eq!(explorer.detect_language(Path::new("Component.jsx")), "javascript");
+        assert_eq!(
+            explorer.detect_language(Path::new("Component.tsx")),
+            "typescript"
+        );
+        assert_eq!(
+            explorer.detect_language(Path::new("Component.jsx")),
+            "javascript"
+        );
         assert_eq!(explorer.detect_language(Path::new("main.go")), "go");
         assert_eq!(explorer.detect_language(Path::new("Main.java")), "java");
         assert_eq!(explorer.detect_language(Path::new("file.c")), "c");

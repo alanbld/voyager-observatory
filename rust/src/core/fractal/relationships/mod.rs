@@ -327,8 +327,8 @@ fn utility() {}
 
     #[test]
     fn test_call_node_with_location() {
-        let node = CallNode::new("func", "func", CallableKind::Function)
-            .with_location("src/lib.rs", 42);
+        let node =
+            CallNode::new("func", "func", CallableKind::Function).with_location("src/lib.rs", 42);
 
         assert_eq!(node.file_path, Some("src/lib.rs".to_string()));
         assert_eq!(node.line, Some(42));
@@ -336,8 +336,8 @@ fn utility() {}
 
     #[test]
     fn test_call_node_with_visibility() {
-        let node = CallNode::new("pub_func", "pub_func", CallableKind::Function)
-            .with_visibility(true);
+        let node =
+            CallNode::new("pub_func", "pub_func", CallableKind::Function).with_visibility(true);
 
         assert!(node.is_public);
     }
@@ -498,8 +498,7 @@ function helper() {}
     fn test_call_graph_metadata_update() {
         let mut graph = CallGraph::with_name("test");
         graph.add_node(
-            CallNode::new("func", "func", CallableKind::Function)
-                .with_location("test.rs", 1)
+            CallNode::new("func", "func", CallableKind::Function).with_location("test.rs", 1),
         );
         graph.add_root("func");
         graph.update_metadata();
@@ -605,8 +604,7 @@ fn c() {}
 
     #[test]
     fn test_call_edge_with_location() {
-        let edge = CallEdge::new(CallKind::Direct)
-            .with_location(42, Some(10));
+        let edge = CallEdge::new(CallKind::Direct).with_location(42, Some(10));
 
         assert_eq!(edge.line, Some(42));
         assert_eq!(edge.column, Some(10));
@@ -628,8 +626,8 @@ fn c() {}
 
     #[test]
     fn test_call_node_with_module() {
-        let node = CallNode::new("func", "func", CallableKind::Function)
-            .with_module("my::module::path");
+        let node =
+            CallNode::new("func", "func", CallableKind::Function).with_module("my::module::path");
 
         assert_eq!(node.module_path, Some("my::module::path".to_string()));
     }

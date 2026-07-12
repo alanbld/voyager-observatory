@@ -487,8 +487,14 @@ mod tests {
 
     #[test]
     fn test_exploration_intent_equality() {
-        assert_eq!(ExplorationIntent::BusinessLogic, ExplorationIntent::BusinessLogic);
-        assert_ne!(ExplorationIntent::BusinessLogic, ExplorationIntent::Debugging);
+        assert_eq!(
+            ExplorationIntent::BusinessLogic,
+            ExplorationIntent::BusinessLogic
+        );
+        assert_ne!(
+            ExplorationIntent::BusinessLogic,
+            ExplorationIntent::Debugging
+        );
     }
 
     #[test]
@@ -497,16 +503,27 @@ mod tests {
         assert_eq!(ExplorationIntent::Debugging.name(), "Debugging");
         assert_eq!(ExplorationIntent::Onboarding.name(), "Onboarding");
         assert_eq!(ExplorationIntent::SecurityReview.name(), "Security Review");
-        assert_eq!(ExplorationIntent::MigrationAssessment.name(), "Migration Assessment");
+        assert_eq!(
+            ExplorationIntent::MigrationAssessment.name(),
+            "Migration Assessment"
+        );
     }
 
     #[test]
     fn test_exploration_intent_description() {
-        assert!(ExplorationIntent::BusinessLogic.description().contains("calculation"));
+        assert!(ExplorationIntent::BusinessLogic
+            .description()
+            .contains("calculation"));
         assert!(ExplorationIntent::Debugging.description().contains("error"));
-        assert!(ExplorationIntent::Onboarding.description().contains("architecture"));
-        assert!(ExplorationIntent::SecurityReview.description().contains("validation"));
-        assert!(ExplorationIntent::MigrationAssessment.description().contains("dependencies"));
+        assert!(ExplorationIntent::Onboarding
+            .description()
+            .contains("architecture"));
+        assert!(ExplorationIntent::SecurityReview
+            .description()
+            .contains("validation"));
+        assert!(ExplorationIntent::MigrationAssessment
+            .description()
+            .contains("dependencies"));
     }
 
     #[test]
@@ -737,7 +754,10 @@ mod tests {
         let comp = IntentComposition::onboarding();
         assert_eq!(comp.intent, ExplorationIntent::Onboarding);
         // Should filter tests
-        assert!(comp.noise_params.filter_concept_types.contains(&ConceptType::Testing));
+        assert!(comp
+            .noise_params
+            .filter_concept_types
+            .contains(&ConceptType::Testing));
         // Should have reasonable time budget
         assert!(comp.planner_params.time_budget_minutes >= 30);
     }
@@ -749,7 +769,10 @@ mod tests {
         // Should NOT group related for independent review
         assert!(!comp.planner_params.group_related);
         // Should filter tests
-        assert!(comp.noise_params.filter_concept_types.contains(&ConceptType::Testing));
+        assert!(comp
+            .noise_params
+            .filter_concept_types
+            .contains(&ConceptType::Testing));
     }
 
     #[test]

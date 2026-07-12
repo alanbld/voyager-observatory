@@ -1757,7 +1757,8 @@ mod tests {
 
     #[test]
     fn test_extract_nested_if() {
-        let source = "fn test() {\n    if x {\n        if y {\n            foo();\n        }\n    }\n}";
+        let source =
+            "fn test() {\n    if x {\n        if y {\n            foo();\n        }\n    }\n}";
         let tree = parse_rust(source);
         let adapter = RustTreeSitterAdapter::new();
         let decls = adapter.extract_declarations(&tree, source);
@@ -1775,7 +1776,10 @@ mod tests {
         let decls = adapter.extract_declarations(&tree, source);
 
         if let Some(body) = adapter.extract_body(&tree, source, &decls[0]) {
-            let if_cf = body.control_flow.iter().find(|cf| cf.kind == ControlFlowKind::If);
+            let if_cf = body
+                .control_flow
+                .iter()
+                .find(|cf| cf.kind == ControlFlowKind::If);
             if let Some(if_block) = if_cf {
                 // Should have branches for else if
                 assert!(if_block.branches.len() >= 1);
@@ -1791,7 +1795,10 @@ mod tests {
         let decls = adapter.extract_declarations(&tree, source);
 
         if let Some(body) = adapter.extract_body(&tree, source, &decls[0]) {
-            let match_cf = body.control_flow.iter().find(|cf| cf.kind == ControlFlowKind::Match);
+            let match_cf = body
+                .control_flow
+                .iter()
+                .find(|cf| cf.kind == ControlFlowKind::Match);
             if let Some(match_block) = match_cf {
                 assert!(match_block.branches.len() >= 2);
             }

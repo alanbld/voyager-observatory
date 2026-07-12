@@ -574,15 +574,30 @@ mod tests {
 
     #[test]
     fn test_match_confidence_from_similarity_high() {
-        assert_eq!(MatchConfidence::from_similarity(0.95), MatchConfidence::High);
-        assert_eq!(MatchConfidence::from_similarity(0.86), MatchConfidence::High);
+        assert_eq!(
+            MatchConfidence::from_similarity(0.95),
+            MatchConfidence::High
+        );
+        assert_eq!(
+            MatchConfidence::from_similarity(0.86),
+            MatchConfidence::High
+        );
     }
 
     #[test]
     fn test_match_confidence_from_similarity_medium() {
-        assert_eq!(MatchConfidence::from_similarity(0.85), MatchConfidence::Medium);
-        assert_eq!(MatchConfidence::from_similarity(0.75), MatchConfidence::Medium);
-        assert_eq!(MatchConfidence::from_similarity(0.71), MatchConfidence::Medium);
+        assert_eq!(
+            MatchConfidence::from_similarity(0.85),
+            MatchConfidence::Medium
+        );
+        assert_eq!(
+            MatchConfidence::from_similarity(0.75),
+            MatchConfidence::Medium
+        );
+        assert_eq!(
+            MatchConfidence::from_similarity(0.71),
+            MatchConfidence::Medium
+        );
     }
 
     #[test]
@@ -729,7 +744,9 @@ mod tests {
         let aligner = CrossLanguageAligner::strict();
         assert!((aligner.similarity_threshold - 0.8).abs() < 0.001);
         // Strict has higher threshold
-        assert!(aligner.similarity_threshold > CrossLanguageAligner::default().similarity_threshold);
+        assert!(
+            aligner.similarity_threshold > CrossLanguageAligner::default().similarity_threshold
+        );
     }
 
     #[test]
@@ -737,7 +754,9 @@ mod tests {
         let aligner = CrossLanguageAligner::lenient();
         assert!((aligner.similarity_threshold - 0.5).abs() < 0.001);
         // Lenient has lower threshold
-        assert!(aligner.similarity_threshold < CrossLanguageAligner::default().similarity_threshold);
+        assert!(
+            aligner.similarity_threshold < CrossLanguageAligner::default().similarity_threshold
+        );
     }
 
     #[test]

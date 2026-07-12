@@ -2447,7 +2447,10 @@ function test(): void {
 
         assert_eq!(declarations.len(), 1);
         if let Some(body) = adapter.extract_body(&tree, source, &declarations[0]) {
-            let if_stmt = body.control_flow.iter().find(|cf| cf.kind == ControlFlowKind::If);
+            let if_stmt = body
+                .control_flow
+                .iter()
+                .find(|cf| cf.kind == ControlFlowKind::If);
             if let Some(if_cf) = if_stmt {
                 // Condition span should be present
                 assert!(if_cf.condition_span.is_some());
