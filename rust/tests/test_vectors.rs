@@ -1138,12 +1138,7 @@ fn load_cli_vector(name: &str) -> CliTestVector {
 
 /// Run the pm_encoder binary with given arguments
 fn run_cli(args: &[String]) -> std::process::Output {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("target");
-    path.push("debug");
-    path.push("pm_encoder");
-
-    Command::new(&path)
+    Command::new(env!("CARGO_BIN_EXE_pm_encoder"))
         .args(args)
         .output()
         .expect("Failed to execute pm_encoder binary")
