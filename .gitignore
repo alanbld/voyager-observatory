@@ -30,6 +30,10 @@ htmlcov/
 # User config (keep example, ignore user's config)
 .pm_encoder_config.json
 
+# Runtime state (per-repo utility scores, caches) - generated, not source
+.pm_encoder/
+.voyager/
+
 # macOS
 .DS_Store
 
