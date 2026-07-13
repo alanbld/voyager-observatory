@@ -862,14 +862,13 @@ impl LanguagePlugin for AblPlugin {
                     boost += 0.25;
                 }
             }
-            "migration" | "migration-assessment" => {
-                // Boost infrastructure procedures
+            // Boost infrastructure procedures
+            "migration" | "migration-assessment"
                 if symbol.name.to_lowercase().contains("connect")
                     || symbol.name.to_lowercase().contains("db")
-                    || symbol.name.to_lowercase().contains("file")
-                {
-                    boost += 0.3;
-                }
+                    || symbol.name.to_lowercase().contains("file") =>
+            {
+                boost += 0.3;
             }
             _ => {}
         }

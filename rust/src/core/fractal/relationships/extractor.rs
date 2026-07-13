@@ -715,15 +715,17 @@ fn extract_python_body(content: &str) -> String {
 
         let indent = line.len() - line.trim_start().len();
 
-        if base_indent.is_none() {
-            if indent > 0 {
-                base_indent = Some(indent);
+        match base_indent {
+            None => {
+                if indent > 0 {
+                    base_indent = Some(indent);
+                    body_lines.push(line);
+                }
+            }
+            Some(base) if indent >= base => {
                 body_lines.push(line);
             }
-        } else if indent >= base_indent.unwrap() {
-            body_lines.push(line);
-        } else {
-            break;
+            Some(_) => break,
         }
     }
 

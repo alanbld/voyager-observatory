@@ -628,7 +628,7 @@ mod tests {
             assert!(
                 claude_md.contains("CONTEXT.txt"),
                 "CLAUDE.md tree should include CONTEXT.txt. Got:\n{}",
-                &claude_md
+                claude_md
             );
         } else {
             panic!("init_prompt should succeed");
