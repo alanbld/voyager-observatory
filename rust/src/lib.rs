@@ -15,6 +15,49 @@
 //! This separation allows the core logic to be reusable across different
 //! interfaces without coupling to any specific runtime environment.
 
+// Pre-existing lint debt as of the Phase 0 safety pass (REVIEW_ROADMAP.md).
+// These categories are allowed crate-wide so `cargo clippy --workspace
+// --all-targets -- -D warnings` can be a real CI gate today without a
+// sprawling, unrelated diff; cleaning each category up is tracked as
+// Phase 1 hygiene (N6) in REVIEW_ROADMAP.md. New code should not rely on
+// these allows - prefer fixing the lint over adding to the count.
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::useless_vec)]
+#![allow(clippy::unwrap_or_default)]
+#![allow(clippy::manual_range_contains)]
+#![allow(clippy::single_char_add_str)]
+#![allow(clippy::clone_on_copy)]
+#![allow(clippy::default_constructed_unit_structs)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::unnecessary_map_or)]
+#![allow(clippy::absurd_extreme_comparisons)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::derivable_impls)]
+#![allow(clippy::len_zero)]
+#![allow(clippy::unnecessary_sort_by)]
+#![allow(clippy::needless_borrows_for_generic_args)]
+#![allow(clippy::explicit_auto_deref)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::if_same_then_else)]
+#![allow(clippy::overly_complex_bool_expr)]
+#![allow(clippy::unnecessary_get_then_check)]
+#![allow(clippy::only_used_in_recursion)]
+#![allow(clippy::ptr_arg)]
+#![allow(clippy::cloned_ref_to_slice_refs)]
+#![allow(clippy::format_in_format_args)]
+#![allow(clippy::redundant_closure)]
+#![allow(clippy::doc_overindented_list_items)]
+#![allow(clippy::unnecessary_literal_unwrap)]
+#![allow(clippy::io_other_error)]
+#![allow(clippy::vec_init_then_push)]
+#![allow(clippy::manual_contains)]
+#![allow(clippy::assertions_on_constants)]
+#![allow(clippy::let_and_return)]
+#![allow(unused_comparisons)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use globset::Glob;
 use serde::{Deserialize, Serialize};
 use std::fs;

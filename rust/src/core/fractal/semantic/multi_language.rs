@@ -920,7 +920,7 @@ mod tests {
         // Should be sorted by concept_count descending
         assert_eq!(sorted[0].1.concept_count, 30); // TypeScript first
         assert_eq!(sorted[1].1.concept_count, 10); // Python second
-        assert_eq!(sorted[2].1.concept_count, 5);  // Shell third
+        assert_eq!(sorted[2].1.concept_count, 5); // Shell third
     }
 
     #[test]
@@ -1000,7 +1000,11 @@ mod tests {
             focus_points: vec!["Logic".to_string(), "Error handling".to_string()],
         };
 
-        if let ReadingDecision::ReadDeeply { reason, focus_points } = decision {
+        if let ReadingDecision::ReadDeeply {
+            reason,
+            focus_points,
+        } = decision
+        {
             assert_eq!(reason, "Important code");
             assert_eq!(focus_points.len(), 2);
         } else {
@@ -1016,7 +1020,12 @@ mod tests {
             time_limit_minutes: 5,
         };
 
-        if let ReadingDecision::Skim { reason, key_patterns, time_limit_minutes } = decision {
+        if let ReadingDecision::Skim {
+            reason,
+            key_patterns,
+            time_limit_minutes,
+        } = decision
+        {
             assert_eq!(reason, "Secondary importance");
             assert_eq!(key_patterns.len(), 1);
             assert_eq!(time_limit_minutes, 5);
@@ -1033,7 +1042,12 @@ mod tests {
             prerequisites: vec!["Learn basics".to_string()],
         };
 
-        if let ReadingDecision::ReadWithContext { reason, language_context, prerequisites } = decision {
+        if let ReadingDecision::ReadWithContext {
+            reason,
+            language_context,
+            prerequisites,
+        } = decision
+        {
             assert_eq!(reason, "Unfamiliar language");
             assert!(language_context.contains("Python"));
             assert_eq!(prerequisites.len(), 1);
@@ -1049,7 +1063,11 @@ mod tests {
             alternative: Some("Check other file".to_string()),
         };
 
-        if let ReadingDecision::Skip { reason, alternative } = decision {
+        if let ReadingDecision::Skip {
+            reason,
+            alternative,
+        } = decision
+        {
             assert_eq!(reason, "Not relevant");
             assert!(alternative.is_some());
         } else {
@@ -1119,7 +1137,10 @@ mod tests {
                     file_path: "a.py".to_string(),
                     line_range: (1, 10),
                     relevance_score: 0.9,
-                    decision: ReadingDecision::Skip { reason: "test".to_string(), alternative: None },
+                    decision: ReadingDecision::Skip {
+                        reason: "test".to_string(),
+                        alternative: None,
+                    },
                     equivalents: vec![],
                     estimated_time_minutes: 0,
                     language_tips: vec![],
@@ -1132,7 +1153,10 @@ mod tests {
                     file_path: "b.ts".to_string(),
                     line_range: (1, 10),
                     relevance_score: 0.8,
-                    decision: ReadingDecision::Skip { reason: "test".to_string(), alternative: None },
+                    decision: ReadingDecision::Skip {
+                        reason: "test".to_string(),
+                        alternative: None,
+                    },
                     equivalents: vec![],
                     estimated_time_minutes: 0,
                     language_tips: vec![],
@@ -1162,7 +1186,10 @@ mod tests {
                     file_path: "a.py".to_string(),
                     line_range: (1, 10),
                     relevance_score: 0.9,
-                    decision: ReadingDecision::Skip { reason: "test".to_string(), alternative: None },
+                    decision: ReadingDecision::Skip {
+                        reason: "test".to_string(),
+                        alternative: None,
+                    },
                     equivalents: vec![],
                     estimated_time_minutes: 0,
                     language_tips: vec![],
@@ -1175,7 +1202,10 @@ mod tests {
                     file_path: "b.py".to_string(),
                     line_range: (1, 10),
                     relevance_score: 0.8,
-                    decision: ReadingDecision::Skip { reason: "test".to_string(), alternative: None },
+                    decision: ReadingDecision::Skip {
+                        reason: "test".to_string(),
+                        alternative: None,
+                    },
                     equivalents: vec![],
                     estimated_time_minutes: 0,
                     language_tips: vec![],
@@ -1188,7 +1218,10 @@ mod tests {
                     file_path: "c.ts".to_string(),
                     line_range: (1, 10),
                     relevance_score: 0.7,
-                    decision: ReadingDecision::Skip { reason: "test".to_string(), alternative: None },
+                    decision: ReadingDecision::Skip {
+                        reason: "test".to_string(),
+                        alternative: None,
+                    },
                     equivalents: vec![],
                     estimated_time_minutes: 0,
                     language_tips: vec![],
@@ -1218,8 +1251,12 @@ mod tests {
     #[test]
     fn test_multi_language_project_languages() {
         let mut project = MultiLanguageProject::new(PathBuf::from("/test"));
-        project.files_by_language.insert(Language::Python, vec![PathBuf::from("a.py")]);
-        project.files_by_language.insert(Language::TypeScript, vec![PathBuf::from("b.ts")]);
+        project
+            .files_by_language
+            .insert(Language::Python, vec![PathBuf::from("a.py")]);
+        project
+            .files_by_language
+            .insert(Language::TypeScript, vec![PathBuf::from("b.ts")]);
 
         let languages = project.languages();
         assert_eq!(languages.len(), 2);
@@ -1233,7 +1270,9 @@ mod tests {
         project.files_by_language.insert(Language::Python, vec![]);
         assert!(!project.is_multi_language());
 
-        project.files_by_language.insert(Language::TypeScript, vec![]);
+        project
+            .files_by_language
+            .insert(Language::TypeScript, vec![]);
         assert!(project.is_multi_language());
     }
 

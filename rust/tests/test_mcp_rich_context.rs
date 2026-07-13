@@ -4,6 +4,11 @@
 //! - Zoom with <related_context> showing callers
 //! - Tiered budget allocation (Core before Tests)
 
+// Pre-existing lint debt (see rust/src/lib.rs) - deferred to Phase 1 (N6).
+#![allow(clippy::field_reassign_with_default)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;

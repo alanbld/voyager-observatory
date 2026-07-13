@@ -3,6 +3,9 @@
 //! These benchmarks validate the <1μs per-call overhead target for the regex engine bridge.
 //! Run with: `cargo bench --bench regex_engine`
 
+// Pre-existing lint debt (see rust/src/lib.rs) - deferred to Phase 1 (N6).
+#![allow(unused_imports)]
+
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use pm_encoder::core::regex_engine::{global_engine, CompiledRegex, PatternSet, RegexEngine};
 

@@ -13,6 +13,10 @@
 
 // Exclude from coverage - CLI binary tested via integration tests
 #![cfg_attr(tarpaulin, ignore)]
+// Pre-existing lint debt (see rust/src/lib.rs) - deferred to Phase 1 (N6).
+#![allow(clippy::collapsible_else_if)]
+#![allow(clippy::ptr_arg)]
+#![allow(clippy::unnecessary_sort_by)]
 
 use clap::{Parser, ValueEnum};
 use pm_encoder::core::{
@@ -24,7 +28,7 @@ use pm_encoder::{
     self, apply_token_budget, parse_token_budget, EncoderConfig, LensManager, OutputFormat,
 };
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// 🌌 Voyager Observatory: Navigate the code galaxy with ease.
 ///
@@ -2477,7 +2481,7 @@ fn find_project_root(start: &PathBuf) -> Option<PathBuf> {
         }
 
         // Stop at filesystem root
-        if current.as_os_str().is_empty() || current == PathBuf::from("/") {
+        if current.as_os_str().is_empty() || current == Path::new("/") {
             break;
         }
     }

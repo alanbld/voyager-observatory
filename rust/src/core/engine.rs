@@ -172,11 +172,9 @@ impl FileTier {
                         return true;
                     }
                 }
-                ProjectType::Node => {
-                    // Node: src/, lib/, index.js, index.ts
-                    if path == "index.js" || path == "index.ts" {
-                        return true;
-                    }
+                // Node: src/, lib/, index.js, index.ts
+                ProjectType::Node if path == "index.js" || path == "index.ts" => {
+                    return true;
                 }
                 _ => {}
             }

@@ -15,8 +15,9 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::fs;
 use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::core::{
     CallGraphAnalyzer,
@@ -156,6 +157,43 @@ impl McpServer {
             initialized: false,
             project_root,
         }
+    }
+
+    /// Resolve a client-supplied `path` argument against `project_root`,
+    /// rejecting anything that escapes it after canonicalization (absolute
+    /// paths, `../` traversal, or a symlink pointing outside the root).
+    fn resolve_contained_path(&self, raw: Option<&str>) -> Result<PathBuf, String> {
+        let requested = match raw {
+            None => self.project_root.clone(),
+            Some(p) => {
+                let p = Path::new(p);
+                if p.is_absolute() {
+                    p.to_path_buf()
+                } else {
+                    self.project_root.join(p)
+                }
+            }
+        };
+
+        let root = fs::canonicalize(&self.project_root).map_err(|e| {
+            format!(
+                "Invalid project root '{}': {}",
+                self.project_root.display(),
+                e
+            )
+        })?;
+        let target = fs::canonicalize(&requested)
+            .map_err(|e| format!("Invalid path '{}': {}", requested.display(), e))?;
+
+        if !target.starts_with(&root) {
+            return Err(format!(
+                "Path '{}' escapes project root '{}'",
+                requested.display(),
+                root.display()
+            ));
+        }
+
+        Ok(target)
     }
 
     /// Run the server loop (blocking)
@@ -439,11 +477,10 @@ impl McpServer {
 
     #[allow(clippy::field_reassign_with_default)]
     fn tool_get_context(&self, id: Value, args: Value) -> JsonRpcResponse {
-        let path = args
-            .get("path")
-            .and_then(|v| v.as_str())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| self.project_root.clone());
+        let path = match self.resolve_contained_path(args.get("path").and_then(|v| v.as_str())) {
+            Ok(p) => p,
+            Err(e) => return JsonRpcResponse::error(id, INVALID_PARAMS, e),
+        };
 
         let lens = args.get("lens").and_then(|v| v.as_str());
         let token_budget = args.get("token_budget").and_then(|v| v.as_str());
@@ -522,11 +559,11 @@ impl McpServer {
         };
 
         // Parse optional path override (default: server's project_root)
-        let project_root = args
-            .get("path")
-            .and_then(|v| v.as_str())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| self.project_root.clone());
+        let project_root =
+            match self.resolve_contained_path(args.get("path").and_then(|v| v.as_str())) {
+                Ok(p) => p,
+                Err(e) => return JsonRpcResponse::error(id, INVALID_PARAMS, e),
+            };
 
         // Parse target (e.g., "function=main", "file=src/lib.rs:10-50")
         let parts: Vec<&str> = target_str.splitn(2, '=').collect();
@@ -829,11 +866,11 @@ impl McpServer {
         };
 
         // Parse optional path override
-        let project_root = args
-            .get("path")
-            .and_then(|v| v.as_str())
-            .map(PathBuf::from)
-            .unwrap_or_else(|| self.project_root.clone());
+        let project_root =
+            match self.resolve_contained_path(args.get("path").and_then(|v| v.as_str())) {
+                Ok(p) => p,
+                Err(e) => return JsonRpcResponse::error(id, INVALID_PARAMS, e),
+            };
 
         // Parse optional parameters
         let include_tests = args
@@ -1654,5 +1691,131 @@ pub fn process_data(data: &str) -> Result<(), String> {
         );
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    // ========================================================================
+    // Path containment (C1 / 0.1)
+    // ========================================================================
+
+    #[test]
+    fn test_tool_get_context_rejects_dot_dot_escape() {
+        let base = std::env::temp_dir().join("pm_mcp_test_traversal_base");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("root")).unwrap();
+        fs::write(base.join("secret.txt"), "TOP SECRET").unwrap();
+
+        let mut server = McpServer::new(base.join("root"));
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_context","arguments":{"path":"../secret.txt"}}}"#
+        ).unwrap();
+
+        assert!(
+            resp.error.is_some(),
+            "'../' traversal outside project root must be rejected"
+        );
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, INVALID_PARAMS);
+        assert!(err.message.contains("escapes project root"));
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_tool_get_context_rejects_absolute_path_escape() {
+        let base = std::env::temp_dir().join("pm_mcp_test_abs_escape_base");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("root")).unwrap();
+        fs::write(base.join("secret.txt"), "TOP SECRET").unwrap();
+
+        let mut server = McpServer::new(base.join("root"));
+        let abs_path = base.join("secret.txt");
+        let req = format!(
+            r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"get_context","arguments":{{"path":"{}"}}}}}}"#,
+            abs_path.display()
+        );
+        let resp = server.handle_request(&req).unwrap();
+
+        assert!(
+            resp.error.is_some(),
+            "absolute path outside project root must be rejected"
+        );
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, INVALID_PARAMS);
+        assert!(err.message.contains("escapes project root"));
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_tool_get_context_rejects_symlink_escape() {
+        let base = std::env::temp_dir().join("pm_mcp_test_symlink_escape_base");
+        let _ = fs::remove_dir_all(&base);
+        let root = base.join("root");
+        let outside = base.join("outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("secret.txt"), "TOP SECRET").unwrap();
+
+        // Symlink inside the project root that points outside of it.
+        std::os::unix::fs::symlink(&outside, root.join("escape_link")).unwrap();
+
+        let mut server = McpServer::new(root.clone());
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_context","arguments":{"path":"escape_link"}}}"#
+        ).unwrap();
+
+        assert!(
+            resp.error.is_some(),
+            "a symlink resolving outside project root must be rejected"
+        );
+        let err = resp.error.unwrap();
+        assert_eq!(err.code, INVALID_PARAMS);
+        assert!(err.message.contains("escapes project root"));
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_tool_zoom_rejects_dot_dot_escape() {
+        let base = std::env::temp_dir().join("pm_mcp_test_zoom_traversal_base");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("root")).unwrap();
+        fs::create_dir_all(base.join("secret")).unwrap();
+        fs::write(base.join("secret/secret.rs"), "fn secret_fn() {}").unwrap();
+
+        let mut server = McpServer::new(base.join("root"));
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"zoom","arguments":{"target":"file=secret.rs","path":"../secret"}}}"#
+        ).unwrap();
+
+        assert!(
+            resp.error.is_some(),
+            "zoom path override escaping the project root must be rejected"
+        );
+        assert_eq!(resp.error.unwrap().code, INVALID_PARAMS);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn test_tool_explore_with_intent_rejects_dot_dot_escape() {
+        let base = std::env::temp_dir().join("pm_mcp_test_explore_traversal_base");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("root")).unwrap();
+        fs::create_dir_all(base.join("secret")).unwrap();
+
+        let mut server = McpServer::new(base.join("root"));
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"explore_with_intent","arguments":{"intent":"business-logic","path":"../secret"}}}"#
+        ).unwrap();
+
+        assert!(
+            resp.error.is_some(),
+            "explore_with_intent path override escaping the project root must be rejected"
+        );
+        assert_eq!(resp.error.unwrap().code, INVALID_PARAMS);
+
+        let _ = fs::remove_dir_all(&base);
     }
 }

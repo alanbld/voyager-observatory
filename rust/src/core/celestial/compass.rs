@@ -615,23 +615,17 @@ mod tests {
 
     #[test]
     fn test_navigation_suggestion_with_priority() {
-        let suggestion = NavigationSuggestion::new(
-            "Test Nebula",
-            SuggestionAction::Explore,
-            "Test reason",
-        )
-        .with_priority(10);
+        let suggestion =
+            NavigationSuggestion::new("Test Nebula", SuggestionAction::Explore, "Test reason")
+                .with_priority(10);
 
         assert_eq!(suggestion.priority, 10);
     }
 
     #[test]
     fn test_navigation_suggestion_default_priority() {
-        let suggestion = NavigationSuggestion::new(
-            "Test Nebula",
-            SuggestionAction::Explore,
-            "Test reason",
-        );
+        let suggestion =
+            NavigationSuggestion::new("Test Nebula", SuggestionAction::Explore, "Test reason");
 
         assert_eq!(suggestion.priority, 5);
         assert!(suggestion.target_path.is_none());
@@ -917,7 +911,9 @@ mod tests {
         };
 
         let hints = compass.generate_hints(&map);
-        let has_entry_points = hints.iter().any(|h| h.category == HintCategory::EntryPoints);
+        let has_entry_points = hints
+            .iter()
+            .any(|h| h.category == HintCategory::EntryPoints);
         assert!(has_entry_points);
     }
 

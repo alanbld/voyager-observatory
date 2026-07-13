@@ -6,6 +6,12 @@
 
 #[cfg(feature = "temporal")]
 mod temporal_tests {
+    // Pre-existing lint debt (see rust/src/lib.rs) - deferred to Phase 1 (N6).
+    #![allow(clippy::absurd_extreme_comparisons)]
+    #![allow(unused_comparisons)]
+    #![allow(unused_imports)]
+    #![allow(dead_code)]
+
     use std::path::PathBuf;
     use std::process::Command;
     use tempfile::TempDir;

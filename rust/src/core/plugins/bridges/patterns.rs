@@ -430,9 +430,16 @@ mod tests {
         let patterns = create_patterns_table(&lua).unwrap();
 
         let rust_patterns = [
-            "rust_fn", "rust_struct", "rust_enum", "rust_impl",
-            "rust_trait", "rust_mod", "rust_use", "rust_const",
-            "rust_static", "rust_type",
+            "rust_fn",
+            "rust_struct",
+            "rust_enum",
+            "rust_impl",
+            "rust_trait",
+            "rust_mod",
+            "rust_use",
+            "rust_const",
+            "rust_static",
+            "rust_type",
         ];
 
         for name in rust_patterns {
@@ -460,8 +467,11 @@ mod tests {
         let patterns = create_patterns_table(&lua).unwrap();
 
         let python_patterns = [
-            "python_def", "python_class", "python_import",
-            "python_decorator", "python_async_def",
+            "python_def",
+            "python_class",
+            "python_import",
+            "python_decorator",
+            "python_async_def",
         ];
 
         for name in python_patterns {
@@ -487,8 +497,13 @@ mod tests {
         let patterns = create_patterns_table(&lua).unwrap();
 
         let js_patterns = [
-            "js_function", "js_const", "js_let", "js_class",
-            "js_arrow", "js_import", "js_export",
+            "js_function",
+            "js_const",
+            "js_let",
+            "js_class",
+            "js_arrow",
+            "js_import",
+            "js_export",
         ];
 
         for name in js_patterns {
@@ -516,8 +531,11 @@ mod tests {
         let patterns = create_patterns_table(&lua).unwrap();
 
         let java_patterns = [
-            "java_class", "java_interface", "java_method",
-            "java_import", "java_package",
+            "java_class",
+            "java_interface",
+            "java_method",
+            "java_import",
+            "java_package",
         ];
 
         for name in java_patterns {
@@ -532,8 +550,11 @@ mod tests {
         let patterns = create_patterns_table(&lua).unwrap();
 
         let csharp_patterns = [
-            "csharp_class", "csharp_interface", "csharp_method",
-            "csharp_struct", "csharp_enum",
+            "csharp_class",
+            "csharp_interface",
+            "csharp_method",
+            "csharp_struct",
+            "csharp_enum",
         ];
 
         for name in csharp_patterns {
@@ -548,8 +569,11 @@ mod tests {
         let patterns = create_patterns_table(&lua).unwrap();
 
         let cpp_patterns = [
-            "cpp_class", "cpp_struct", "cpp_function",
-            "cpp_namespace", "cpp_template",
+            "cpp_class",
+            "cpp_struct",
+            "cpp_function",
+            "cpp_namespace",
+            "cpp_template",
         ];
 
         for name in cpp_patterns {
@@ -564,8 +588,12 @@ mod tests {
         let patterns = create_patterns_table(&lua).unwrap();
 
         let go_patterns = [
-            "go_func", "go_type", "go_struct",
-            "go_interface", "go_package", "go_import",
+            "go_func",
+            "go_type",
+            "go_struct",
+            "go_interface",
+            "go_package",
+            "go_import",
         ];
 
         for name in go_patterns {
@@ -631,8 +659,10 @@ mod tests {
         let patterns = create_patterns_table(&lua).unwrap();
 
         let fortran_patterns = [
-            "fortran_subroutine", "fortran_function",
-            "fortran_program", "fortran_module",
+            "fortran_subroutine",
+            "fortran_function",
+            "fortran_program",
+            "fortran_module",
         ];
 
         for name in fortran_patterns {
@@ -647,8 +677,10 @@ mod tests {
         let patterns = create_patterns_table(&lua).unwrap();
 
         let pascal_patterns = [
-            "pascal_procedure", "pascal_function",
-            "pascal_program", "pascal_unit",
+            "pascal_procedure",
+            "pascal_function",
+            "pascal_program",
+            "pascal_unit",
         ];
 
         for name in pascal_patterns {
@@ -691,8 +723,10 @@ mod tests {
         let patterns = create_patterns_table(&lua).unwrap();
 
         let haskell_patterns = [
-            "haskell_function", "haskell_data",
-            "haskell_newtype", "haskell_class",
+            "haskell_function",
+            "haskell_data",
+            "haskell_newtype",
+            "haskell_class",
         ];
 
         for name in haskell_patterns {
@@ -719,9 +753,7 @@ mod tests {
         let lua = Lua::new();
         let patterns = create_patterns_table(&lua).unwrap();
 
-        let scala_patterns = [
-            "scala_def", "scala_class", "scala_object", "scala_trait",
-        ];
+        let scala_patterns = ["scala_def", "scala_class", "scala_object", "scala_trait"];
 
         for name in scala_patterns {
             let pattern: String = patterns.get(name).unwrap();
@@ -791,8 +823,10 @@ mod tests {
         let patterns = create_patterns_table(&lua).unwrap();
 
         let graphql_patterns = [
-            "graphql_type", "graphql_query",
-            "graphql_mutation", "graphql_interface",
+            "graphql_type",
+            "graphql_query",
+            "graphql_mutation",
+            "graphql_interface",
         ];
 
         for name in graphql_patterns {

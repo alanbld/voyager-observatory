@@ -613,10 +613,8 @@ impl ClusterEngine {
                         description = format!("Functions ending with '{}'", suffix);
                     }
                 }
-                ClusterPattern::SimilarArity(arity) => {
-                    if description.is_empty() {
-                        description = format!("Functions with ~{} parameters", arity);
-                    }
+                ClusterPattern::SimilarArity(arity) if description.is_empty() => {
+                    description = format!("Functions with ~{} parameters", arity);
                 }
                 _ => {}
             }

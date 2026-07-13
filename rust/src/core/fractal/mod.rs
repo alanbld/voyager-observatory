@@ -411,7 +411,6 @@ mod integration_tests {
         let _kmeans = ClusterAlgorithm::KMeans { k: 5 };
     }
 
-
     /// Integration test: Build a complete fractal context hierarchy
     #[test]
     fn test_complete_hierarchy() {

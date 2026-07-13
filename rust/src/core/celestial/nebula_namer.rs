@@ -556,10 +556,7 @@ mod tests {
 
     #[test]
     fn test_naming_strategy_variants() {
-        assert_eq!(
-            NamingStrategy::ConceptBased,
-            NamingStrategy::ConceptBased
-        );
+        assert_eq!(NamingStrategy::ConceptBased, NamingStrategy::ConceptBased);
         assert_ne!(NamingStrategy::ConceptBased, NamingStrategy::DirectoryBased);
         assert_ne!(NamingStrategy::PatternBased, NamingStrategy::FileTypeBased);
         assert_ne!(NamingStrategy::Fallback, NamingStrategy::ConceptBased);
@@ -746,13 +743,19 @@ mod tests {
     #[test]
     fn test_capitalize_directory_underscore() {
         assert_eq!(capitalize_directory("user_handlers"), "User Handlers");
-        assert_eq!(capitalize_directory("data_access_layer"), "Data Access Layer");
+        assert_eq!(
+            capitalize_directory("data_access_layer"),
+            "Data Access Layer"
+        );
     }
 
     #[test]
     fn test_capitalize_directory_hyphen() {
         assert_eq!(capitalize_directory("api-routes"), "Api Routes");
-        assert_eq!(capitalize_directory("user-auth-service"), "User Auth Service");
+        assert_eq!(
+            capitalize_directory("user-auth-service"),
+            "User Auth Service"
+        );
     }
 
     #[test]

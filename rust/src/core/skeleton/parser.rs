@@ -786,7 +786,9 @@ class Foo:
         let s = Skeletonizer::new();
         let result = s.skeletonize(input, Language::Rust);
         assert!(result.content.contains("pub fn public_func()"));
-        assert!(result.preserved_symbols.contains(&"public_func".to_string()));
+        assert!(result
+            .preserved_symbols
+            .contains(&"public_func".to_string()));
     }
 
     #[test]
@@ -915,7 +917,8 @@ class Foo:
 
     #[test]
     fn test_python_async_function() {
-        let input = "async def fetch(url):\n    response = await client.get(url)\n    return response";
+        let input =
+            "async def fetch(url):\n    response = await client.get(url)\n    return response";
         let s = Skeletonizer::new();
         let result = s.skeletonize(input, Language::Python);
         assert!(result.content.contains("async def fetch(url):"));
@@ -1015,7 +1018,9 @@ class Foo:
         let s = Skeletonizer::new();
         let result = s.skeletonize(input, Language::TypeScript);
         assert!(result.content.contains("type StringOrNumber"));
-        assert!(result.preserved_symbols.contains(&"StringOrNumber".to_string()));
+        assert!(result
+            .preserved_symbols
+            .contains(&"StringOrNumber".to_string()));
     }
 
     #[test]

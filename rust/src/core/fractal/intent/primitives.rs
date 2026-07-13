@@ -439,11 +439,11 @@ pub struct ScoredElement<'a> {
 /// A cognitive primitive performs a single transformation step
 pub trait CognitivePrimitive {
     type Input<'a>;
-    type Output;
+    type Output<'a>;
     type Params;
 
     /// Apply this primitive to transform input
-    fn apply<'a>(&self, input: Self::Input<'a>, params: &Self::Params) -> Self::Output;
+    fn apply<'a>(&self, input: Self::Input<'a>, params: &Self::Params) -> Self::Output<'a>;
 
     /// Name of this primitive for logging/debugging
     fn name(&self) -> &'static str;
@@ -526,10 +526,10 @@ pub struct NoiseFilter;
 
 impl CognitivePrimitive for NoiseFilter {
     type Input<'a> = &'a [(&'a ContextLayer, &'a FeatureVector)];
-    type Output = Vec<(usize, ConceptType)>; // Indices of kept elements + their types
+    type Output<'a> = Vec<(usize, ConceptType)>; // Indices of kept elements + their types
     type Params = NoiseFilterParams;
 
-    fn apply<'a>(&self, input: Self::Input<'a>, params: &Self::Params) -> Self::Output {
+    fn apply<'a>(&self, input: Self::Input<'a>, params: &Self::Params) -> Self::Output<'a> {
         let filter_types: HashSet<_> = params.filter_concept_types.iter().collect();
 
         input
@@ -795,10 +795,10 @@ impl CognitivePrimitive for RelevanceScorer {
         &'a [(&'a ContextLayer, &'a FeatureVector)],
         &'a [(usize, ConceptType)],
     );
-    type Output = Vec<ScoredElement<'static>>; // Note: We'll handle lifetimes in actual use
+    type Output<'a> = Vec<ScoredElement<'a>>;
     type Params = RelevanceScorerParams;
 
-    fn apply<'a>(&self, input: Self::Input<'a>, params: &Self::Params) -> Self::Output {
+    fn apply<'a>(&self, input: Self::Input<'a>, params: &Self::Params) -> Self::Output<'a> {
         let (all_elements, filtered_indices) = input;
 
         filtered_indices
@@ -807,15 +807,9 @@ impl CognitivePrimitive for RelevanceScorer {
                 let (layer, vector) = &all_elements[*idx];
                 let relevance = self.score_element(layer, vector, *concept_type, params);
 
-                // SAFETY: We're creating references that won't outlive the input
-                // In actual use, we'll need to handle this differently
                 ScoredElement {
-                    layer: unsafe {
-                        std::mem::transmute::<&ContextLayer, &'static ContextLayer>(*layer)
-                    },
-                    vector: unsafe {
-                        std::mem::transmute::<&FeatureVector, &'static FeatureVector>(*vector)
-                    },
+                    layer: *layer,
+                    vector: *vector,
                     score: relevance.score,
                     concept_type: *concept_type,
                     relevance,
@@ -912,10 +906,10 @@ impl ExplorationPlanner {
 
 impl CognitivePrimitive for ExplorationPlanner {
     type Input<'a> = &'a [ScoredElement<'a>];
-    type Output = Vec<PlannedStep>;
+    type Output<'a> = Vec<PlannedStep>;
     type Params = ExplorationPlannerParams;
 
-    fn apply<'a>(&self, input: Self::Input<'a>, params: &Self::Params) -> Self::Output {
+    fn apply<'a>(&self, input: Self::Input<'a>, params: &Self::Params) -> Self::Output<'a> {
         // Sort by relevance (descending)
         let mut sorted: Vec<_> = input.iter().enumerate().collect();
         sorted.sort_by(|a, b| {
@@ -1027,14 +1021,38 @@ mod tests {
 
     #[test]
     fn test_concept_type_from_shell_pattern() {
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Deployment), ConceptType::Infrastructure);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::ErrorHandling), ConceptType::ErrorHandling);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::DataProcessing), ConceptType::Transformation);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Monitoring), ConceptType::Logging);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Testing), ConceptType::Testing);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Setup), ConceptType::Configuration);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Security), ConceptType::Validation);
-        assert_eq!(ConceptType::from_shell_pattern(&ShellPatternType::Unknown), ConceptType::Unknown);
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Deployment),
+            ConceptType::Infrastructure
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::ErrorHandling),
+            ConceptType::ErrorHandling
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::DataProcessing),
+            ConceptType::Transformation
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Monitoring),
+            ConceptType::Logging
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Testing),
+            ConceptType::Testing
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Setup),
+            ConceptType::Configuration
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Security),
+            ConceptType::Validation
+        );
+        assert_eq!(
+            ConceptType::from_shell_pattern(&ShellPatternType::Unknown),
+            ConceptType::Unknown
+        );
     }
 
     // === RelevanceScore tests ===
@@ -1630,6 +1648,55 @@ mod tests {
             "Low-relevance should be at most 0.3, got {}",
             low_score.score
         );
+    }
+
+    #[test]
+    fn test_relevance_scorer_apply_via_cognitive_primitive_trait() {
+        // Regression test for I5: RelevanceScorer::apply used to launder its
+        // output to 'static via transmute. Exercise it through the trait with
+        // real, non-'static borrows and confirm the returned ScoredElements
+        // still point at the original (uncorrupted) data.
+        use crate::core::fractal::SymbolVectorizer;
+
+        let layer_a = make_symbol_layer(
+            "a1",
+            "calculate_total",
+            SymbolKind::Function,
+            "pub fn calculate_total() -> f64",
+            Some("f64"),
+            true,
+        );
+        let layer_b = make_symbol_layer(
+            "b1",
+            "test_helper",
+            SymbolKind::Function,
+            "fn test_helper()",
+            None,
+            false,
+        );
+
+        let vectorizer = SymbolVectorizer::new();
+        let vector_a = vectorizer.vectorize_layer(&layer_a);
+        let vector_b = vectorizer.vectorize_layer(&layer_b);
+
+        let all_elements: Vec<(&ContextLayer, &FeatureVector)> =
+            vec![(&layer_a, &vector_a), (&layer_b, &vector_b)];
+        let filtered_indices = vec![
+            (0usize, ConceptType::Calculation),
+            (1usize, ConceptType::Testing),
+        ];
+
+        let scorer = RelevanceScorer;
+        let params = RelevanceScorerParams::default();
+        let scored = scorer.apply((&all_elements, &filtered_indices), &params);
+
+        assert_eq!(scored.len(), 2);
+        assert!(std::ptr::eq(scored[0].layer, &layer_a));
+        assert!(std::ptr::eq(scored[0].vector, &vector_a));
+        assert_eq!(scored[0].layer.name(), "calculate_total");
+        assert!(std::ptr::eq(scored[1].layer, &layer_b));
+        assert!(std::ptr::eq(scored[1].vector, &vector_b));
+        assert_eq!(scored[1].layer.name(), "test_helper");
     }
 
     #[test]
