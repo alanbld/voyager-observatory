@@ -39,7 +39,7 @@ use std::path::{Path, PathBuf};
 #[command(version = pm_encoder::VERSION)]
 #[command(about = "🌌 Voyager Observatory: Navigate the code galaxy")]
 #[command(after_help = "EXAMPLES:
-  # Start exploring (auto-focus applies smart defaults)
+  # Start exploring
   vo .
 
   # Explore business logic constellations
