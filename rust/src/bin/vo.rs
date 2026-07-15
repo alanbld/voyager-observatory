@@ -20,8 +20,8 @@
 
 use clap::{Parser, ValueEnum};
 use pm_encoder::core::{
-    ContextEngine, ContextStore, DetailLevel, IntelligentPresenter, ObserversJournal,
-    SemanticDepth, SkeletonMode, ZoomConfig, ZoomTarget, DEFAULT_ALPHA,
+    ContextEngine, ContextStore, IntelligentPresenter, ObserversJournal, SkeletonMode,
+    ZoomConfig, ZoomTarget, DEFAULT_ALPHA,
 };
 use pm_encoder::server::McpServer;
 use pm_encoder::{
@@ -106,15 +106,6 @@ struct Cli {
     /// Exclude files matching pattern
     #[arg(long = "exclude", value_name = "PATTERN", num_args = 0.., help_heading = "🔍 LENS FILTERS")]
     exclude: Vec<String>,
-
-    /// Analysis depth [quick, balanced, deep]
-    #[arg(
-        long = "semantic-depth",
-        value_enum,
-        default_value = "balanced",
-        help_heading = "🔍 LENS FILTERS"
-    )]
-    semantic_depth: SemanticDepthArg,
 
     /// Use cached analysis (deterministic output)
     #[arg(long = "frozen", help_heading = "🔍 LENS FILTERS")]
@@ -205,19 +196,6 @@ struct Cli {
         help_heading = "💡 EXPLORATION"
     )]
     explore: Option<String>,
-
-    /// Output detail level [summary, smart, detailed]
-    #[arg(
-        long = "detail",
-        value_enum,
-        default_value = "smart",
-        help_heading = "💡 EXPLORATION"
-    )]
-    detail: DetailLevelArg,
-
-    /// Show technical reasoning behind decisions
-    #[arg(long = "explain-reasoning", help_heading = "💡 EXPLORATION")]
-    explain_reasoning: bool,
 
     /// Show system health summary
     #[arg(long = "health", help_heading = "💡 EXPLORATION")]
@@ -408,50 +386,6 @@ struct Cli {
 // =============================================================================
 // New Enums for Telescope UX
 // =============================================================================
-
-/// Semantic analysis depth.
-#[derive(Debug, Clone, Copy, ValueEnum, Default)]
-enum SemanticDepthArg {
-    /// Fast pattern matching (10ms)
-    Quick,
-    /// Balanced analysis with timeout (500ms)
-    #[default]
-    Balanced,
-    /// Full semantic analysis (no timeout)
-    Deep,
-}
-
-impl From<SemanticDepthArg> for SemanticDepth {
-    fn from(arg: SemanticDepthArg) -> Self {
-        match arg {
-            SemanticDepthArg::Quick => SemanticDepth::Quick,
-            SemanticDepthArg::Balanced => SemanticDepth::Balanced,
-            SemanticDepthArg::Deep => SemanticDepth::Deep,
-        }
-    }
-}
-
-/// Output detail level.
-#[derive(Debug, Clone, Copy, ValueEnum, Default)]
-enum DetailLevelArg {
-    /// Minimal output with key insights
-    Summary,
-    /// Progressive disclosure (default)
-    #[default]
-    Smart,
-    /// Full technical details
-    Detailed,
-}
-
-impl From<DetailLevelArg> for DetailLevel {
-    fn from(arg: DetailLevelArg) -> Self {
-        match arg {
-            DetailLevelArg::Summary => DetailLevel::Summary,
-            DetailLevelArg::Smart => DetailLevel::Smart,
-            DetailLevelArg::Detailed => DetailLevel::Detailed,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum OutputFormatArg {
