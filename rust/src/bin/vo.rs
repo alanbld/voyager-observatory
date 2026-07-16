@@ -70,13 +70,14 @@ struct Cli {
     #[arg(value_name = "PATH", help_heading = "🔭 VIEWFINDER (Essential)")]
     project_root: Option<PathBuf>,
 
-    /// What to look for [architecture, debug, security, onboarding, minimal]
+    /// What to look for
     #[arg(
         long = "lens",
+        value_enum,
         value_name = "LENS",
         help_heading = "🔭 VIEWFINDER (Essential)"
     )]
-    lens: Option<String>,
+    lens: Option<LensArg>,
 
     /// Output file path (default: stdout)
     #[arg(
@@ -386,6 +387,30 @@ struct Cli {
 // =============================================================================
 // New Enums for Telescope UX
 // =============================================================================
+
+/// Which lens to view the codebase through.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum LensArg {
+    /// High-level code structure
+    Architecture,
+    /// Recent changes for debugging
+    Debug,
+    /// Security-relevant files
+    Security,
+    /// Essential files for new contributors
+    Onboarding,
+}
+
+impl LensArg {
+    fn as_str(&self) -> &'static str {
+        match self {
+            LensArg::Architecture => "architecture",
+            LensArg::Debug => "debug",
+            LensArg::Security => "security",
+            LensArg::Onboarding => "onboarding",
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum OutputFormatArg {
@@ -2882,7 +2907,7 @@ pub fn run() {
     // Apply determinism and privacy settings (v2.0.0)
     config.frozen = cli.frozen;
     config.allow_sensitive = cli.allow_sensitive;
-    config.active_lens = cli.lens.clone();
+    config.active_lens = cli.lens.map(|l| l.as_str().to_string());
 
     // Apply skeleton mode (v2.2.0)
     config.skeleton_mode = SkeletonMode::parse(&cli.skeleton).unwrap_or(SkeletonMode::Auto);
@@ -3394,9 +3419,10 @@ pub fn run() {
         let mut lens_manager = LensManager::new();
 
         // Apply CLI lens if present (for priority groups)
-        if let Some(lens_name) = &cli.lens {
+        if let Some(lens_arg) = &cli.lens {
+            let lens_name = lens_arg.as_str();
             // Store active lens for metadata injection (v2.0.0)
-            config.active_lens = Some(lens_name.clone());
+            config.active_lens = Some(lens_name.to_string());
 
             match lens_manager.apply_lens(lens_name) {
                 Ok(applied) => {
@@ -3509,7 +3535,7 @@ pub fn run() {
         print_mission_log(
             project_name,
             &output,
-            cli.lens.as_deref(),
+            cli.lens.as_ref().map(|l| l.as_str()),
             token_budget_parsed,
             entries.len(),
         );
@@ -3560,7 +3586,7 @@ pub fn run() {
             print_mission_log(
                 project_name,
                 &output,
-                cli.lens.as_deref(),
+                cli.lens.as_ref().map(|l| l.as_str()),
                 token_budget_parsed,
                 file_count,
             );

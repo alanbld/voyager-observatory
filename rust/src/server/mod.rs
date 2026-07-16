@@ -324,7 +324,7 @@ impl McpServer {
                             },
                             "lens": {
                                 "type": "string",
-                                "description": "Context lens: architecture, debug, security, minimal, onboarding"
+                                "description": "Context lens: architecture, debug, security, onboarding"
                             },
                             "token_budget": {
                                 "type": "string",

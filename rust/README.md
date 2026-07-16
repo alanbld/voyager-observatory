@@ -9,7 +9,7 @@ This is the Rust implementation of pm_encoder, designed as a high-performance co
 
 ### Core Features (100% Parity)
 - **Plus/Minus Format Serialization** - Full format support
-- **Context Lenses** - architecture, security, debug, minimal lenses
+- **Context Lenses** - architecture, security, debug, onboarding lenses
 - **Priority Groups** - File prioritization for token budgeting
 - **Token Budgeting** - `--token-budget 100k` with drop/truncate/hybrid strategies
 - **Truncation Modes** - simple, smart, structure
