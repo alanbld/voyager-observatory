@@ -324,7 +324,7 @@ struct Cli {
     // ═══════════════════════════════════════════════════════════════════════════
     // 📊 CELESTIAL CENSUS (Code Health Survey)
     // ═══════════════════════════════════════════════════════════════════════════
-    /// Survey the codebase [composition, health]
+    /// Survey the codebase [composition, health, evolution]
     #[arg(long = "survey", value_name = "MODE", help_heading = "📊 CENSUS")]
     survey: Option<SurveyMode>,
 
@@ -469,7 +469,7 @@ enum SurveyMode {
 }
 
 /// Grouping level for survey output
-#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
 enum SurveyGrouping {
     /// Group by directory (default)
     #[default]
@@ -642,6 +642,15 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
     use std::time::Instant;
 
     let start = Instant::now();
+
+    if grouping != SurveyGrouping::Constellation
+        && matches!(mode, SurveyMode::Health | SurveyMode::Evolution)
+    {
+        eprintln!(
+            "note: --by is ignored in --survey {:?} mode (only composition respects grouping)",
+            mode
+        );
+    }
 
     // Walk directory and collect files
     let ignore_patterns: Vec<String> = cli.exclude.clone();
@@ -2662,6 +2671,10 @@ pub fn run() {
             std::process::exit(1);
         }
 
+        if cli.lens.is_some() {
+            eprintln!("note: --lens is ignored in --survey mode");
+        }
+
         // Run the survey
         run_survey(&survey_root, survey_mode, cli.by, &cli);
         return;
@@ -2788,6 +2801,10 @@ pub fn run() {
     // Handle --explore command (Intent-Driven Exploration v2.4.0)
     if let Some(intent_str) = &cli.explore {
         use pm_encoder::core::{ExplorationIntent, ExplorerConfig, IntentExplorer};
+
+        if cli.lens.is_some() {
+            eprintln!("note: --lens is ignored in --explore mode");
+        }
 
         // Parse intent
         let intent: ExplorationIntent = match intent_str.parse() {
@@ -3177,6 +3194,10 @@ pub fn run() {
     // Includes Microscope Auto-Focus (v1.2.0) - auto-zoom when path is a file
     let effective_zoom = cli.zoom.as_ref().or(auto_zoom_target.as_ref());
     if let Some(zoom_str) = effective_zoom {
+        if cli.lens.is_some() {
+            eprintln!("note: --lens is ignored in zoom mode");
+        }
+
         let mut zoom_config = match parse_zoom_target(zoom_str) {
             Ok(config) => config,
             Err(e) => {
