@@ -27,16 +27,9 @@ path = "src/bin/vo.rs"
 name = "pm_encoder"
 path = "src/bin/pm_encoder.rs"
 
-# MCP Server binary
-[[bin]]
-name = "pm_encoder_mcp"
-path = "src/bin/mcp_server.rs"
-required-features = ["mcp"]
-
 [features]
 default = ["temporal"]
 wasm = ["wasm-bindgen", "serde-wasm-bindgen"]
-mcp = ["rmcp", "tokio", "schemars_1"]
 temporal = ["git2"]
 plugins = ["mlua"]
 
@@ -82,11 +75,6 @@ tree-sitter-bash = "0.23"
 # WASM dependencies (optional)
 wasm-bindgen = { version = "0.2", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
-
-# MCP dependencies (optional)
-rmcp = { version = "0.8", features = ["server"], optional = true }
-tokio = { version = "1", features = ["full"], optional = true }
-schemars_1 = { package = "schemars", version = "1.1", optional = true }
 
 # Temporal (Chronos Engine) dependencies (optional)
 git2 = { version = "0.19", optional = true }
