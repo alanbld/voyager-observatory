@@ -2810,10 +2810,8 @@ pub fn run() {
         let intent: ExplorationIntent = match intent_str.parse() {
             Ok(i) => i,
             Err(e) => {
+                // e already includes the valid-intents list (composition.rs's FromStr impl)
                 eprintln!("Error: {}", e);
-                eprintln!(
-                    "Valid intents: business-logic, debugging, onboarding, security, migration"
-                );
                 std::process::exit(1);
             }
         };
