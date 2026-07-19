@@ -13,7 +13,6 @@
 //! - `engine`: Main ContextEngine orchestration
 //! - `zoom`: Fractal Protocol zoom actions
 //! - `fractal`: Fractal Context Engine for hierarchical, zoomable context
-//! - `syntax`: Tree-sitter based AST parsing (Phase 1A)
 //! - `plugin`: Plugin ecosystem reservation (Phase 2)
 //! - `ast_bridge`: Bridge to voyager-ast structural optics
 //! - `metrics`: AST-based code metrics collection (Phase 3 foundation)
@@ -37,7 +36,6 @@ pub mod serialization;
 pub mod skeleton;
 pub mod spectrograph;
 pub mod store;
-pub mod syntax;
 pub mod temporal;
 pub mod walker;
 pub mod zoom;
@@ -112,13 +110,6 @@ pub use celestial::{
     CelestialMap, ConstellationMapper, ExplorationHint, FileInfo, NamingStrategy,
     NavigationCompass, NavigationSuggestion, Nebula, NebulaName, NebulaNamer, Star,
     SuggestionAction,
-};
-
-// Phase 1A: Core Syntax Infrastructure (Tree-sitter)
-pub use syntax::{
-    Import, ImportKind, Language as SyntaxLanguage, Location, NormalizedAst, ProviderStats, Span,
-    Symbol, SymbolKind, SymbolVisibility, SyntaxError, SyntaxProvider, SyntaxRegistry,
-    TreeSitterAdapter,
 };
 
 // voyager-ast integration (Structural Optics)
