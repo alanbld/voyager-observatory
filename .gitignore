@@ -28,6 +28,7 @@ htmlcov/
 .pytest_cache/
 
 # User config (keep example, ignore user's config)
+.vo_config.json
 .pm_encoder_config.json
 
 # Runtime state (per-repo utility scores, caches) - generated, not source

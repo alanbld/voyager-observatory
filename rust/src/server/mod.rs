@@ -10,7 +10,7 @@
 //!
 //! # Usage
 //! ```bash
-//! pm_encoder --server
+//! vo --server
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -302,7 +302,7 @@ impl McpServer {
                     "tools": {}
                 },
                 "serverInfo": {
-                    "name": "pm_encoder",
+                    "name": "vo",
                     "version": crate::version()
                 }
             }),
@@ -956,7 +956,7 @@ mod tests {
 
         let result = resp.result.unwrap();
         assert_eq!(result["protocolVersion"], "2024-11-05");
-        assert_eq!(result["serverInfo"]["name"], "pm_encoder");
+        assert_eq!(result["serverInfo"]["name"], "vo");
     }
 
     #[test]

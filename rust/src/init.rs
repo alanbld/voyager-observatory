@@ -183,7 +183,7 @@ fn generate_meta_header(lens_name: &str, description: &str) -> String {
     }
 
     content.push_str(&format!("Generated: {}\n", timestamp));
-    content.push_str(&format!("pm_encoder version: {}\n", crate::VERSION));
+    content.push_str(&format!("vo version: {}\n", crate::VERSION));
 
     // Calculate MD5 of content
     let checksum = crate::calculate_md5(&content);
@@ -805,7 +805,7 @@ mod tests {
         assert!(header.contains("Focus: Architecture"));
         assert!(header.contains("Implementation details truncated"));
         assert!(header.contains("Import/export statements"));
-        assert!(header.contains("pm_encoder version:"));
+        assert!(header.contains("vo version:"));
         assert!(header.contains(".pm_encoder_meta"));
     }
 

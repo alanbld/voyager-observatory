@@ -2432,7 +2432,8 @@ fn find_project_root(start: &PathBuf) -> Option<PathBuf> {
         "go.mod",                  // Go
         "pom.xml",                 // Java Maven
         "build.gradle",            // Java Gradle
-        ".pm_encoder_config.json", // pm_encoder config
+        ".vo_config.json",         // vo config
+        ".pm_encoder_config.json", // vo config (deprecated pre-rename name)
     ];
 
     let mut current = start.clone();
@@ -2704,8 +2705,8 @@ pub fn run() {
         Some(path) => path,
         None => {
             eprintln!("Error: PROJECT_ROOT argument is required");
-            eprintln!("Usage: pm_encoder <PROJECT_ROOT>");
-            eprintln!("\nTry 'pm_encoder --help' for more information.");
+            eprintln!("Usage: vo <PROJECT_ROOT>");
+            eprintln!("\nTry 'vo --help' for more information.");
             std::process::exit(1);
         }
     };
@@ -2867,14 +2868,10 @@ pub fn run() {
                 EncoderConfig::default()
             }
         }
+    } else if let Some(default_config) = pm_encoder::resolve_config_path(&project_root) {
+        EncoderConfig::from_file(&default_config).unwrap_or_default()
     } else {
-        // Try default config path
-        let default_config = project_root.join(".pm_encoder_config.json");
-        if default_config.exists() {
-            EncoderConfig::from_file(&default_config).unwrap_or_default()
-        } else {
-            EncoderConfig::default()
-        }
+        EncoderConfig::default()
     };
 
     // Apply CLI overrides

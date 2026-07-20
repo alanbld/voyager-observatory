@@ -564,7 +564,7 @@ impl ContextEngine {
         let mut buffer = Vec::new();
 
         let xml_config = XmlConfig {
-            package: "pm_encoder".to_string(),
+            package: "vo".to_string(),
             version: crate::VERSION.to_string(),
             lens: self.config.active_lens.clone(),
             token_budget: self.config.token_budget,

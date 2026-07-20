@@ -366,7 +366,9 @@ Add to your MCP settings (`~/.claude/mcp.json`):
 
 ### Project Configuration
 
-Create `.pm_encoder_config.json` in your project root:
+Create `.vo_config.json` in your project root (the older
+`.pm_encoder_config.json` name is still read for backward
+compatibility, but is deprecated):
 
 ```json
 {
@@ -431,7 +433,7 @@ Your codebase is larger than the budget. Either:
 - Apply a lens to filter: `--lens architecture`
 
 ### "Binary file detected"
-Binary files are automatically skipped. If you need to include specific binary paths, use `.pm_encoder_config.json`.
+Binary files are automatically skipped. If you need to include specific binary paths, use `.vo_config.json`.
 
 ### "No files found"
 Check that you're pointing at the right directory and that .gitignore isn't excluding everything.

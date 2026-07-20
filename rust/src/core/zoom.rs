@@ -7,7 +7,7 @@
 //!
 //! When content is truncated, a zoom affordance is embedded:
 //! ```text
-//! /* ZOOM_AFFORDANCE: pm_encoder --zoom function=apply_budget --budget=1000 */
+//! /* ZOOM_AFFORDANCE: vo --zoom function=apply_budget --budget=1000 */
 //! ```
 //!
 //! The LLM can then request expansion via MCP or CLI.
@@ -102,8 +102,8 @@ impl ZoomTarget {
         };
 
         match budget {
-            Some(b) => format!("pm_encoder --zoom {} --budget {}", target_str, b),
-            None => format!("pm_encoder --zoom {}", target_str),
+            Some(b) => format!("vo --zoom {} --budget {}", target_str, b),
+            None => format!("vo --zoom {}", target_str),
         }
     }
 }
@@ -979,7 +979,7 @@ mod tests {
         let target = ZoomTarget::Function("process".to_string());
         assert_eq!(
             target.to_command(Some(1000)),
-            "pm_encoder --zoom function=process --budget 1000"
+            "vo --zoom function=process --budget 1000"
         );
     }
 
@@ -1257,7 +1257,7 @@ mod tests {
         let target = ZoomTarget::Function("process".to_string());
         assert_eq!(
             target.to_command(None),
-            "pm_encoder --zoom function=process"
+            "vo --zoom function=process"
         );
     }
 
@@ -1270,7 +1270,7 @@ mod tests {
         };
         assert_eq!(
             target.to_command(Some(1000)),
-            "pm_encoder --zoom file=src/main.rs:10-50 --budget 1000"
+            "vo --zoom file=src/main.rs:10-50 --budget 1000"
         );
     }
 
@@ -1283,7 +1283,7 @@ mod tests {
         };
         assert_eq!(
             target.to_command(None),
-            "pm_encoder --zoom file=src/main.rs:42"
+            "vo --zoom file=src/main.rs:42"
         );
     }
 
@@ -1477,14 +1477,14 @@ mod tests {
         let target = ZoomTarget::Class("Config".to_string());
         assert_eq!(
             target.to_command(Some(500)),
-            "pm_encoder --zoom class=Config --budget 500"
+            "vo --zoom class=Config --budget 500"
         );
     }
 
     #[test]
     fn test_zoom_target_module_to_command() {
         let target = ZoomTarget::Module("utils".to_string());
-        assert_eq!(target.to_command(None), "pm_encoder --zoom module=utils");
+        assert_eq!(target.to_command(None), "vo --zoom module=utils");
     }
 
     #[test]
