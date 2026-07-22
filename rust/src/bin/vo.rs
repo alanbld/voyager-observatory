@@ -410,6 +410,18 @@ impl LensArg {
             LensArg::Onboarding => "onboarding",
         }
     }
+
+    /// Default token budget applied when this lens is used without an
+    /// explicit --token-budget, so `--lens X` alone never dumps the whole
+    /// repo (previously ~2.4M tokens for --lens onboarding on this repo).
+    fn default_budget(&self) -> &'static str {
+        match self {
+            LensArg::Architecture => "100k",
+            LensArg::Debug => "80k",
+            LensArg::Security => "80k",
+            LensArg::Onboarding => "50k",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -3413,7 +3425,23 @@ pub fn run() {
     }
 
     // Token budgeting mode (v0.7.0)
-    if let Some(budget_str) = &cli.token_budget {
+    // If a lens is active but no explicit budget was given, fall back to a
+    // sane per-lens default rather than serializing the whole project.
+    let default_lens_budget = match (&cli.token_budget, &cli.lens) {
+        (None, Some(lens)) => {
+            let budget = lens.default_budget();
+            eprintln!(
+                "note: using default budget {} for --lens {} (override with --token-budget)",
+                budget,
+                lens.as_str()
+            );
+            Some(budget.to_string())
+        }
+        _ => None,
+    };
+    let effective_token_budget = cli.token_budget.clone().or(default_lens_budget);
+
+    if let Some(budget_str) = &effective_token_budget {
         // Parse budget
         let budget = match parse_token_budget(budget_str) {
             Ok(b) => b,
@@ -3544,8 +3572,7 @@ pub fn run() {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("project");
-        let token_budget_parsed = cli
-            .token_budget
+        let token_budget_parsed = effective_token_budget
             .as_ref()
             .and_then(|b| parse_token_budget(b).ok());
         print_mission_log(
