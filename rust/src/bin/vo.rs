@@ -20,8 +20,8 @@
 
 use clap::{Parser, ValueEnum};
 use pm_encoder::core::{
-    ContextEngine, ContextStore, IntelligentPresenter, ObserversJournal, SkeletonMode,
-    ZoomConfig, ZoomTarget, DEFAULT_ALPHA,
+    ContextEngine, ContextStore, IntelligentPresenter, ObserversJournal, SkeletonMode, ZoomConfig,
+    ZoomTarget, DEFAULT_ALPHA,
 };
 use pm_encoder::server::McpServer;
 use pm_encoder::{

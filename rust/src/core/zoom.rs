@@ -1255,10 +1255,7 @@ mod tests {
     #[test]
     fn test_zoom_target_to_command_no_budget() {
         let target = ZoomTarget::Function("process".to_string());
-        assert_eq!(
-            target.to_command(None),
-            "vo --zoom function=process"
-        );
+        assert_eq!(target.to_command(None), "vo --zoom function=process");
     }
 
     #[test]
@@ -1281,10 +1278,7 @@ mod tests {
             start_line: Some(42),
             end_line: None,
         };
-        assert_eq!(
-            target.to_command(None),
-            "vo --zoom file=src/main.rs:42"
-        );
+        assert_eq!(target.to_command(None), "vo --zoom file=src/main.rs:42");
     }
 
     #[test]

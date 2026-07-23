@@ -1269,7 +1269,10 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_context","arguments":{"lens":"onboarding"}}}"#
         ).unwrap();
 
-        assert!(resp.error.is_none(), "Lens without budget should still succeed");
+        assert!(
+            resp.error.is_none(),
+            "Lens without budget should still succeed"
+        );
         let result = resp.result.unwrap();
         let content = result["content"][0]["text"].as_str().unwrap();
         assert!(!content.is_empty());

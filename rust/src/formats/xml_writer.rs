@@ -315,8 +315,11 @@ impl<W: Write> XmlWriter<W> {
             }
 
             // Structure-only view (always available for truncated files)
-            writeln!(self.writer, "        <action type=\"structure\" cmd=\"vo --zoom file={} --depth signature\" />",
-                escape_xml_attr(path))?;
+            writeln!(
+                self.writer,
+                "        <action type=\"structure\" cmd=\"vo --zoom file={} --depth signature\" />",
+                escape_xml_attr(path)
+            )?;
 
             // Full file (no truncation) - use single quotes for shell arg
             writeln!(
