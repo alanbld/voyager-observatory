@@ -10,7 +10,7 @@
 //!
 //! # Usage
 //! ```bash
-//! pm_encoder --server
+//! vo --server
 //! ```
 
 use serde::{Deserialize, Serialize};
@@ -138,6 +138,17 @@ fn tool_error(id: Value, message: String) -> JsonRpcResponse {
             "isError": true
         }),
     )
+}
+
+/// Default token budget for a lens when the caller doesn't supply one.
+fn default_budget_for_lens(lens_name: &str) -> Option<&'static str> {
+    match lens_name {
+        "architecture" => Some("100k"),
+        "debug" => Some("80k"),
+        "security" => Some("80k"),
+        "onboarding" => Some("50k"),
+        _ => None,
+    }
 }
 
 // ============================================================================
@@ -302,7 +313,7 @@ impl McpServer {
                     "tools": {}
                 },
                 "serverInfo": {
-                    "name": "pm_encoder",
+                    "name": "vo",
                     "version": crate::version()
                 }
             }),
@@ -324,7 +335,7 @@ impl McpServer {
                             },
                             "lens": {
                                 "type": "string",
-                                "description": "Context lens: architecture, debug, security, minimal, onboarding"
+                                "description": "Context lens: architecture, debug, security, onboarding"
                             },
                             "token_budget": {
                                 "type": "string",
@@ -524,9 +535,14 @@ impl McpServer {
             }
         }
 
-        // Parse token budget
-        if let Some(budget_str) = token_budget {
-            match parse_token_budget(budget_str) {
+        // Parse token budget - if none given but a lens is active, fall back
+        // to a sane per-lens default rather than serializing the whole
+        // project (previously ~2.4M tokens for lens=onboarding on this repo).
+        let effective_budget = token_budget
+            .map(String::from)
+            .or_else(|| lens.and_then(default_budget_for_lens).map(String::from));
+        if let Some(budget_str) = effective_budget {
+            match parse_token_budget(&budget_str) {
                 Ok(budget) => config.token_budget = Some(budget),
                 Err(e) => {
                     return JsonRpcResponse::error(
@@ -956,7 +972,7 @@ mod tests {
 
         let result = resp.result.unwrap();
         assert_eq!(result["protocolVersion"], "2024-11-05");
-        assert_eq!(result["serverInfo"]["name"], "pm_encoder");
+        assert_eq!(result["serverInfo"]["name"], "vo");
     }
 
     #[test]
@@ -1224,6 +1240,43 @@ mod tests {
         let result = resp.result.unwrap();
         let content = result["content"][0]["text"].as_str().unwrap();
         assert!(content.contains("line2") || content.contains("line3"));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_default_budget_for_lens() {
+        assert_eq!(default_budget_for_lens("architecture"), Some("100k"));
+        assert_eq!(default_budget_for_lens("debug"), Some("80k"));
+        assert_eq!(default_budget_for_lens("security"), Some("80k"));
+        assert_eq!(default_budget_for_lens("onboarding"), Some("50k"));
+        assert_eq!(default_budget_for_lens("nonexistent_lens"), None);
+    }
+
+    #[test]
+    fn test_tool_get_context_lens_without_budget_applies_default() {
+        let temp_dir = std::env::temp_dir().join("pm_mcp_test_ctx_lens_default_budget");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+        // The onboarding lens's include_patterns only match specific
+        // onboarding-relevant filenames (README.md, Cargo.toml, etc.), so
+        // the fixture needs one of those rather than an arbitrary source
+        // file to be selected at all.
+        fs::write(temp_dir.join("README.md"), "# Test project\n".repeat(50)).unwrap();
+
+        let mut server = McpServer::new(temp_dir.clone());
+        let resp = server.handle_request(
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_context","arguments":{"lens":"onboarding"}}}"#
+        ).unwrap();
+
+        assert!(
+            resp.error.is_none(),
+            "Lens without budget should still succeed"
+        );
+        let result = resp.result.unwrap();
+        let content = result["content"][0]["text"].as_str().unwrap();
+        assert!(!content.is_empty());
+        assert!(content.contains("README.md"));
 
         let _ = fs::remove_dir_all(&temp_dir);
     }

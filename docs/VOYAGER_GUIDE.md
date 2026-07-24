@@ -107,7 +107,6 @@ The viewfinder automatically:
 | `architecture` | System design | Entry points, configs, core modules |
 | `security` | Security review | Auth, crypto, input validation |
 | `debug` | Bug hunting | Tests, error handlers, logs |
-| `minimal` | Quick overview | READMEs, main files only |
 | `onboarding` | New developer | Getting started guides, examples |
 
 ```bash
@@ -116,9 +115,6 @@ vo . --lens architecture
 
 # Security-focused view
 vo . --lens security
-
-# Minimal context for quick questions
-vo . --lens minimal
 ```
 
 ### Magnification (Zoom)
@@ -370,7 +366,9 @@ Add to your MCP settings (`~/.claude/mcp.json`):
 
 ### Project Configuration
 
-Create `.pm_encoder_config.json` in your project root:
+Create `.vo_config.json` in your project root (the older
+`.pm_encoder_config.json` name is still read for backward
+compatibility, but is deprecated):
 
 ```json
 {
@@ -432,10 +430,10 @@ vo . --explore onboarding
 Your codebase is larger than the budget. Either:
 - Increase the budget: `--token-budget 200k`
 - Use a more aggressive strategy: `--strategy drop`
-- Apply a lens to filter: `--lens minimal`
+- Apply a lens to filter: `--lens architecture`
 
 ### "Binary file detected"
-Binary files are automatically skipped. If you need to include specific binary paths, use `.pm_encoder_config.json`.
+Binary files are automatically skipped. If you need to include specific binary paths, use `.vo_config.json`.
 
 ### "No files found"
 Check that you're pointing at the right directory and that .gitignore isn't excluding everything.
@@ -456,7 +454,7 @@ vo /path/to/project               # Specific path
 vo . --lens architecture          # System design view
 vo . --lens security              # Security review
 vo . --lens debug                 # Debugging view
-vo . --lens minimal               # Minimal context
+vo . --lens onboarding            # New-contributor view
 
 # Budgeting
 vo . --token-budget 100k          # 100,000 tokens

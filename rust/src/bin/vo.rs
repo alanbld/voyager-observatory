@@ -20,8 +20,8 @@
 
 use clap::{Parser, ValueEnum};
 use pm_encoder::core::{
-    ContextEngine, ContextStore, DetailLevel, IntelligentPresenter, ObserversJournal,
-    SemanticDepth, SkeletonMode, ZoomConfig, ZoomTarget, DEFAULT_ALPHA,
+    ContextEngine, ContextStore, IntelligentPresenter, ObserversJournal, SkeletonMode, ZoomConfig,
+    ZoomTarget, DEFAULT_ALPHA,
 };
 use pm_encoder::server::McpServer;
 use pm_encoder::{
@@ -39,7 +39,7 @@ use std::path::{Path, PathBuf};
 #[command(version = pm_encoder::VERSION)]
 #[command(about = "🌌 Voyager Observatory: Navigate the code galaxy")]
 #[command(after_help = "EXAMPLES:
-  # Start exploring (auto-focus applies smart defaults)
+  # Start exploring
   vo .
 
   # Explore business logic constellations
@@ -70,13 +70,14 @@ struct Cli {
     #[arg(value_name = "PATH", help_heading = "🔭 VIEWFINDER (Essential)")]
     project_root: Option<PathBuf>,
 
-    /// What to look for [architecture, debug, security, onboarding, minimal]
+    /// What to look for
     #[arg(
         long = "lens",
+        value_enum,
         value_name = "LENS",
         help_heading = "🔭 VIEWFINDER (Essential)"
     )]
-    lens: Option<String>,
+    lens: Option<LensArg>,
 
     /// Output file path (default: stdout)
     #[arg(
@@ -106,15 +107,6 @@ struct Cli {
     /// Exclude files matching pattern
     #[arg(long = "exclude", value_name = "PATTERN", num_args = 0.., help_heading = "🔍 LENS FILTERS")]
     exclude: Vec<String>,
-
-    /// Analysis depth [quick, balanced, deep]
-    #[arg(
-        long = "semantic-depth",
-        value_enum,
-        default_value = "balanced",
-        help_heading = "🔍 LENS FILTERS"
-    )]
-    semantic_depth: SemanticDepthArg,
 
     /// Use cached analysis (deterministic output)
     #[arg(long = "frozen", help_heading = "🔍 LENS FILTERS")]
@@ -205,19 +197,6 @@ struct Cli {
         help_heading = "💡 EXPLORATION"
     )]
     explore: Option<String>,
-
-    /// Output detail level [summary, smart, detailed]
-    #[arg(
-        long = "detail",
-        value_enum,
-        default_value = "smart",
-        help_heading = "💡 EXPLORATION"
-    )]
-    detail: DetailLevelArg,
-
-    /// Show technical reasoning behind decisions
-    #[arg(long = "explain-reasoning", help_heading = "💡 EXPLORATION")]
-    explain_reasoning: bool,
 
     /// Show system health summary
     #[arg(long = "health", help_heading = "💡 EXPLORATION")]
@@ -345,7 +324,7 @@ struct Cli {
     // ═══════════════════════════════════════════════════════════════════════════
     // 📊 CELESTIAL CENSUS (Code Health Survey)
     // ═══════════════════════════════════════════════════════════════════════════
-    /// Survey the codebase [composition, health]
+    /// Survey the codebase [composition, health, evolution]
     #[arg(long = "survey", value_name = "MODE", help_heading = "📊 CENSUS")]
     survey: Option<SurveyMode>,
 
@@ -409,46 +388,38 @@ struct Cli {
 // New Enums for Telescope UX
 // =============================================================================
 
-/// Semantic analysis depth.
-#[derive(Debug, Clone, Copy, ValueEnum, Default)]
-enum SemanticDepthArg {
-    /// Fast pattern matching (10ms)
-    Quick,
-    /// Balanced analysis with timeout (500ms)
-    #[default]
-    Balanced,
-    /// Full semantic analysis (no timeout)
-    Deep,
+/// Which lens to view the codebase through.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum LensArg {
+    /// High-level code structure
+    Architecture,
+    /// Recent changes for debugging
+    Debug,
+    /// Security-relevant files
+    Security,
+    /// Essential files for new contributors
+    Onboarding,
 }
 
-impl From<SemanticDepthArg> for SemanticDepth {
-    fn from(arg: SemanticDepthArg) -> Self {
-        match arg {
-            SemanticDepthArg::Quick => SemanticDepth::Quick,
-            SemanticDepthArg::Balanced => SemanticDepth::Balanced,
-            SemanticDepthArg::Deep => SemanticDepth::Deep,
+impl LensArg {
+    fn as_str(&self) -> &'static str {
+        match self {
+            LensArg::Architecture => "architecture",
+            LensArg::Debug => "debug",
+            LensArg::Security => "security",
+            LensArg::Onboarding => "onboarding",
         }
     }
-}
 
-/// Output detail level.
-#[derive(Debug, Clone, Copy, ValueEnum, Default)]
-enum DetailLevelArg {
-    /// Minimal output with key insights
-    Summary,
-    /// Progressive disclosure (default)
-    #[default]
-    Smart,
-    /// Full technical details
-    Detailed,
-}
-
-impl From<DetailLevelArg> for DetailLevel {
-    fn from(arg: DetailLevelArg) -> Self {
-        match arg {
-            DetailLevelArg::Summary => DetailLevel::Summary,
-            DetailLevelArg::Smart => DetailLevel::Smart,
-            DetailLevelArg::Detailed => DetailLevel::Detailed,
+    /// Default token budget applied when this lens is used without an
+    /// explicit --token-budget, so `--lens X` alone never dumps the whole
+    /// repo (previously ~2.4M tokens for --lens onboarding on this repo).
+    fn default_budget(&self) -> &'static str {
+        match self {
+            LensArg::Architecture => "100k",
+            LensArg::Debug => "80k",
+            LensArg::Security => "80k",
+            LensArg::Onboarding => "50k",
         }
     }
 }
@@ -510,7 +481,7 @@ enum SurveyMode {
 }
 
 /// Grouping level for survey output
-#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
 enum SurveyGrouping {
     /// Group by directory (default)
     #[default]
@@ -683,6 +654,15 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
     use std::time::Instant;
 
     let start = Instant::now();
+
+    if grouping != SurveyGrouping::Constellation
+        && matches!(mode, SurveyMode::Health | SurveyMode::Evolution)
+    {
+        eprintln!(
+            "note: --by is ignored in --survey {:?} mode (only composition respects grouping)",
+            mode
+        );
+    }
 
     // Walk directory and collect files
     let ignore_patterns: Vec<String> = cli.exclude.clone();
@@ -2464,7 +2444,8 @@ fn find_project_root(start: &PathBuf) -> Option<PathBuf> {
         "go.mod",                  // Go
         "pom.xml",                 // Java Maven
         "build.gradle",            // Java Gradle
-        ".pm_encoder_config.json", // pm_encoder config
+        ".vo_config.json",         // vo config
+        ".pm_encoder_config.json", // vo config (deprecated pre-rename name)
     ];
 
     let mut current = start.clone();
@@ -2703,6 +2684,10 @@ pub fn run() {
             std::process::exit(1);
         }
 
+        if cli.lens.is_some() {
+            eprintln!("note: --lens is ignored in --survey mode");
+        }
+
         // Run the survey
         run_survey(&survey_root, survey_mode, cli.by, &cli);
         return;
@@ -2732,8 +2717,8 @@ pub fn run() {
         Some(path) => path,
         None => {
             eprintln!("Error: PROJECT_ROOT argument is required");
-            eprintln!("Usage: pm_encoder <PROJECT_ROOT>");
-            eprintln!("\nTry 'pm_encoder --help' for more information.");
+            eprintln!("Usage: vo <PROJECT_ROOT>");
+            eprintln!("\nTry 'vo --help' for more information.");
             std::process::exit(1);
         }
     };
@@ -2830,14 +2815,16 @@ pub fn run() {
     if let Some(intent_str) = &cli.explore {
         use pm_encoder::core::{ExplorationIntent, ExplorerConfig, IntentExplorer};
 
+        if cli.lens.is_some() {
+            eprintln!("note: --lens is ignored in --explore mode");
+        }
+
         // Parse intent
         let intent: ExplorationIntent = match intent_str.parse() {
             Ok(i) => i,
             Err(e) => {
+                // e already includes the valid-intents list (composition.rs's FromStr impl)
                 eprintln!("Error: {}", e);
-                eprintln!(
-                    "Valid intents: business-logic, debugging, onboarding, security, migration"
-                );
                 std::process::exit(1);
             }
         };
@@ -2893,14 +2880,10 @@ pub fn run() {
                 EncoderConfig::default()
             }
         }
+    } else if let Some(default_config) = pm_encoder::resolve_config_path(&project_root) {
+        EncoderConfig::from_file(&default_config).unwrap_or_default()
     } else {
-        // Try default config path
-        let default_config = project_root.join(".pm_encoder_config.json");
-        if default_config.exists() {
-            EncoderConfig::from_file(&default_config).unwrap_or_default()
-        } else {
-            EncoderConfig::default()
-        }
+        EncoderConfig::default()
     };
 
     // Apply CLI overrides
@@ -2948,7 +2931,7 @@ pub fn run() {
     // Apply determinism and privacy settings (v2.0.0)
     config.frozen = cli.frozen;
     config.allow_sensitive = cli.allow_sensitive;
-    config.active_lens = cli.lens.clone();
+    config.active_lens = cli.lens.map(|l| l.as_str().to_string());
 
     // Apply skeleton mode (v2.2.0)
     config.skeleton_mode = SkeletonMode::parse(&cli.skeleton).unwrap_or(SkeletonMode::Auto);
@@ -3218,6 +3201,10 @@ pub fn run() {
     // Includes Microscope Auto-Focus (v1.2.0) - auto-zoom when path is a file
     let effective_zoom = cli.zoom.as_ref().or(auto_zoom_target.as_ref());
     if let Some(zoom_str) = effective_zoom {
+        if cli.lens.is_some() {
+            eprintln!("note: --lens is ignored in zoom mode");
+        }
+
         let mut zoom_config = match parse_zoom_target(zoom_str) {
             Ok(config) => config,
             Err(e) => {
@@ -3438,7 +3425,23 @@ pub fn run() {
     }
 
     // Token budgeting mode (v0.7.0)
-    if let Some(budget_str) = &cli.token_budget {
+    // If a lens is active but no explicit budget was given, fall back to a
+    // sane per-lens default rather than serializing the whole project.
+    let default_lens_budget = match (&cli.token_budget, &cli.lens) {
+        (None, Some(lens)) => {
+            let budget = lens.default_budget();
+            eprintln!(
+                "note: using default budget {} for --lens {} (override with --token-budget)",
+                budget,
+                lens.as_str()
+            );
+            Some(budget.to_string())
+        }
+        _ => None,
+    };
+    let effective_token_budget = cli.token_budget.clone().or(default_lens_budget);
+
+    if let Some(budget_str) = &effective_token_budget {
         // Parse budget
         let budget = match parse_token_budget(budget_str) {
             Ok(b) => b,
@@ -3460,9 +3463,10 @@ pub fn run() {
         let mut lens_manager = LensManager::new();
 
         // Apply CLI lens if present (for priority groups)
-        if let Some(lens_name) = &cli.lens {
+        if let Some(lens_arg) = &cli.lens {
+            let lens_name = lens_arg.as_str();
             // Store active lens for metadata injection (v2.0.0)
-            config.active_lens = Some(lens_name.clone());
+            config.active_lens = Some(lens_name.to_string());
 
             match lens_manager.apply_lens(lens_name) {
                 Ok(applied) => {
@@ -3568,14 +3572,13 @@ pub fn run() {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("project");
-        let token_budget_parsed = cli
-            .token_budget
+        let token_budget_parsed = effective_token_budget
             .as_ref()
             .and_then(|b| parse_token_budget(b).ok());
         print_mission_log(
             project_name,
             &output,
-            cli.lens.as_deref(),
+            cli.lens.as_ref().map(|l| l.as_str()),
             token_budget_parsed,
             entries.len(),
         );
@@ -3626,7 +3629,7 @@ pub fn run() {
             print_mission_log(
                 project_name,
                 &output,
-                cli.lens.as_deref(),
+                cli.lens.as_ref().map(|l| l.as_str()),
                 token_budget_parsed,
                 file_count,
             );

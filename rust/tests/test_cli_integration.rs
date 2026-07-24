@@ -480,6 +480,34 @@ fn test_lens_architecture() {
         .stderr(predicate::str::contains("LENS: architecture"));
 }
 
+#[test]
+fn test_lens_without_budget_uses_default() {
+    let temp_dir = create_test_project();
+
+    let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
+    cmd.arg(temp_dir.path()).arg("--lens").arg("onboarding");
+
+    cmd.assert().success().stderr(predicate::str::contains(
+        "note: using default budget 50k for --lens onboarding",
+    ));
+}
+
+#[test]
+fn test_lens_with_explicit_budget_skips_default_note() {
+    let temp_dir = create_test_project();
+
+    let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
+    cmd.arg(temp_dir.path())
+        .arg("--lens")
+        .arg("onboarding")
+        .arg("--token-budget")
+        .arg("5000");
+
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("using default budget").not());
+}
+
 // ============================================================================
 // Include/Exclude Pattern Tests
 // ============================================================================

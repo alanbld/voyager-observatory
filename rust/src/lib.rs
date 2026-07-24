@@ -61,7 +61,7 @@
 use globset::Glob;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
@@ -129,7 +129,7 @@ pub struct FileEntry {
     pub size: u64,
 }
 
-/// Configuration loaded from .pm_encoder_config.json
+/// Configuration loaded from the project config file (see `resolve_config_path`)
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
     /// Patterns to ignore (e.g., ["*.pyc", ".git"])
@@ -582,7 +582,7 @@ impl ContextEngine {
 
         // Context root with attributes
         header.push_str("<context\n");
-        header.push_str("  package=\"pm_encoder\"\n");
+        header.push_str("  package=\"vo\"\n");
 
         if let Some(ref lens) = self.config.active_lens {
             header.push_str(&format!("  lens=\"{}\"\n", lens));
@@ -683,7 +683,31 @@ pub fn version() -> &'static str {
     VERSION
 }
 
-/// Load configuration from .pm_encoder_config.json
+/// Config filenames, in priority order: the current name first, then the
+/// deprecated pre-rename name (kept for one release; using it prints a
+/// warning). Update `resolve_config_path`'s callers, not this list, when
+/// the old name is finally dropped.
+const CONFIG_FILENAMES: [&str; 2] = [".vo_config.json", ".pm_encoder_config.json"];
+
+/// Resolve the project config file path in `root`, preferring the current
+/// filename over the deprecated one. Returns `None` if neither exists.
+pub fn resolve_config_path(root: &Path) -> Option<PathBuf> {
+    for (i, name) in CONFIG_FILENAMES.iter().enumerate() {
+        let path = root.join(name);
+        if path.exists() {
+            if i > 0 {
+                eprintln!(
+                    "Warning: {} is deprecated, please rename it to {}",
+                    CONFIG_FILENAMES[i], CONFIG_FILENAMES[0]
+                );
+            }
+            return Some(path);
+        }
+    }
+    None
+}
+
+/// Load configuration from the project config file (see `resolve_config_path`)
 ///
 /// # Arguments
 ///
@@ -694,12 +718,10 @@ pub fn version() -> &'static str {
 /// * `Ok(Config)` - Loaded configuration, or default if file doesn't exist
 /// * `Err(String)` - Error message if config file exists but is malformed
 pub fn load_config(root: &str) -> Result<Config, String> {
-    let config_path = Path::new(root).join(".pm_encoder_config.json");
-
-    if !config_path.exists() {
+    let Some(config_path) = resolve_config_path(Path::new(root)) else {
         // No config file, return default
         return Ok(Config::default());
-    }
+    };
 
     let content = fs::read_to_string(&config_path)
         .map_err(|e| format!("Failed to read config file: {}", e))?;
@@ -1162,7 +1184,7 @@ pub fn truncate_simple_with_options(
     if include_summary {
         let reduced_pct = (total_lines - max_lines) * 100 / total_lines;
         let marker = format!(
-            "\n\n{}\nTRUNCATED at line {}/{} ({}% reduction)\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: pm_encoder --zoom file={} */\n{}\n",
+            "\n\n{}\nTRUNCATED at line {}/{} ({}% reduction)\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: vo --zoom file={} */\n{}\n",
             "=".repeat(70),
             max_lines,
             total_lines,
@@ -1275,7 +1297,7 @@ fn truncate_with_gap_markers(
         }
 
         marker.push_str(&format!(
-            "\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: pm_encoder --zoom file={} */\n{}\n",
+            "\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: vo --zoom file={} */\n{}\n",
             file_path,
             file_path,
             "=".repeat(70)
@@ -1353,7 +1375,7 @@ fn truncate_markdown(
 
         // Empty line before "To get full content" (matches Python's marker format)
         marker.push_str(&format!(
-            "\n\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: pm_encoder --zoom file={} */\n{}\n",
+            "\n\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: vo --zoom file={} */\n{}\n",
             file_path,
             file_path,
             "=".repeat(70)
@@ -2083,8 +2105,8 @@ fn serialize_claude_xml_entry(
 
 /// Serialize a project directory into the Plus/Minus format
 ///
-/// This function automatically loads configuration from `.pm_encoder_config.json`
-/// if it exists in the root directory.
+/// This function automatically loads configuration from the project config
+/// file (see `resolve_config_path`) if it exists in the root directory.
 ///
 /// # Arguments
 ///
@@ -2105,8 +2127,7 @@ fn serialize_claude_xml_entry(
 /// ```
 pub fn serialize_project(root: &str) -> Result<String, String> {
     // Try to load config from the project directory
-    let config_path = Path::new(root).join(".pm_encoder_config.json");
-    let config = if config_path.exists() {
+    let config = if let Some(config_path) = resolve_config_path(Path::new(root)) {
         EncoderConfig::from_file(&config_path).unwrap_or_default()
     } else {
         EncoderConfig::default()
@@ -2216,7 +2237,7 @@ pub fn serialize_entries_claude_xml(
 
     // Build XmlConfig from EncoderConfig
     let xml_config = XmlConfig {
-        package: "pm_encoder".to_string(),
+        package: "vo".to_string(),
         version: VERSION.to_string(),
         lens: config.active_lens.clone(),
         token_budget: config.token_budget,
@@ -2335,7 +2356,7 @@ pub fn serialize_entries_claude_xml_with_report(
 
     // Build XmlConfig from EncoderConfig - use report.used for accurate utilized count
     let xml_config = XmlConfig {
-        package: "pm_encoder".to_string(),
+        package: "vo".to_string(),
         version: VERSION.to_string(),
         lens: config.active_lens.clone(),
         token_budget: Some(report.budget),
@@ -2425,7 +2446,7 @@ pub fn serialize_entries_claude_xml_with_report(
 
         // Build zoom command for truncated files
         let zoom_cmd = if truncated {
-            Some(format!("pm_encoder --zoom file={}", entry.path))
+            Some(format!("vo --zoom file={}", entry.path))
         } else {
             None
         };
@@ -2496,7 +2517,7 @@ fn detect_language_from_content(content: &str) -> String {
 pub fn generate_claude_xml_header(config: &EncoderConfig, files: &[FileEntry]) -> String {
     let mut header = String::new();
     header.push_str("<context\n");
-    header.push_str("  package=\"pm_encoder\"\n");
+    header.push_str("  package=\"vo\"\n");
 
     if let Some(ref lens) = config.active_lens {
         header.push_str(&format!("  lens=\"{}\"\n", lens));
@@ -4849,6 +4870,42 @@ class MyClass:
         assert!(result.unwrap_err().contains("parse"));
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_resolve_config_path_prefers_new_name() {
+        use std::fs;
+
+        let temp_dir = std::env::temp_dir().join("vo_test_config_priority");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        // Only the deprecated name exists - still found.
+        fs::write(temp_dir.join(".pm_encoder_config.json"), "{}").unwrap();
+        assert_eq!(
+            resolve_config_path(&temp_dir),
+            Some(temp_dir.join(".pm_encoder_config.json"))
+        );
+
+        // Once the new name also exists, it wins.
+        fs::write(temp_dir.join(".vo_config.json"), "{}").unwrap();
+        assert_eq!(
+            resolve_config_path(&temp_dir),
+            Some(temp_dir.join(".vo_config.json"))
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_resolve_config_path_none_when_absent() {
+        let temp_dir = std::env::temp_dir().join("vo_test_config_absent");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        assert_eq!(resolve_config_path(&temp_dir), None);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[test]
