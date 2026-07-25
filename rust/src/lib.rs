@@ -2348,6 +2348,26 @@ pub fn serialize_entries_claude_xml(
 pub fn serialize_entries_claude_xml_with_report(
     config: &EncoderConfig,
     files: &[FileEntry],
+    report: &mut crate::budgeting::BudgetReport,
+) -> Result<String, String> {
+    // The `utilized_tokens` header is written before file content (the
+    // XmlWriter streams), so the pre-serialization estimate baked into
+    // `report.used` may not match the real rendered size once XML wrapping
+    // overhead is accounted for. Render once to find out the real size, then
+    // re-render with the corrected value if it drifted, so the number
+    // embedded in the output and the one printed to stderr always agree.
+    let draft = render_claude_xml(config, files, report)?;
+    let real_used = crate::budgeting::TokenEstimator::estimate_tokens(&draft);
+    if real_used == report.used {
+        return Ok(draft);
+    }
+    report.used = real_used;
+    render_claude_xml(config, files, report)
+}
+
+fn render_claude_xml(
+    config: &EncoderConfig,
+    files: &[FileEntry],
     report: &crate::budgeting::BudgetReport,
 ) -> Result<String, String> {
     use crate::formats::{AttentionEntry, XmlConfig, XmlWriter};
@@ -5282,6 +5302,57 @@ class MyClass:
         assert!(result.is_ok());
         let xml = result.unwrap();
         assert!(xml.contains("truncated=\"true\"") || xml.contains("long.py"));
+    }
+
+    /// Roadmap 2.1 ("one token counter"): the budget report's `used` field,
+    /// the number embedded in the rendered output's `utilized_tokens`
+    /// attribute, and a fresh estimate off the rendered bytes must all agree
+    /// — not three independent numbers for the same run.
+    #[test]
+    fn test_budget_report_used_matches_rendered_claude_xml() {
+        let lens_manager = LensManager::new();
+        let files: Vec<(String, String)> = (0..8)
+            .map(|i| (format!("src/file{}.rs", i), "x".repeat(500).repeat(i + 1)))
+            .collect();
+        let budget = 2000;
+
+        let (selected, mut report) = apply_token_budget(files, budget, &lens_manager, "drop");
+        let entries: Vec<FileEntry> = selected
+            .into_iter()
+            .map(|(path, content)| FileEntry {
+                md5: calculate_md5(&content),
+                size: content.len() as u64,
+                path,
+                content,
+                mtime: 0,
+                ctime: 0,
+            })
+            .collect();
+
+        let config = EncoderConfig::default();
+        let xml = serialize_entries_claude_xml_with_report(&config, &entries, &mut report)
+            .expect("serialization should succeed");
+
+        let rendered_estimate = TokenEstimator::estimate_tokens(&xml);
+        let drift = (rendered_estimate as i64 - report.used as i64).unsigned_abs() as f64;
+        assert!(
+            (drift / budget as f64) < 0.01,
+            "report.used ({}) drifted from the rendered output's estimate ({}) by more than 1% of budget ({})",
+            report.used,
+            rendered_estimate,
+            budget
+        );
+
+        // The number baked into the output itself must match too, not just
+        // the in-memory report — otherwise the file we hand to the LLM lies
+        // about its own size even though stderr reports the truth.
+        let embedded = format!("utilized=\"{}\"", report.used);
+        assert!(
+            xml.contains(&embedded),
+            "expected XML to embed utilized_tokens=\"{}\", got:\n{}",
+            report.used,
+            xml
+        );
     }
 }
 

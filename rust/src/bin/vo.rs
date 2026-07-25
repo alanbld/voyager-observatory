@@ -26,6 +26,7 @@ use pm_encoder::core::{
 use pm_encoder::server::McpServer;
 use pm_encoder::{
     self, apply_token_budget, parse_token_budget, EncoderConfig, LensManager, OutputFormat,
+    TokenEstimator,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -2391,10 +2392,12 @@ fn format_mass(lines: usize) -> String {
 }
 
 /// Print Context Health summary to stderr
-fn print_context_health(output: &str, file_count: usize) {
-    // Calculate total tokens (rough estimate: 4 chars per token)
-    let total_tokens = output.len() / 4;
-
+///
+/// `total_tokens` is supplied by the caller (the recalibrated `BudgetReport.used`
+/// when a budget was applied, or `TokenEstimator::estimate_tokens(output)`
+/// otherwise) rather than re-derived here, so this always agrees with the
+/// budget report and mission log for the same run.
+fn print_context_health(output: &str, file_count: usize, total_tokens: usize) {
     // Count zoom affordances
     let zoom_count = output.matches("ZOOM_AFFORDANCE").count();
 
@@ -2479,12 +2482,18 @@ fn find_project_root(start: &PathBuf) -> Option<PathBuf> {
 /// - Fuel gauge (token usage)
 /// - Points of interest
 /// - Transmission status
+///
+/// `tokens_used` is supplied by the caller (the recalibrated `BudgetReport.used`
+/// when a budget was applied, or `TokenEstimator::estimate_tokens(output)`
+/// otherwise) rather than re-derived here, so the fuel gauge always agrees
+/// with the budget report and context health for the same run.
 fn print_mission_log(
     project_name: &str,
     output: &str,
     lens: Option<&str>,
     token_budget: Option<usize>,
     file_count: usize,
+    tokens_used: usize,
 ) {
     let presenter = IntelligentPresenter::new();
 
@@ -2526,8 +2535,8 @@ fn print_mission_log(
     // Detect hemispheres
     let hemispheres = IntelligentPresenter::detect_hemispheres(&languages);
 
-    // Calculate token usage
-    let tokens_used = output.len() / 4; // Rough estimate
+    // Token usage is supplied by the caller (see fn doc) so it agrees with
+    // the budget report and context health for the same run.
     let budget = token_budget.unwrap_or(tokens_used);
 
     // Determine lens confidence (default high if lens was applied)
@@ -3508,10 +3517,7 @@ pub fn run() {
             BudgetStrategy::Truncate => "truncate",
             BudgetStrategy::Hybrid => "hybrid",
         };
-        let (selected, report) = apply_token_budget(files, budget, &lens_manager, strategy_str);
-
-        // Print budget report to stderr
-        report.print_report();
+        let (selected, mut report) = apply_token_budget(files, budget, &lens_manager, strategy_str);
 
         // Build file entries for serialization
         let entries: Vec<pm_encoder::FileEntry> = selected
@@ -3529,8 +3535,9 @@ pub fn run() {
         // Serialize selected files with configured format and truncation
         let output = if config.output_format == OutputFormat::ClaudeXml {
             // Use streaming XmlWriter for ClaudeXml format with budget report (Fractal Protocol v2.0)
-            // This includes hotspots/coldspots in attention_map from BudgetReport
-            pm_encoder::serialize_entries_claude_xml_with_report(&config, &entries, &report)
+            // This includes hotspots/coldspots in attention_map from BudgetReport.
+            // Recalibrates report.used against the real rendered size internally.
+            pm_encoder::serialize_entries_claude_xml_with_report(&config, &entries, &mut report)
                 .unwrap_or_else(|e| {
                     eprintln!("Error serializing XML: {}", e);
                     std::process::exit(1);
@@ -3549,6 +3556,15 @@ pub fn run() {
             output
         };
 
+        // Recalibrate the report against the real rendered output (no-op for
+        // ClaudeXml, which already recalibrated itself above) so the budget
+        // report, context health, and mission log all agree with each other
+        // and with what was actually produced.
+        report.recalibrate(&output);
+
+        // Print budget report to stderr, now reflecting the real token count
+        report.print_report();
+
         // Write output
         if let Some(output_path) = cli.output.clone() {
             match std::fs::write(&output_path, &output) {
@@ -3564,7 +3580,7 @@ pub fn run() {
 
         // Print Context Health if requested
         if cli.health {
-            print_context_health(&output, entries.len());
+            print_context_health(&output, entries.len(), report.used);
         }
 
         // Print Voyager Mission Log (to stderr)
@@ -3581,6 +3597,7 @@ pub fn run() {
             cli.lens.as_ref().map(|l| l.as_str()),
             token_budget_parsed,
             entries.len(),
+            report.used,
         );
         return;
     }
@@ -3609,11 +3626,16 @@ pub fn run() {
                 print!("{}", output);
             }
 
+            // No BudgetReport exists in this (unbudgeted) path, but we still
+            // funnel through the one shared estimator rather than each
+            // caller re-deriving output.len() / 4 independently.
+            let total_tokens = TokenEstimator::estimate_tokens(&output);
+
             // Print Context Health if requested
             if cli.health {
                 // Count files in output (each file starts with "++++++++++ ")
                 let file_count = output.matches("++++++++++ ").count();
-                print_context_health(&output, file_count);
+                print_context_health(&output, file_count, total_tokens);
             }
 
             // Print Voyager Mission Log (to stderr)
@@ -3632,6 +3654,7 @@ pub fn run() {
                 cli.lens.as_ref().map(|l| l.as_str()),
                 token_budget_parsed,
                 file_count,
+                total_tokens,
             );
         }
         Err(e) => {

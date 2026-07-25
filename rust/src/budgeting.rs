@@ -150,6 +150,19 @@ impl BudgetReport {
         self.budget.saturating_sub(self.used)
     }
 
+    /// Recalibrate `used` against the actually rendered output.
+    ///
+    /// `used` starts out as the sum of per-file estimates made *before*
+    /// serialization (needed to decide what fits). Different output formats
+    /// (plain PM markers vs. Claude XML wrapping) add different overhead, so
+    /// that estimate can drift from the real thing. Callers that have the
+    /// final rendered string should call this so every downstream report
+    /// (budget report, context health, mission log) agrees with what was
+    /// actually produced, instead of each re-deriving its own number.
+    pub fn recalibrate(&mut self, rendered_output: &str) {
+        self.used = TokenEstimator::estimate_tokens(rendered_output);
+    }
+
     /// Print a formatted budget report to stderr
     pub fn print_report(&self) {
         eprintln!("{}", "=".repeat(70));
