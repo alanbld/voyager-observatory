@@ -5316,7 +5316,13 @@ class MyClass:
             .collect();
         let budget = 2000;
 
-        let (selected, mut report) = apply_token_budget(files, budget, &lens_manager, "drop");
+        let (selected, mut report) = apply_token_budget(
+            files,
+            budget,
+            &lens_manager,
+            "drop",
+            OutputFormat::ClaudeXml,
+        );
         let entries: Vec<FileEntry> = selected
             .into_iter()
             .map(|(path, content)| FileEntry {

@@ -17,7 +17,7 @@ use pm_encoder::core::{
     ContextEngine, EncoderConfig, FileTier, RelatedContext, SymbolResolver, UsageFinder,
     ZoomConfig, ZoomDepth, ZoomTarget,
 };
-use pm_encoder::{apply_token_budget, LensManager};
+use pm_encoder::{apply_token_budget, LensManager, OutputFormat};
 
 /// Create a test project with Core, Tests, and Config files
 fn create_test_project() -> TempDir {
@@ -200,7 +200,8 @@ fn test_tiered_budget_prioritizes_core() {
     let lens_manager = LensManager::new();
 
     // Small budget - should prioritize Core files
-    let (selected, _report) = apply_token_budget(files, 100, &lens_manager, "drop");
+    let (selected, _report) =
+        apply_token_budget(files, 100, &lens_manager, "drop", OutputFormat::PlusMinus);
 
     // Get selected paths
     let selected_paths: Vec<&str> = selected.iter().map(|(p, _)| p.as_str()).collect();
@@ -255,7 +256,8 @@ fn test_budget_drops_other_before_core() {
     let lens_manager = LensManager::new();
 
     // Budget for ~2 files
-    let (selected, report) = apply_token_budget(files, 120, &lens_manager, "drop");
+    let (selected, report) =
+        apply_token_budget(files, 120, &lens_manager, "drop", OutputFormat::PlusMinus);
 
     // Should have dropped some files
     if report.dropped_count > 0 {

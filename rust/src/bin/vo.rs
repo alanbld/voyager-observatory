@@ -3517,7 +3517,13 @@ pub fn run() {
             BudgetStrategy::Truncate => "truncate",
             BudgetStrategy::Hybrid => "hybrid",
         };
-        let (selected, mut report) = apply_token_budget(files, budget, &lens_manager, strategy_str);
+        let (selected, mut report) = apply_token_budget(
+            files,
+            budget,
+            &lens_manager,
+            strategy_str,
+            config.output_format,
+        );
 
         // Build file entries for serialization
         let entries: Vec<pm_encoder::FileEntry> = selected

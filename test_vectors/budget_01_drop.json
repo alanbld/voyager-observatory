@@ -22,13 +22,14 @@
     "budget": 100,
     "files_selected": [
       "high_priority.py",
-      "medium_priority.py",
       "low_priority_test.py"
     ],
-    "files_dropped": [],
-    "used_tokens": 90,
-    "dropped_count": 0,
-    "selected_count": 3,
+    "files_dropped": [
+      "medium_priority.py"
+    ],
+    "used_tokens": 81,
+    "dropped_count": 1,
+    "selected_count": 2,
     "behavior": [
       "Files sorted by priority DESC, then path ASC",
       "High priority files included first",
@@ -38,6 +39,7 @@
   "metadata": {
     "created_by": "generate_budget_vectors.py",
     "python_version": "1.7.0",
-    "purpose": "Rust v0.8.0 budget drop strategy validation"
+    "purpose": "Rust v0.8.0 budget drop strategy validation",
+    "recalibrated": "2026-07 (roadmap 2.1 Q10 follow-up): expected values were fitted against a flat, uncalibrated per-file overhead constant that didn't match the real PlusMinus serializer (see TokenEstimator::estimate_file_tokens_for_format). Recalibrated to the real serializer's output. Also note: test_budget_01_drop's Rust harness never actually feeds this vector's `priorities` map into the LensManager, so selection here is really tie-broken by path ASC (all three files land in the same tier/priority), not by the declared priorities — the resulting order (high, low, medium alphabetically) is what dropped medium_priority.py rather than the lowest declared priority. That's a pre-existing gap in the test harness, out of scope for this recalibration."
   }
 }

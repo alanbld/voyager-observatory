@@ -1298,7 +1298,7 @@ fn test_vector_loading_works() {
 // Budget Tests (v1.7.0 Intelligence Layer) - The Twins Protocol
 // ============================================================================
 
-use pm_encoder::{apply_token_budget, parse_token_budget, LensManager};
+use pm_encoder::{apply_token_budget, parse_token_budget, LensManager, OutputFormat};
 use std::path::Path;
 
 /// Budget test vector structure
@@ -1379,6 +1379,7 @@ fn test_budget_01_drop() {
         vector.input.budget,
         &lens_manager,
         &vector.input.strategy,
+        OutputFormat::PlusMinus,
     );
 
     // Verify strategy
@@ -1436,6 +1437,7 @@ fn test_budget_02_hybrid() {
         vector.input.budget,
         &lens_manager,
         &vector.input.strategy,
+        OutputFormat::PlusMinus,
     );
 
     // Verify strategy
@@ -1479,6 +1481,7 @@ fn test_budget_03_lens_priority() {
         vector.input.budget,
         &lens_manager,
         &vector.input.strategy,
+        OutputFormat::PlusMinus,
     );
 
     // Verify strategy

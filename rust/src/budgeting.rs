@@ -14,6 +14,7 @@
 use crate::core::engine::FileTier;
 use crate::lenses::LensManager;
 use crate::truncate_structure;
+use crate::OutputFormat;
 use std::path::Path;
 
 /// Threshold for hybrid strategy: files > 10% of budget get auto-truncated
@@ -34,14 +35,41 @@ impl TokenEstimator {
         content.len() / 4
     }
 
-    /// Estimate tokens for a file including PM format overhead
+    /// Estimate tokens for a file as it will actually be rendered in `format`.
     ///
-    /// Accounts for the ++++/---- markers and path repetition
-    pub fn estimate_file_tokens(path: &Path, content: &str) -> usize {
-        let path_str = path.to_string_lossy();
-        // PM format: "++++++++++ path ++++++++++\n" + content + "\n---------- path checksum path ----------\n"
-        let overhead = 20 + path_str.len() * 2 + 50; // Approximate overhead
+    /// Each format wraps content in a fixed template plus the path repeated
+    /// a format-specific number of times; these constants are the real
+    /// measured overhead of each serializer (untruncated, no metadata),
+    /// not a guess — see `test_format_overhead_matches_real_serializers`,
+    /// which fails loudly if a serializer's template ever drifts from these
+    /// numbers instead of silently reintroducing the drift this closes.
+    ///
+    /// This is DECISIONS.md Q10's actual fix for the I1 finding: a single
+    /// PM-shaped flat constant badly undercounts real Claude-XML overhead,
+    /// which meant budget *selection* (not just reporting, see roadmap 2.1)
+    /// could let a file in that wouldn't really fit once rendered.
+    pub fn estimate_file_tokens_for_format(
+        path: &Path,
+        content: &str,
+        format: OutputFormat,
+    ) -> usize {
+        let path_len = path.to_string_lossy().len();
+        let (base, per_path_char) = match format {
+            OutputFormat::PlusMinus => (81, 3),
+            OutputFormat::Xml => (63, 1),
+            OutputFormat::Markdown => (61, 1),
+            OutputFormat::ClaudeXml => (164, 1),
+        };
+        let overhead = base + per_path_char * path_len;
         Self::estimate_tokens(content) + (overhead / 4)
+    }
+
+    /// Estimate tokens for a file including PM format overhead.
+    ///
+    /// Kept for callers that don't know (or care about) the eventual output
+    /// format; prefer `estimate_file_tokens_for_format` when it's known.
+    pub fn estimate_file_tokens(path: &Path, content: &str) -> usize {
+        Self::estimate_file_tokens_for_format(path, content, OutputFormat::PlusMinus)
     }
 
     /// Get the estimation method name
@@ -264,6 +292,8 @@ fn try_truncate_to_structure(path: &str, content: &str) -> (String, bool) {
 /// * `budget` - Maximum tokens allowed
 /// * `lens_manager` - LensManager for priority resolution
 /// * `strategy` - Budget strategy: "drop", "truncate", or "hybrid"
+/// * `format` - Output format the selection estimate should be calibrated
+///   against, so selection matches what will actually be rendered
 ///
 /// # Strategies
 ///
@@ -279,6 +309,7 @@ pub fn apply_token_budget(
     budget: usize,
     lens_manager: &LensManager,
     strategy: &str,
+    format: OutputFormat,
 ) -> (Vec<(String, String)>, BudgetReport) {
     // Step 1: Calculate tokens and get priorities, applying group-based truncation
     let mut file_data: Vec<FileData> = files
@@ -288,7 +319,8 @@ pub fn apply_token_budget(
             let group_config = lens_manager.get_file_group_config(path_obj);
 
             // Calculate original tokens before any truncation
-            let original_tokens = TokenEstimator::estimate_file_tokens(path_obj, &content);
+            let original_tokens =
+                TokenEstimator::estimate_file_tokens_for_format(path_obj, &content, format);
 
             // Apply group-level truncation if specified (e.g., structure mode for *.py)
             let (final_content, method) = if let Some(ref mode) = group_config.truncate_mode {
@@ -306,7 +338,8 @@ pub fn apply_token_budget(
                 (content, "full".to_string())
             };
 
-            let tokens = TokenEstimator::estimate_file_tokens(path_obj, &final_content);
+            let tokens =
+                TokenEstimator::estimate_file_tokens_for_format(path_obj, &final_content, format);
 
             FileData {
                 path,
@@ -346,8 +379,11 @@ pub fn apply_token_budget(
                     try_truncate_to_structure(&fd.path, &fd.content);
                 if was_truncated {
                     let path_obj = Path::new(&fd.path);
-                    let new_tokens =
-                        TokenEstimator::estimate_file_tokens(path_obj, &truncated_content);
+                    let new_tokens = TokenEstimator::estimate_file_tokens_for_format(
+                        path_obj,
+                        &truncated_content,
+                        format,
+                    );
                     fd.content = truncated_content;
                     fd.tokens = new_tokens;
                     fd.method = "truncated".to_string();
@@ -380,8 +416,11 @@ pub fn apply_token_budget(
                     try_truncate_to_structure(&fd.path, &fd.content);
                 if was_truncated {
                     let path_obj = Path::new(&fd.path);
-                    let new_tokens =
-                        TokenEstimator::estimate_file_tokens(path_obj, &truncated_content);
+                    let new_tokens = TokenEstimator::estimate_file_tokens_for_format(
+                        path_obj,
+                        &truncated_content,
+                        format,
+                    );
                     if total_tokens + new_tokens <= budget {
                         // Truncated version fits!
                         truncated_count += 1;
@@ -492,7 +531,8 @@ mod tests {
             ("small.py".to_string(), "x".repeat(100)),   // ~25 tokens
             ("large.py".to_string(), "y".repeat(10000)), // ~2500 tokens
         ];
-        let (selected, report) = apply_token_budget(files, 500, &lens_manager, "drop");
+        let (selected, report) =
+            apply_token_budget(files, 500, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // Small file should be included, large should be dropped
         assert_eq!(selected.len(), 1);
@@ -526,7 +566,13 @@ mod tests {
         let files = vec![("test.py".to_string(), python_content)];
 
         // Budget small enough that full file doesn't fit
-        let (selected, report) = apply_token_budget(files, 50, &lens_manager, "truncate");
+        let (selected, report) = apply_token_budget(
+            files,
+            50,
+            &lens_manager,
+            "truncate",
+            OutputFormat::PlusMinus,
+        );
 
         // File should be included (truncated) or dropped depending on truncated size
         assert_eq!(report.strategy, "truncate");
@@ -569,7 +615,13 @@ mod tests {
         ];
 
         // Budget where large file > 10%
-        let (selected, report) = apply_token_budget(files, 1000, &lens_manager, "hybrid");
+        let (selected, report) = apply_token_budget(
+            files,
+            1000,
+            &lens_manager,
+            "hybrid",
+            OutputFormat::PlusMinus,
+        );
 
         // Both files should potentially be included
         assert_eq!(report.strategy, "hybrid");
@@ -582,14 +634,31 @@ mod tests {
         let lens_manager = LensManager::new();
         let files = vec![("test.py".to_string(), "x = 1".to_string())];
 
-        let (_, report_drop) = apply_token_budget(files.clone(), 1000, &lens_manager, "drop");
+        let (_, report_drop) = apply_token_budget(
+            files.clone(),
+            1000,
+            &lens_manager,
+            "drop",
+            OutputFormat::PlusMinus,
+        );
         assert_eq!(report_drop.strategy, "drop");
 
-        let (_, report_truncate) =
-            apply_token_budget(files.clone(), 1000, &lens_manager, "truncate");
+        let (_, report_truncate) = apply_token_budget(
+            files.clone(),
+            1000,
+            &lens_manager,
+            "truncate",
+            OutputFormat::PlusMinus,
+        );
         assert_eq!(report_truncate.strategy, "truncate");
 
-        let (_, report_hybrid) = apply_token_budget(files, 1000, &lens_manager, "hybrid");
+        let (_, report_hybrid) = apply_token_budget(
+            files,
+            1000,
+            &lens_manager,
+            "hybrid",
+            OutputFormat::PlusMinus,
+        );
         assert_eq!(report_hybrid.strategy, "hybrid");
     }
 
@@ -714,7 +783,8 @@ mod tests {
             ("a.py".to_string(), "x".repeat(100)), // ~25 tokens + overhead
             ("b.py".to_string(), "y".repeat(100)),
         ];
-        let (selected, report) = apply_token_budget(files, 100, &lens_manager, "drop");
+        let (selected, report) =
+            apply_token_budget(files, 100, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // At least one file should fit
         assert!(selected.len() >= 1);
@@ -725,7 +795,8 @@ mod tests {
     fn test_empty_file_list() {
         let lens_manager = LensManager::new();
         let files: Vec<(String, String)> = vec![];
-        let (selected, report) = apply_token_budget(files, 1000, &lens_manager, "drop");
+        let (selected, report) =
+            apply_token_budget(files, 1000, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         assert_eq!(selected.len(), 0);
         assert_eq!(report.selected_count, 0);
@@ -746,7 +817,8 @@ mod tests {
         ];
 
         // With limited budget, high priority files should be kept
-        let (selected, _report) = apply_token_budget(files, 200, &lens_manager, "drop");
+        let (selected, _report) =
+            apply_token_budget(files, 200, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // Should have selected at least some files
         assert!(!selected.is_empty());
@@ -773,7 +845,13 @@ mod tests {
         ];
 
         // Very small budget
-        let (_selected, report) = apply_token_budget(files, 10, &lens_manager, "truncate");
+        let (_selected, report) = apply_token_budget(
+            files,
+            10,
+            &lens_manager,
+            "truncate",
+            OutputFormat::PlusMinus,
+        );
 
         // Strategy should still be recorded
         assert_eq!(report.strategy, "truncate");
@@ -793,7 +871,8 @@ mod tests {
             ("medium.py".to_string(), python_content.repeat(5)),
         ];
 
-        let (_selected, report) = apply_token_budget(files, 500, &lens_manager, "hybrid");
+        let (_selected, report) =
+            apply_token_budget(files, 500, &lens_manager, "hybrid", OutputFormat::PlusMinus);
         assert_eq!(report.strategy, "hybrid");
     }
 
@@ -809,7 +888,8 @@ mod tests {
         ];
 
         // Budget for only 2 files
-        let (selected, _report) = apply_token_budget(files, 80, &lens_manager, "drop");
+        let (selected, _report) =
+            apply_token_budget(files, 80, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // Core file (src/main.rs) should be selected first
         assert!(!selected.is_empty());
@@ -838,7 +918,8 @@ mod tests {
         ];
 
         // Budget for 3 files (drops 1)
-        let (selected, _report) = apply_token_budget(files, 100, &lens_manager, "drop");
+        let (selected, _report) =
+            apply_token_budget(files, 100, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         let selected_paths: Vec<&str> = selected.iter().map(|(p, _)| p.as_str()).collect();
 
@@ -1008,7 +1089,8 @@ mod tests {
             "def main():\n    pass".to_string(),
         )];
 
-        let (selected, report) = apply_token_budget(files, 1000, &lens_manager, "drop");
+        let (selected, report) =
+            apply_token_budget(files, 1000, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // File should be selected
         assert!(!selected.is_empty());
@@ -1025,7 +1107,13 @@ mod tests {
             ("c.py".to_string(), "z = 3".to_string()),
         ];
 
-        let (selected, report) = apply_token_budget(files, 1000, &lens_manager, "hybrid");
+        let (selected, report) = apply_token_budget(
+            files,
+            1000,
+            &lens_manager,
+            "hybrid",
+            OutputFormat::PlusMinus,
+        );
 
         // All small files should be included without truncation
         assert_eq!(selected.len(), 3);
@@ -1084,13 +1172,101 @@ mod tests {
             ("src/b.py".to_string(), "b".to_string()),
         ];
 
-        let (selected1, _) = apply_token_budget(files.clone(), 1000, &lens_manager, "drop");
-        let (selected2, _) = apply_token_budget(files, 1000, &lens_manager, "drop");
+        let (selected1, _) = apply_token_budget(
+            files.clone(),
+            1000,
+            &lens_manager,
+            "drop",
+            OutputFormat::PlusMinus,
+        );
+        let (selected2, _) =
+            apply_token_budget(files, 1000, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // Order should be deterministic (sorted by path)
         assert_eq!(selected1.len(), selected2.len());
         for (f1, f2) in selected1.iter().zip(selected2.iter()) {
             assert_eq!(f1.0, f2.0);
+        }
+    }
+
+    /// DECISIONS.md Q10's calibration constants in `estimate_file_tokens_for_format`
+    /// are real measurements of the actual serializers, not guesses. If a
+    /// serializer's template ever changes, this fails loudly instead of
+    /// silently reintroducing the "flat constant undercounts real overhead"
+    /// drift that caused Claude-XML files to be selected as if they fit
+    /// when they wouldn't once rendered.
+    #[test]
+    fn test_format_overhead_matches_real_serializers() {
+        use crate::formats::{XmlConfig, XmlWriter};
+        use crate::{calculate_md5, serialize_file_with_format, FileEntry};
+
+        for path_str in ["a.rs", "src/some/nested/path/file.rs"] {
+            let path = Path::new(path_str);
+
+            for format in [
+                OutputFormat::PlusMinus,
+                OutputFormat::Xml,
+                OutputFormat::Markdown,
+            ] {
+                let entry = FileEntry {
+                    path: path_str.to_string(),
+                    content: String::new(),
+                    md5: calculate_md5(""),
+                    size: 0,
+                    mtime: 0,
+                    ctime: 0,
+                };
+                let real_overhead_tokens =
+                    serialize_file_with_format(&entry, 0, "none", format).len() / 4;
+                let estimated = TokenEstimator::estimate_file_tokens_for_format(path, "", format);
+                assert_eq!(
+                    estimated, real_overhead_tokens,
+                    "{:?} overhead drifted from the real serializer for {}: \
+                     estimated {} tokens, real output is {} tokens. \
+                     Recalibrate the (base, per_path_char) constants.",
+                    format, path_str, estimated, real_overhead_tokens
+                );
+            }
+
+            // ClaudeXml goes through the streaming XmlWriter, not
+            // serialize_file_with_format — measure it the same way 2.1's
+            // two-pass render does.
+            let mut buf = Vec::new();
+            let xml_config = XmlConfig {
+                package: "vo".to_string(),
+                version: "0".to_string(),
+                lens: None,
+                token_budget: None,
+                utilized_tokens: None,
+                frozen: false,
+                allow_sensitive: true,
+                snapshot_id: None,
+            };
+            let mut writer = XmlWriter::new(&mut buf, xml_config);
+            writer.write_files_start().unwrap();
+            writer
+                .write_file(
+                    path_str,
+                    "rust",
+                    &calculate_md5(""),
+                    50,
+                    "",
+                    false,
+                    None,
+                    None,
+                )
+                .unwrap();
+            writer.write_files_end().unwrap();
+            let real_overhead_tokens = buf.len() / 4;
+            let estimated =
+                TokenEstimator::estimate_file_tokens_for_format(path, "", OutputFormat::ClaudeXml);
+            assert_eq!(
+                estimated, real_overhead_tokens,
+                "ClaudeXml overhead drifted from the real XmlWriter for {}: \
+                 estimated {} tokens, real output is {} tokens. \
+                 Recalibrate the (base, per_path_char) constants.",
+                path_str, estimated, real_overhead_tokens
+            );
         }
     }
 }
