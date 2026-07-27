@@ -14,8 +14,8 @@ use pm_encoder::core::{
     NebulaeCountMetric, StarCountMetric,
 };
 use voyager_ast::ir::{
-    Comment, CommentKind, Declaration, DeclarationKind, File, LanguageId, Span, UnknownNode,
-    Visibility,
+    Block, Comment, CommentKind, ControlFlow, ControlFlowKind, Declaration, DeclarationKind, File,
+    LanguageId, Span, UnknownNode, Visibility,
 };
 
 // =============================================================================
@@ -78,45 +78,34 @@ fn create_file_with_dark_matter() -> File {
     file
 }
 
+/// Build `depth` levels of nested `if` control flow, innermost first, so
+/// the resulting `Block` has real control-flow nesting of exactly `depth`
+/// (as opposed to declarations nested in each other, which measures
+/// something unrelated to how hard a function body is to read).
+fn nested_if_block(depth: usize) -> Block {
+    let mut block = Block::default();
+    if depth > 0 {
+        block.control_flow.push(ControlFlow {
+            kind: ControlFlowKind::If,
+            span: Span::new(0, 10, 1, 1),
+            condition_span: None,
+            branches: vec![nested_if_block(depth - 1)],
+        });
+    }
+    block
+}
+
 fn create_file_with_deep_nesting() -> File {
     let mut file = File::new("nested.rs".to_string(), LanguageId::Rust);
     file.span = Span::new(0, 1000, 1, 50);
 
-    // Create deeply nested structure (> 4 levels)
+    // Real control-flow nesting 5 levels deep (> the volcanic threshold of 4).
     let mut outer = Declaration::new(
         "level1".to_string(),
         DeclarationKind::Function,
         Span::new(0, 900, 1, 45),
     );
-
-    let mut level2 = Declaration::new(
-        "level2".to_string(),
-        DeclarationKind::Method,
-        Span::new(10, 800, 2, 40),
-    );
-
-    let mut level3 = Declaration::new(
-        "level3".to_string(),
-        DeclarationKind::Method,
-        Span::new(20, 700, 3, 35),
-    );
-
-    let mut level4 = Declaration::new(
-        "level4".to_string(),
-        DeclarationKind::Method,
-        Span::new(30, 600, 4, 30),
-    );
-
-    let level5 = Declaration::new(
-        "level5".to_string(),
-        DeclarationKind::Method,
-        Span::new(40, 500, 5, 25),
-    );
-
-    level4.children.push(level5);
-    level3.children.push(level4);
-    level2.children.push(level3);
-    outer.children.push(level2);
+    outer.body = Some(nested_if_block(5));
     file.declarations.push(outer);
 
     file
@@ -188,6 +177,84 @@ fn test_clean_file_no_dark_matter() {
     assert_eq!(
         metrics.dark_matter.volcanic_regions, 0,
         "Clean file should have no volcanic regions"
+    );
+}
+
+#[test]
+fn test_cyclomatic_complexity_from_control_flow() {
+    // if/elseif/for/while/match/catch each add one decision point; else
+    // does not (it's the fallback, not an independent branch).
+    let mut file = File::new("complex.rs".to_string(), LanguageId::Rust);
+    let mut decl = Declaration::new(
+        "complex_fn".to_string(),
+        DeclarationKind::Function,
+        Span::new(0, 100, 1, 20),
+    );
+    decl.body = Some(Block {
+        control_flow: vec![
+            ControlFlow {
+                kind: ControlFlowKind::If,
+                span: Span::new(0, 10, 1, 1),
+                condition_span: None,
+                branches: vec![],
+            },
+            ControlFlow {
+                kind: ControlFlowKind::Else,
+                span: Span::new(10, 20, 2, 2),
+                condition_span: None,
+                branches: vec![],
+            },
+            ControlFlow {
+                kind: ControlFlowKind::For,
+                span: Span::new(20, 30, 3, 3),
+                condition_span: None,
+                branches: vec![],
+            },
+        ],
+        ..Default::default()
+    });
+    file.declarations.push(decl);
+
+    let census = CelestialCensus::new();
+    let metrics = census.analyze(&file);
+
+    // Base complexity 1 + if + for = 3 (else doesn't count).
+    assert_eq!(
+        metrics.dark_matter.max_cyclomatic_complexity, 3,
+        "Should count if/for as decision points but not else"
+    );
+}
+
+#[test]
+fn test_red_giant_excludes_test_files() {
+    // A file that would otherwise trip the Red Giant complexity trigger,
+    // but lives under tests/ — should be excluded, not flagged.
+    let mut file = File::new("tests/big_test.rs".to_string(), LanguageId::Rust);
+    file.span = Span::new(0, 20000, 1, 600);
+    let mut decl = Declaration::new(
+        "giant_test".to_string(),
+        DeclarationKind::Function,
+        Span::new(0, 20000, 1, 600),
+    );
+    decl.body = Some(nested_if_block(25)); // way past the complexity threshold
+    file.declarations.push(decl);
+
+    let census = CelestialCensus::new();
+    let mut metrics = census.analyze(&file);
+    metrics.total_lines = 600; // > 500, would otherwise qualify by size
+
+    let mut galaxy = GalaxyCensus::new(".".to_string());
+    galaxy.add_file("tests/big_test.rs", metrics);
+    galaxy.finalize();
+
+    let constellation = galaxy
+        .constellations
+        .get("tests")
+        .expect("constellation for tests/ should exist");
+    assert!(
+        constellation.red_giants.is_empty(),
+        "Test files should be excluded from Red Giant detection, got: {:?}",
+        constellation.red_giants
     );
 }
 

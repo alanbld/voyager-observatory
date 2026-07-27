@@ -91,6 +91,14 @@ impl AdapterRegistry {
         // Extract declarations
         file.declarations = adapter.extract_declarations(&tree, source);
 
+        // Populate each declaration's body (control flow, calls, nested
+        // declarations) so consumers like census get real complexity data
+        // without having to go through the separate Zoom-mode `zoom_into`
+        // path, which most callers (serialize, survey) never invoke.
+        for decl in &mut file.declarations {
+            populate_bodies(adapter, &tree, source, decl);
+        }
+
         // Extract imports
         file.imports = adapter.extract_imports(&tree, source);
 
@@ -101,6 +109,22 @@ impl AdapterRegistry {
         file.unknown_regions = adapter.extract_errors(&tree, source);
 
         Ok(file)
+    }
+}
+
+/// Recursively populate `body` for `decl` and every nested declaration
+/// (methods in a class, inner functions, etc.) via the adapter's Zoom-mode
+/// `extract_body`, so a normal parse carries the same control-flow data
+/// Zoom mode would compute on demand for a single declaration.
+fn populate_bodies(
+    adapter: &dyn LanguageAdapter,
+    tree: &tree_sitter::Tree,
+    source: &str,
+    decl: &mut crate::ir::Declaration,
+) {
+    decl.body = adapter.extract_body(tree, source, decl);
+    for child in &mut decl.children {
+        populate_bodies(adapter, tree, source, child);
     }
 }
 

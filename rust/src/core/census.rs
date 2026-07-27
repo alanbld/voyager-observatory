@@ -38,10 +38,19 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use voyager_ast::ir::{CommentKind, Declaration, DeclarationKind, File, Span};
+use voyager_ast::ir::{
+    Block, CommentKind, ControlFlowKind, Declaration, DeclarationKind, File, Span,
+};
 
+use super::engine::FileTier;
 use super::metrics::{MetricCollector, MetricRegistry, MetricResult};
 use super::spectrograph::{Hemisphere, STELLAR_LIBRARY};
+
+/// McCabe cyclomatic complexity above which a single declaration is
+/// considered high-risk enough to help flag its file as a Red Giant. 20 is a
+/// common industry rule of thumb (e.g. NIST 500-235) for "needs attention";
+/// below ~10 is generally considered easily testable.
+const HIGH_COMPLEXITY_THRESHOLD: usize = 20;
 
 // =============================================================================
 // Census Result Types
@@ -97,10 +106,16 @@ pub struct DarkMatterMetrics {
     pub unknown_regions: usize,
     /// Total bytes in unknown regions
     pub unknown_bytes: usize,
-    /// Volcanic regions (nesting > 4 levels)
+    /// Volcanic regions (real control-flow nesting > 4 levels deep)
     pub volcanic_regions: usize,
-    /// Maximum nesting depth found
+    /// Maximum real control-flow block-nesting depth found (if/for/while/etc.
+    /// nested inside each other within a function body — not declaration
+    /// nesting like class -> method, which doesn't reflect how hard a
+    /// function is to read; see DECISIONS.md Q4)
     pub max_nesting_depth: usize,
+    /// Highest McCabe cyclomatic complexity (1 + decision points) found in
+    /// any single declaration's body in this file
+    pub max_cyclomatic_complexity: usize,
     /// Functions/methods with excessive parameters (> 5)
     pub parameter_heavy: usize,
 }
@@ -151,6 +166,23 @@ impl HealthRating {
             Self::Critical => "Critical Complexity",
         }
     }
+}
+
+/// Whether a control-flow kind is an independent decision point for McCabe
+/// cyclomatic complexity. `Else`/`Finally`/`With`/`Return`/`Break`/`Continue`
+/// are control statements that don't branch the path count on their own.
+fn is_decision_point(kind: ControlFlowKind) -> bool {
+    matches!(
+        kind,
+        ControlFlowKind::If
+            | ControlFlowKind::ElseIf
+            | ControlFlowKind::Match
+            | ControlFlowKind::Switch
+            | ControlFlowKind::For
+            | ControlFlowKind::While
+            | ControlFlowKind::Loop
+            | ControlFlowKind::Catch
+    )
 }
 
 // =============================================================================
@@ -328,9 +360,8 @@ impl CelestialCensus {
         metrics.unknown_regions = file.unknown_regions.len();
         metrics.unknown_bytes = file.unknown_regions.iter().map(|r| r.span.len()).sum();
 
-        // Analyze nesting depth in declarations (start at depth 1 for top-level)
         for decl in &file.declarations {
-            self.analyze_nesting_depth(decl, 1, &mut metrics);
+            self.analyze_complexity(decl, &mut metrics);
 
             // Check for parameter-heavy functions
             if decl.parameters.len() > self.param_threshold {
@@ -341,22 +372,60 @@ impl CelestialCensus {
         metrics
     }
 
-    fn analyze_nesting_depth(
-        &self,
-        decl: &Declaration,
-        current_depth: usize,
-        metrics: &mut DarkMatterMetrics,
-    ) {
-        metrics.max_nesting_depth = metrics.max_nesting_depth.max(current_depth);
+    /// Real block-nesting depth and cyclomatic complexity from a
+    /// declaration's parsed control flow (DECISIONS.md Q4). Previously this
+    /// measured how deeply *declarations* were nested in each other
+    /// (class -> method -> inner function), which says nothing about how
+    /// hard any single function actually is to read.
+    fn analyze_complexity(&self, decl: &Declaration, metrics: &mut DarkMatterMetrics) {
+        if let Some(body) = &decl.body {
+            let nesting = Self::block_max_nesting(body);
+            let complexity = 1 + Self::block_decision_points(body);
 
-        if current_depth > self.volcanic_threshold {
-            metrics.volcanic_regions += 1;
+            metrics.max_nesting_depth = metrics.max_nesting_depth.max(nesting);
+            metrics.max_cyclomatic_complexity = metrics.max_cyclomatic_complexity.max(complexity);
+
+            if nesting > self.volcanic_threshold {
+                metrics.volcanic_regions += 1;
+            }
         }
 
-        // Check children
         for child in &decl.children {
-            self.analyze_nesting_depth(child, current_depth + 1, metrics);
+            self.analyze_complexity(child, metrics);
         }
+    }
+
+    /// Deepest control-flow nesting within `block` (0 if it contains none).
+    fn block_max_nesting(block: &Block) -> usize {
+        block
+            .control_flow
+            .iter()
+            .map(|cf| {
+                1 + cf
+                    .branches
+                    .iter()
+                    .map(Self::block_max_nesting)
+                    .max()
+                    .unwrap_or(0)
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// McCabe decision-point count within `block`, recursing into nested
+    /// branches. `Else`/`Finally`/`With`/`Return`/`Break`/`Continue` are
+    /// control statements, not independent decisions, so they don't count —
+    /// add 1 to this for the base complexity of the containing function.
+    fn block_decision_points(block: &Block) -> usize {
+        block
+            .control_flow
+            .iter()
+            .map(|cf| {
+                let here = usize::from(is_decision_point(cf.kind));
+                let nested: usize = cf.branches.iter().map(Self::block_decision_points).sum();
+                here + nested
+            })
+            .sum()
     }
 
     /// Calculate derived metrics
@@ -719,9 +788,17 @@ impl GalaxyCensus {
         constellation.file_count += 1;
         constellation.aggregate_metrics(&metrics);
 
-        // Check for Red Giant (large file with issues)
-        if metrics.total_lines > 500
-            && (metrics.derived.dark_matter_ratio > 0.05 || metrics.derived.nebula_ratio < 0.1)
+        // Check for Red Giant (large file with issues). Test files are
+        // excluded: a large file full of straightforward, repetitive test
+        // cases isn't the same problem as a large file that's genuinely
+        // hard to read, and lumping them together buried real complexity
+        // hotspots under test-suite size (DECISIONS.md Q4).
+        let is_test_file = FileTier::classify(file_path, None) == FileTier::Tests;
+        if !is_test_file
+            && metrics.total_lines > 500
+            && (metrics.derived.dark_matter_ratio > 0.05
+                || metrics.derived.nebula_ratio < 0.1
+                || metrics.dark_matter.max_cyclomatic_complexity > HIGH_COMPLEXITY_THRESHOLD)
         {
             constellation.red_giants.push(file_path.to_string());
         }

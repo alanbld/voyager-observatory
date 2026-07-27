@@ -1265,6 +1265,7 @@ mod tests {
             unknown_bytes: 150,
             volcanic_regions: 2,
             max_nesting_depth: 6,
+            max_cyclomatic_complexity: 0,
             parameter_heavy: 1,
         };
         metrics.total_lines = 100;
@@ -1292,6 +1293,7 @@ mod tests {
             unknown_bytes: 500,
             volcanic_regions: 10,
             max_nesting_depth: 8,
+            max_cyclomatic_complexity: 0,
             parameter_heavy: 3,
         };
         metrics.total_lines = 500;
@@ -2111,6 +2113,7 @@ mod tests {
             unknown_bytes: 50,
             volcanic_regions: 0,
             max_nesting_depth: 3,
+            max_cyclomatic_complexity: 0,
             parameter_heavy: 0,
         };
         metrics.derived = DerivedMetrics {
@@ -2133,6 +2136,7 @@ mod tests {
             unknown_bytes: 500,
             volcanic_regions: 5,
             max_nesting_depth: 6,
+            max_cyclomatic_complexity: 0,
             parameter_heavy: 3,
         };
         metrics.derived = DerivedMetrics {
