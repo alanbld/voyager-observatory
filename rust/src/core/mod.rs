@@ -18,6 +18,7 @@
 //! - `metrics`: AST-based code metrics collection (Phase 3 foundation)
 
 pub mod ast_bridge;
+pub mod ast_cache;
 pub mod celestial;
 pub mod census;
 pub mod engine;
@@ -114,6 +115,7 @@ pub use celestial::{
 
 // voyager-ast integration (Structural Optics)
 pub use ast_bridge::{AstBridge, FileSummary, Star as AstStar, StarKind, StarSummary};
+pub use ast_cache::{ParseCache, ParseCacheManager};
 
 // Phase 0 Hardening: Centralized Regex Engine
 pub use regex_engine::{

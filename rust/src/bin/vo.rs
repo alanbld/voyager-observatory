@@ -347,7 +347,7 @@ struct Cli {
     )]
     chronos_depth: ChronosDepth,
 
-    /// Disable Chronos Warp cache (force fresh git analysis)
+    /// Disable survey caches (Chronos Warp git analysis + AST parse cache)
     #[arg(long = "no-cache", help_heading = "📊 CENSUS")]
     no_cache: bool,
 
@@ -646,7 +646,7 @@ fn parse_zoom_target(s: &str) -> Result<ZoomConfig, String> {
 
 /// Run the Celestial Census survey
 fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &Cli) {
-    use pm_encoder::core::{AstBridge, CelestialCensus, GalaxyCensus};
+    use pm_encoder::core::{AstBridge, CelestialCensus, GalaxyCensus, ParseCacheManager};
     #[cfg(feature = "temporal")]
     use pm_encoder::core::{
         ChronosEngine, StellarDriftAnalyzer, StellarDriftReport, TemporalCensus,
@@ -688,18 +688,43 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
     let mut galaxy = GalaxyCensus::new(root.to_string_lossy().to_string());
     let mut star_counts: HashMap<String, usize> = HashMap::new();
 
+    // Parse cache: avoids re-parsing unchanged files across repeated `--survey`
+    // invocations. Keyed by content hash (md5), not mtime, so it survives
+    // touches/checkouts that don't actually change file content.
+    let parse_cache_manager = ParseCacheManager::new(root);
+    let mut parse_cache = if cli.no_cache {
+        pm_encoder::core::ParseCache::new()
+    } else {
+        parse_cache_manager.load()
+    };
+    let mut parse_cache_hits: usize = 0;
+
     // Analyze each file
     for entry in &entries {
         // Detect language from path
         let language = AstBridge::detect_language(std::path::Path::new(&entry.path));
 
-        // Parse file with AST bridge
-        if let Some(file) = bridge.analyze_file(&entry.content, language) {
+        let file = if let Some(cached) = parse_cache.get(&entry.path, &entry.md5) {
+            parse_cache_hits += 1;
+            Some(cached.clone())
+        } else {
+            let parsed = bridge.analyze_file(&entry.content, language);
+            if let Some(ref file) = parsed {
+                parse_cache.insert(entry.path.clone(), entry.md5.clone(), file.clone());
+            }
+            parsed
+        };
+
+        if let Some(file) = file {
             let metrics = census.analyze(&file);
             // Track star counts for drift analysis
             star_counts.insert(entry.path.clone(), metrics.stars.count);
             galaxy.add_file(&entry.path, metrics);
         }
+    }
+
+    if !cli.no_cache {
+        let _ = parse_cache_manager.save(&parse_cache);
     }
 
     galaxy.finalize();
@@ -840,6 +865,11 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
     }
 
     // Print timing with Warp status
+    let parse_cache_indicator = if entries.is_empty() {
+        String::new()
+    } else {
+        format!(" [AST cache: {}/{} hits]", parse_cache_hits, entries.len())
+    };
     eprintln!();
     #[cfg(feature = "temporal")]
     if let Some(ref tc) = temporal_census {
@@ -849,24 +879,27 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
             _ => "",
         };
         eprintln!(
-            "Survey completed in {:.1}ms ({} files, {} chronos events){}",
+            "Survey completed in {:.1}ms ({} files, {} chronos events){}{}",
             elapsed.as_secs_f64() * 1000.0,
             galaxy.total_files,
             tc.total_observations,
-            warp_indicator
+            warp_indicator,
+            parse_cache_indicator
         );
     } else {
         eprintln!(
-            "Survey completed in {:.1}ms ({} files analyzed)",
+            "Survey completed in {:.1}ms ({} files analyzed){}",
             elapsed.as_secs_f64() * 1000.0,
-            galaxy.total_files
+            galaxy.total_files,
+            parse_cache_indicator
         );
     }
     #[cfg(not(feature = "temporal"))]
     eprintln!(
-        "Survey completed in {:.1}ms ({} files analyzed)",
+        "Survey completed in {:.1}ms ({} files analyzed){}",
         elapsed.as_secs_f64() * 1000.0,
-        galaxy.total_files
+        galaxy.total_files,
+        parse_cache_indicator
     );
 }
 
