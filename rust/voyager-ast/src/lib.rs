@@ -11,27 +11,23 @@
 //! - Explicit uncertainty via `UnknownNode` markers
 //! - Never silently drop content we can't parse
 //!
-//! # Two Operating Modes
+//! # Parsing
 //!
-//! 1. **Index (Planetarium)**: Fast project-wide scan
-//!    - Top-level declarations, imports, file-level comments
-//!    - No intra-function control-flow by default
-//!
-//! 2. **Zoom (Microscope)**: Deep symbol inspection
-//!    - Full body of target symbol
-//!    - Nested blocks, control flow, calls, comments
+//! `AdapterRegistry::parse` is the single entry point: it parses source into
+//! a `File` IR and populates every declaration's `body` (control flow, calls,
+//! nested declarations) inline, so consumers get full structural data from
+//! one parse — no separate indexing/zoom pass is needed.
 //!
 //! # Example
 //!
 //! ```rust,ignore
-//! use voyager_ast::{AstProvider, TreeSitterProvider, IndexOptions};
-//! use std::path::Path;
+//! use voyager_ast::{AdapterRegistry, LanguageId};
 //!
-//! let provider = TreeSitterProvider::new();
-//! let model = provider.index_project(Path::new("."), &IndexOptions::default())?;
+//! let registry = AdapterRegistry::new();
+//! let file = registry.parse("fn hello() {}", LanguageId::Rust)?;
 //!
-//! for (path, file) in &model.files {
-//!     println!("{}: {} declarations", path, file.declarations.len());
+//! for decl in &file.declarations {
+//!     println!("{}: {:?}", decl.name, decl.kind);
 //! }
 //! ```
 
@@ -48,7 +44,6 @@
 pub mod adapters;
 pub mod error;
 pub mod ir;
-pub mod provider;
 mod registry;
 
 // Re-export core types for convenience
@@ -82,10 +77,6 @@ pub use ir::{
 
 pub use adapters::LanguageAdapter;
 pub use error::AstError;
-pub use provider::{
-    AstProvider, ContextWindow, IndexError, IndexOptions, IndexStats, MicroscopeModel,
-    PlanetariumModel, ZoomOptions,
-};
 pub use registry::AdapterRegistry;
 
 /// Version of the IR schema
