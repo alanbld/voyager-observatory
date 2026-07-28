@@ -2871,13 +2871,16 @@ pub fn run() {
             }
         };
 
-        // Build explorer config
-        let config = ExplorerConfig {
+        // Build explorer config. Extend (not replace) the default
+        // ignore_patterns — a bare struct-literal override here would
+        // silently drop node_modules/target/.git/etc. whenever --exclude
+        // isn't passed, which is the common case.
+        let mut config = ExplorerConfig {
             max_files: cli.explore_max_files,
             include_tests: cli.explore_tests,
-            ignore_patterns: cli.exclude.clone(),
             ..Default::default()
         };
+        config.ignore_patterns.extend(cli.exclude.clone());
 
         // Create explorer and run
         let explorer = IntentExplorer::with_config(&project_root, config);
