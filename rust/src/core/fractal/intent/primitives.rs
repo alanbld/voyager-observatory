@@ -335,11 +335,6 @@ impl ConceptType {
         // =================================================================
         // Symbol kind fallback (for unclassified symbols)
         // =================================================================
-        // Check visibility from the layer content
-        let is_public = matches!(&layer.content,
-            LayerContent::Symbol { visibility, .. } if *visibility == crate::core::fractal::Visibility::Public
-        ) || signature.contains("pub ");
-
         if let Some(ref k) = kind {
             match k {
                 SymbolKind::Struct | SymbolKind::Class => {
@@ -358,16 +353,11 @@ impl ConceptType {
                     // Enums are usually for decision/state
                     return ConceptType::Decision;
                 }
-                SymbolKind::Function | SymbolKind::Method => {
-                    // Functions/methods that don't match other patterns
-                    // Check if public (likely API) vs private (helper)
-                    if is_public {
-                        // Public functions without clear category - likely core logic
-                        return ConceptType::Calculation;
-                    }
-                    // Private helpers - infrastructure/utility
-                    return ConceptType::Infrastructure;
-                }
+                // Functions/methods matching no heuristic above are genuinely
+                // unclassified — fall through to Unknown rather than guess.
+                // This used to guess Calculation (public) / Infrastructure
+                // (private), which silently scored unknown code as the
+                // single highest-weighted bucket in business_logic().
                 _ => {}
             }
         }
@@ -1524,7 +1514,9 @@ mod tests {
         );
         assert_eq!(ConceptType::infer(&const_layer), ConceptType::Configuration);
 
-        // Private function without clear pattern - Infrastructure
+        // Private function without clear pattern - Unknown (no guessing;
+        // Unknown carries a neutral weight in every RelevanceScorerParams
+        // preset instead of a bucket's max weight).
         let helper_layer = make_symbol_layer(
             "h1",
             "do_work",
@@ -1533,12 +1525,10 @@ mod tests {
             None,
             false,
         );
-        assert_eq!(
-            ConceptType::infer(&helper_layer),
-            ConceptType::Infrastructure
-        );
+        assert_eq!(ConceptType::infer(&helper_layer), ConceptType::Unknown);
 
-        // Public function without clear pattern - Calculation (core logic fallback)
+        // Public function without clear pattern - also Unknown (public vs
+        // private visibility is no longer used to guess a concept type here)
         // Note: "process_item" doesn't match the exact "process" entry point pattern
         let pub_layer = make_symbol_layer(
             "p1",
@@ -1548,7 +1538,7 @@ mod tests {
             None,
             true,
         );
-        assert_eq!(ConceptType::infer(&pub_layer), ConceptType::Calculation);
+        assert_eq!(ConceptType::infer(&pub_layer), ConceptType::Unknown);
     }
 
     #[test]
