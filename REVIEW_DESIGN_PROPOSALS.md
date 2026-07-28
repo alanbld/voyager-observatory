@@ -64,12 +64,14 @@ Canonical representation is f32 0–1; lenses convert at the edge (`as_priority`
 
 ### Migration plan (incremental, not flag-day)
 
-- **Step A** (additive, zero behavior change): land `src/core/scoring/` with `Signal`/`Score`/`Scorer`/`ScoringContext`/`weighted_sum` and `ExclusionSet`. No callers.
-- **Step B**: reimplement `get_static_priority`/`get_file_priority` on `score()` with a single glob signal. The lenses.rs tests pin **exact integers** (e.g. lenses.rs:1270–1282, 1369) — a perfect byte-identical regression net. Pure refactor.
-- **Step C**: reimplement `score_element` via `signals()`+`weighted_sum`, keeping the same coefficients. primitives.rs tests pin **orderings** not exact floats (primitives.rs:1582–1651), tolerating negligible drift.
-- **Step D** (first behavior change; ship with item 3's `BlendPolicy` review): thread `ScoringContext` through both call sites so intents gain blend and both gain the shared exclusion set.
+- **Step A** ✅ done (`0d97938`, 2026-07-28) — landed `src/core/scoring/` with `Signal`/`Score`/`Scorer`/`ScoringContext`/`BlendPolicy`/`LinearBlend`/`weighted_sum`. One refinement made during implementation: `Score`/`Signal` are domain-agnostic rather than a hardcoded 0.0..=1.0 scale (see the note below) — `ExclusionSet` (Step D) not built yet, deferred until intents actually need it.
+- **Step B** ✅ done (`0d97938`) — `LensManager` implements `Scorer` (`type Subject<'s> = Path`); `get_file_priority` now calls `scoring::score(self, path, &ctx).as_priority()` instead of hand-rolling the blend. `get_static_priority` (the glob-matching itself) is untouched. All 68 existing lenses tests pass unchanged, including the blend-specific ones (`test_priority_blend_high_utility`, `test_priority_blend_low_utility`, `test_frozen_mode_ignores_store`) — confirmed byte-identical, not just structurally similar.
+- **Step C** (open): reimplement `score_element` via `signals()`+`weighted_sum`, keeping the same coefficients. primitives.rs tests pin **orderings** not exact floats (primitives.rs:1582–1651), tolerating negligible drift.
+- **Step D** (open, first real behavior change; ship with item 3's `BlendPolicy` review): thread `ScoringContext` through the intents call site too so intents gain blend and both surfaces gain a shared exclusion set.
 
-Each step is independently shippable; lenses and intents adopt the layer one at a time. No rewrite of either domain's logic — only the aggregation/blend/exclusion spine is shared.
+Each step is independently shippable; lenses and intents adopt the layer one at a time. No rewrite of either domain's logic — only the aggregation/blend spine is shared.
+
+**Refinement to the original design (found during Step A implementation)**: `PriorityGroup::priority`'s own doc comment says "arbitrary integers supported," not bounded to 0-100. The original design specified `Score`/`Signal` as a hardcoded 0.0..=1.0 domain with `as_priority() = round(value*100)` — that would silently clamp/lose precision for any out-of-range custom lens priority. `Signal`/`Score` now carry whatever domain the producing `Scorer` uses (lenses: priority-scale, unclamped; intents: 0.0..=1.0), and `as_priority()` is a plain `round()` with no forced `*100`. This only matters for a currently-untested edge case (no built-in lens or test exceeds 0-100), but the fix costs nothing and avoids quietly breaking a documented contract.
 
 ### Three concrete fixes (fold in regardless of the abstraction) — ✅ all done (2026-07-28)
 
