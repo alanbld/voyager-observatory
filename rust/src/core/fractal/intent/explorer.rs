@@ -42,8 +42,12 @@ pub struct ExplorerConfig {
     pub max_files: usize,
     /// Maximum file size to process (bytes)
     pub max_file_size: usize,
-    /// Patterns to ignore (glob patterns)
+    /// Patterns to ignore (glob patterns), matched at any depth
     pub ignore_patterns: Vec<String>,
+    /// Directory names to ignore, matched only as the first path component
+    /// under the project root (not any-depth — a nested directory that
+    /// happens to share one of these names is not excluded).
+    pub root_ignore_dirs: Vec<String>,
     /// Include only these patterns (if non-empty)
     pub include_patterns: Vec<String>,
     /// Whether to include test files
@@ -61,6 +65,12 @@ impl Default for ExplorerConfig {
                 ".git/**".to_string(),
                 "*.lock".to_string(),
                 "*.min.js".to_string(),
+            ],
+            root_ignore_dirs: vec![
+                "experiments".to_string(),
+                "classic".to_string(),
+                "benches".to_string(),
+                ".llm_archive".to_string(),
             ],
             include_patterns: vec![],
             include_tests: false,
@@ -369,6 +379,7 @@ impl IntentExplorer {
     fn build_context(&self) -> Result<(Vec<ContextLayer>, usize), String> {
         let mut layers = Vec::new();
         let mut files_analyzed = 0;
+        let mut files_skipped_by_cap = 0;
 
         // Walk the directory
         let walker = walkdir::WalkDir::new(&self.project_root)
@@ -377,10 +388,6 @@ impl IntentExplorer {
             .filter_entry(|e| !self.should_ignore(e.path()));
 
         for entry in walker.filter_map(|e| e.ok()) {
-            if files_analyzed >= self.config.max_files {
-                break;
-            }
-
             let path = entry.path();
             if !path.is_file() {
                 continue;
@@ -406,6 +413,14 @@ impl IntentExplorer {
                 continue;
             }
 
+            // This file passed every real filter and would have been
+            // analyzed — keep walking (cheaply) to report an honest skip
+            // count instead of silently truncating in filesystem order.
+            if files_analyzed >= self.config.max_files {
+                files_skipped_by_cap += 1;
+                continue;
+            }
+
             files_analyzed += 1;
 
             // Read and extract symbols
@@ -418,11 +433,31 @@ impl IntentExplorer {
             layers.extend(file_layers);
         }
 
+        if files_skipped_by_cap > 0 {
+            eprintln!(
+                "note: {} files skipped by --explore-max-files cap ({} analyzed, filesystem order — not relevance-ranked)",
+                files_skipped_by_cap, files_analyzed
+            );
+        }
+
         Ok((layers, files_analyzed))
     }
 
     /// Check if a path should be ignored
     fn should_ignore(&self, path: &Path) -> bool {
+        // Root-scoped excludes: only match the path's first component
+        // relative to the project root, so a legitimately-named nested
+        // directory (e.g. some/deep/experiments/) is not excluded.
+        if let Ok(relative) = path.strip_prefix(&self.project_root) {
+            if let Some(first) = relative.components().next() {
+                if let Some(first) = first.as_os_str().to_str() {
+                    if self.config.root_ignore_dirs.iter().any(|d| d == first) {
+                        return true;
+                    }
+                }
+            }
+        }
+
         let path_str = path.to_string_lossy();
 
         for pattern in &self.config.ignore_patterns {
@@ -593,6 +628,7 @@ mod tests {
             max_files: 50,
             max_file_size: 50_000,
             ignore_patterns: vec!["custom/**".to_string()],
+            root_ignore_dirs: vec![],
             include_patterns: vec!["src/**".to_string()],
             include_tests: true,
         };
@@ -776,6 +812,21 @@ mod tests {
         // Should not ignore
         assert!(!explorer.should_ignore(Path::new("/project/src/main.rs")));
         assert!(!explorer.should_ignore(Path::new("/project/lib/util.py")));
+    }
+
+    #[test]
+    fn test_should_ignore_root_scoped_dirs() {
+        let explorer = IntentExplorer::new("/project");
+
+        // At the project root: excluded
+        assert!(explorer.should_ignore(Path::new("/project/experiments/foo.py")));
+        assert!(explorer.should_ignore(Path::new("/project/classic/foo.py")));
+        assert!(explorer.should_ignore(Path::new("/project/benches/foo.rs")));
+        assert!(explorer.should_ignore(Path::new("/project/.llm_archive/foo.md")));
+
+        // Nested elsewhere: NOT excluded (Q7 — root-scoped, not any-depth)
+        assert!(!explorer.should_ignore(Path::new("/project/vendor/some-crate/experiments/foo.py")));
+        assert!(!explorer.should_ignore(Path::new("/project/src/benches/mod.rs")));
     }
 
     // === ExplorationResult output tests ===
@@ -1025,6 +1076,26 @@ pub fn validate_input(input: &str) -> Result<(), String> {
 
         let result = explorer.explore(ExplorationIntent::BusinessLogic).unwrap();
         assert!(result.files_analyzed <= 5);
+
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn test_explorer_cap_enforced_when_exceeded() {
+        // create_test_project() has 2 source files (main.rs, lib.rs) —
+        // a cap of 1 must still stop at exactly 1 analyzed file, proving
+        // the cap check (now a `continue` instead of a `break`, so it can
+        // keep counting skipped files) still enforces the limit.
+        let project = create_test_project();
+        let config = ExplorerConfig {
+            max_files: 1,
+            include_tests: true,
+            ..Default::default()
+        };
+        let explorer = IntentExplorer::with_config(&project, config);
+
+        let result = explorer.explore(ExplorationIntent::BusinessLogic).unwrap();
+        assert_eq!(result.files_analyzed, 1);
 
         let _ = fs::remove_dir_all(&project);
     }
