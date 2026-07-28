@@ -32,6 +32,7 @@ pub mod plugin;
 pub mod plugins;
 pub mod presenter;
 pub mod regex_engine;
+pub mod scoring;
 pub mod search;
 pub mod serialization;
 pub mod skeleton;
@@ -121,6 +122,11 @@ pub use ast_cache::{ParseCache, ParseCacheManager};
 pub use regex_engine::{
     compile, find_all, global_engine, is_match, replace_all, CompiledRegex, MatchRange,
     MatchResult, PatternSet, RegexEngine, RegexError,
+};
+
+// Roadmap 2.4: Unified scoring layer (aggregation/blend shared by lenses/intents)
+pub use scoring::{
+    score, weighted_sum, BlendPolicy, LinearBlend, Score, Scorer, ScoringContext, Signal,
 };
 
 // Phase 1C: Celestial Census (Code Health Metrics)
