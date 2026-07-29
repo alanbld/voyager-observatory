@@ -41,13 +41,25 @@ impl Signal {
 }
 
 /// Combine signals into a single value via a weighted average. Signals with
-/// non-positive total weight score as 0.0 (nothing to justify a score).
+/// non-positive total weight score as 0.0 (nothing to justify a score). Use
+/// this when signals compete for one channel and should be averaged
+/// together (e.g. lenses' single glob-priority signal).
 pub fn weighted_sum(signals: &[Signal]) -> f32 {
     let total_weight: f32 = signals.iter().map(|s| s.weight).sum();
     if total_weight <= 0.0 {
         return 0.0;
     }
     signals.iter().map(|s| s.value * s.weight).sum::<f32>() / total_weight
+}
+
+/// Combine signals via a plain sum of `value * weight` — NOT an average.
+/// Use this when signals are independent, stacking bonuses/penalties (each
+/// `weight` a fixed per-factor coefficient, `value` how much of it to
+/// award) rather than competing votes — e.g. intents' relevance scoring,
+/// which sums a concept-type weight, documentation/visibility boosts, and
+/// complexity/name-clarity adjustments that can be positive or negative.
+pub fn additive_sum(signals: &[Signal]) -> f32 {
+    signals.iter().map(|s| s.value * s.weight).sum()
 }
 
 /// The result of scoring a subject: the aggregated value, the signals that
@@ -180,6 +192,33 @@ mod tests {
     fn test_weighted_sum_zero_total_weight() {
         let signals = vec![Signal::new("a", 1.0, 0.0)];
         assert_eq!(weighted_sum(&signals), 0.0);
+    }
+
+    #[test]
+    fn test_additive_sum_empty() {
+        assert_eq!(additive_sum(&[]), 0.0);
+    }
+
+    #[test]
+    fn test_additive_sum_stacks_independent_terms() {
+        // Unlike weighted_sum, more signals should not dilute the total —
+        // each contributes its own value*weight independently.
+        let signals = vec![
+            Signal::new("concept_type", 1.0, 0.6),
+            Signal::new("has_documentation", 1.0, 0.15),
+            Signal::new("public_visibility", 1.0, 0.1),
+        ];
+        assert!((additive_sum(&signals) - 0.85).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn test_additive_sum_allows_negative_terms() {
+        let signals = vec![
+            Signal::new("concept_type", 0.5, 0.6),
+            Signal::new("private_visibility", -0.05, 1.0),
+            Signal::new("complexity", -0.1, 1.0),
+        ];
+        assert!((additive_sum(&signals) - 0.15).abs() < f32::EPSILON);
     }
 
     #[test]
