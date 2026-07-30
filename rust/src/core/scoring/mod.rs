@@ -86,11 +86,12 @@ pub trait BlendPolicy {
     fn apply(&self, raw: f32, store: &ContextStore, key: &str) -> f32;
 }
 
-/// The blend formula `ContextStore::blend_priority` already uses:
-/// `raw * 0.7 + learned * 100.0 * 0.3`. Exists so lenses can move onto the
-/// shared scoring layer without changing behavior; roadmap 3.3's
-/// decay/confidence-weighted policy will provide an alternative
-/// `BlendPolicy` impl without changing this trait's shape.
+/// The pre-3.3 naive formula: `raw * 0.7 + learned * 100.0 * 0.3`, applied
+/// regardless of how many observations back the learned score or how
+/// stale it is — an unseen file gets perturbed by the 0.5 default utility
+/// score, and a single bad observation carries full weight forever. Kept
+/// as a simple, deterministic `BlendPolicy` for tests/other scorers;
+/// production lens blending uses [`DecayBlend`] instead.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LinearBlend;
 
@@ -98,6 +99,30 @@ impl BlendPolicy for LinearBlend {
     fn apply(&self, raw: f32, store: &ContextStore, key: &str) -> f32 {
         let learned = store.get_utility_score(key) as f32;
         raw * 0.7 + learned * 100.0 * 0.3
+    }
+}
+
+/// The roadmap 3.3 blend: confidence-weighted (few observations stay close
+/// to `raw`) and time-decayed (a stale learned score drifts back toward
+/// neutral), via `ContextStore::blend_priority_v2`. An unseen file (no
+/// stored utility at all) returns `raw` unchanged.
+#[derive(Debug, Clone, Copy)]
+pub struct DecayBlend {
+    pub now: chrono::DateTime<chrono::Utc>,
+}
+
+impl DecayBlend {
+    /// A `DecayBlend` anchored to the current wall-clock time.
+    pub fn now() -> Self {
+        Self {
+            now: chrono::Utc::now(),
+        }
+    }
+}
+
+impl BlendPolicy for DecayBlend {
+    fn apply(&self, raw: f32, store: &ContextStore, key: &str) -> f32 {
+        store.blend_priority_v2(key, raw.round() as i32, self.now) as f32
     }
 }
 
@@ -251,18 +276,22 @@ mod tests {
     }
 
     #[test]
-    fn test_linear_blend_matches_context_store_formula() {
+    fn test_linear_blend_matches_naive_formula() {
+        // LinearBlend implements the pre-3.3 naive formula in isolation —
+        // ContextStore::blend_priority itself has since moved onto the
+        // decay/confidence-weighted v2 formula (roadmap 3.3), so this
+        // checks LinearBlend's own math directly rather than cross-calling
+        // a store method that no longer implements the same formula.
         let mut store = ContextStore::new();
         store.report_utility("src/main.rs", 0.8, 0.3);
 
         let blend = LinearBlend;
         let via_blend_policy = blend.apply(90.0, &store, "src/main.rs");
-        let via_store_directly = store.blend_priority("src/main.rs", 90) as f32;
 
-        assert_eq!(
-            via_blend_policy.round() as i32,
-            via_store_directly.round() as i32
-        );
+        let learned = store.get_utility_score("src/main.rs") as f32;
+        let expected = 90.0 * 0.7 + learned * 100.0 * 0.3;
+
+        assert_eq!(via_blend_policy, expected);
     }
 
     #[test]

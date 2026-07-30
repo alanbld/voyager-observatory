@@ -126,8 +126,8 @@ pub use regex_engine::{
 
 // Roadmap 2.4: Unified scoring layer (aggregation/blend shared by lenses/intents)
 pub use scoring::{
-    additive_sum, score, weighted_sum, BlendPolicy, LinearBlend, Score, Scorer, ScoringContext,
-    Signal,
+    additive_sum, score, weighted_sum, BlendPolicy, DecayBlend, LinearBlend, Score, Scorer,
+    ScoringContext, Signal,
 };
 
 // Phase 1C: Celestial Census (Code Health Metrics)

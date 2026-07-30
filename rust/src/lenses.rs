@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::core::scoring::{self, LinearBlend, Scorer, ScoringContext, Signal};
+use crate::core::scoring::{self, Scorer, ScoringContext, Signal};
 use crate::core::store::ContextStore;
 
 /// Priority group for file ranking (v1.7.0)
@@ -985,16 +985,18 @@ impl LensManager {
     /// Returns the highest matching priority from groups, or fallback priority.
     /// Default priority is 50 if no groups defined (backward compatible).
     ///
-    /// # Learning Integration (v2.2.0)
+    /// # Learning Integration (v2.2.0, blend upgraded in roadmap 3.3)
     ///
-    /// When a ContextStore is available and frozen mode is disabled, the priority
-    /// is blended with learned utility scores:
-    /// `final = (static * 0.7) + (learned * 100 * 0.3)`
+    /// When a ContextStore is available and frozen mode is disabled, the
+    /// priority is blended with learned utility scores via
+    /// `DecayBlend`/`ContextStore::blend_priority_v2`: confidence-weighted
+    /// (few observations stay close to static) and time-decayed (a stale
+    /// learned score drifts back toward neutral) — see store.rs.
     pub fn get_file_priority(&self, file_path: &Path) -> i32 {
         let ctx = ScoringContext {
             store: self.context_store.as_ref(),
             frozen: self.frozen,
-            blend: &LinearBlend,
+            blend: &scoring::DecayBlend::now(),
         };
         scoring::score(self, file_path, &ctx).as_priority()
     }
