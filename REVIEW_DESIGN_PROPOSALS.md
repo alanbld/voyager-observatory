@@ -151,7 +151,24 @@ So: two regex skeletonizers (lib.rs `truncate_structure`, `core::skeleton::Skele
 
 ## 3. TERTIARY — report_utility decay/exploration (roadmap 3.3)
 
-### Current state (verified)
+### ✅ Implemented (2026-07-30) — with a bigger, more precise "wire the read side" than originally scoped
+
+The decay/confidence math below was implemented essentially as proposed (`store.rs`: `FileUtility::effective_score`/`confidence`, `ContextStore::blend_priority_v2`, plus a `DecayBlend` `BlendPolicy` in `src/core/scoring` that `LensManager::get_file_priority` now uses by default instead of the old `LinearBlend`). All pre-existing tests updated to the new expected values (a permanently-buried-at-0.0 unseen file now correctly returns pure static priority instead of being pulled toward 65); 8 new tests added for decay/confidence/unseen-file behavior.
+
+**"Wire the read side" turned out to require more than swapping `LensManager::new()` for `with_store(...)` at one call site** — verification (not assumption) found the codebase has *multiple independent* `LensManager` constructions, most of which don't actually consume `get_file_priority` (the blended method) at all:
+
+- `apply_token_budget` (budgeting.rs) — the file **selection/dropping** logic — calls `get_file_group_config` (static glob group), never `get_file_priority`. The learned-utility blend does not (and, per this pass's scope, still does not) influence which files get selected under a budget, only their *displayed* priority once selected.
+- `render_claude_xml` (lib.rs, the function actually used by the CLI's `--token-budget --format claude-xml` path, and the same function touched earlier this session for roadmap 2.1) constructed its **own separate**, storeless `LensManager::new()` internally and rendered every file's `priority` attribute via `get_static_priority` — with a literal `// TODO: Integrate with ContextStore for utility scores` comment sitting next to it. This function, not the `lens_manager` built in `vo.rs`'s `run()`, is what actually determines the served `priority="N"` value — fixing only the `vo.rs` construction site (as the original proposal implied) would have had **zero observable effect**.
+- The MCP server's `tool_get_context` (server/mod.rs:521) constructs a `LensManager` too, but only to call `apply_lens()` for ignore/include glob patterns — it is never consulted for per-file priority at all. `core::engine::ContextEngine` (what `get_context`/`zoom` actually serialize through) has no `ContextStore`/`LensManager` awareness whatsoever. **There is currently nowhere in the MCP path to "mirror" the fix to** — that's a separate, deeper gap (lens-priority-aware rendering doesn't exist yet in the MCP server), not something this pass's read-wiring could plug into.
+
+**What's actually wired now**: `vo.rs`'s `run()` loads `.pm_encoder/context_store.json` (via `ContextStore::default_path`/`load_from_file`, safe no-op if missing) into `LensManager::with_store(...)` unless `--no-learning` is passed, and calls `set_frozen(config.frozen)`. `serialize_entries_claude_xml_with_report`/`render_claude_xml` (lib.rs) were changed to take that `&LensManager` as a parameter instead of constructing their own, and to render each file's `priority` attribute via `get_file_priority` (blended) instead of `get_static_priority`. Live-verified end-to-end: 10 `--report-utility` calls at score 1.0 for one file and 0.0 for another, then `--token-budget --format claude-xml`, produced `priority="65"`/`priority="35"` (matching the confidence-weighted formula exactly, confidence ≈0.31 at 10 observations) instead of both showing the static default of 50; `--no-learning` and `--frozen` both correctly suppress the blend back to 50/50.
+
+**Known remaining gaps** (verified real, not yet fixed — separate follow-up work):
+1. The **non-budgeted** CLI path (`serialize_project_with_config` → `serialize_entries_claude_xml`, used by plain `vo <path>` with no `--token-budget`) has the identical own-internal-storeless-`LensManager` + static-only-priority pattern as `render_claude_xml` had. Same fix, not yet applied here — `serialize_project_with_config` has `root: &str` available so it's tractable (load a store, thread a `&LensManager` into a new private `serialize_entries_claude_xml_impl`, keep the public `serialize_entries_claude_xml(config, files)` as a storeless back-compat wrapper), just not done in this pass.
+2. `apply_token_budget`'s **selection** (not just display) never consults learned utility — whether it should is a bigger, more consequential design question (it changes *which* files appear, not just their displayed number) than "wire the read side" implied, and is explicitly out of scope here.
+3. The MCP server's `get_context`/`zoom` don't use lens-based priority scoring in their rendering at all (pre-existing, independent of 3.3).
+
+### Current state (verified, historical — see the ✅ block above for what changed)
 
 `FileUtility::update` is EMA (store.rs:69): `score = α·session + (1-α)·score`, α=0.3. `blend_priority` (store.rs:200): `final = static·0.7 + learned·100·0.3`. `LensManager::get_file_priority` (lenses.rs:1001) calls it only when `store` is `Some` and not frozen. The **write** path works (server:844–849, vo.rs:2824–2837 load→update→save to `.pm_encoder/context_store.json`); the **read** path is dead — production `LensManager::new()` (vo.rs:3505) never gets a store (Q9). Burial risk: one early `0.0` decays a file toward 0, the blended priority drops, the file stops being selected, so it never earns utility again → **permanent burial**.
 
@@ -187,10 +204,10 @@ This also fixes a current oddity: today an **unseen** file gets `0.7·static + 0
 **3. Exploration floor (optional):** item 1 already guarantees no permanent burial. For a stronger guarantee add `last_offered` and a periodic bonus (`if days_since_offered > EXPLORE_INTERVAL { += EXPLORE_BONUS }`). Recommend shipping **1+2 first** (pure functions of existing fields) and treating 3 as optional, because it requires the selection path to write the store on **every** serialize (write-amplification + a `--frozen` determinism problem), not just on `report_utility`.
 
 ### Where it plugs in
-- Replace `ContextStore::blend_priority` (store.rs:200) with the `now`-taking v2; keep the old signature as a thin `now = Utc::now()` wrapper for the existing test call sites (store.rs:475–516).
-- This **is** item 1's `BlendPolicy::apply(raw_static, store, key) -> f32` — items 1 and 3 meet here; the decay/blend is the single shared read-back path for both lenses and (newly) intents.
-- **Wire the read side** (the whole point): at vo.rs:3505 replace `LensManager::new()` with load-store-if-exists + `with_store`, honoring `--frozen` (`set_frozen`) and a new `--no-learning` escape hatch; mirror in server get_context.
-- **Determinism guard**: `effective_score` depends on wall-clock `now`, so `--frozen` MUST bypass decay entirely (static only) to stay reproducible. State this explicitly in the flag docs.
+- ✅ Replaced `ContextStore::blend_priority` (store.rs:200) with the `now`-taking v2; the old signature is now a thin `now = Utc::now()` wrapper (existing test call sites unchanged in signature, updated in expected values where behavior genuinely changed).
+- ✅ This **is** item 1's `BlendPolicy::apply(raw_static, store, key) -> f32` — implemented as `DecayBlend` in `src/core/scoring`, replacing `LinearBlend` as `LensManager`'s default. (Intents don't consume this yet — that's Step D of item 1's migration, still open.)
+- ✅ **Wired the read side** for the CLI's `--token-budget` path (see the block above for exactly what does/doesn't consume it yet): `--no-learning` escape hatch added, `--frozen` (`set_frozen`) honored.
+- ✅ **Determinism guard**: live-verified `--frozen` bypasses the blend entirely (static only), independent of whether a store is loaded.
 
 Defaults: NEUTRAL 0.5, HALF_LIFE_DAYS 30, K 3, MAX_LEARNED_WEIGHT 0.4 (vs today's flat 0.3).
 
