@@ -6,7 +6,7 @@
 use crate::core::error::{EncoderError, Result};
 use crate::core::models::FileEntry;
 use globset::{Glob, GlobSet, GlobSetBuilder};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 #[cfg(test)]
@@ -372,22 +372,38 @@ pub struct SmartWalker {
 }
 
 impl SmartWalker {
+    /// Normalize a constructor path into the walker's search root: resolve
+    /// to a directory (parent, if given a file) and canonicalize. Deliberately
+    /// does NOT consult `ProjectManifest::detect` — every real caller
+    /// (`SymbolResolver`/`UsageFinder` in search.rs) passes `path` meaning
+    /// "search boundary," often an already-validated, contained root, so
+    /// silently widening it to a farther-up detected project root would
+    /// (and, before this fix, did) let a search escape the boundary the
+    /// caller explicitly gave it. See `ProjectManifest::detect`'s own doc
+    /// comment for the separate, informational `manifest()` accessor.
+    fn normalize_root(path: &Path) -> PathBuf {
+        let dir = if path.is_file() {
+            path.parent().unwrap_or(path)
+        } else {
+            path
+        };
+        dir.canonicalize().unwrap_or_else(|_| dir.to_path_buf())
+    }
+
     /// Create a new SmartWalker for the given path.
     pub fn new(path: &Path) -> Self {
-        let manifest = ProjectManifest::detect(path);
         Self {
-            root: manifest.root.clone(),
-            manifest,
+            root: Self::normalize_root(path),
+            manifest: ProjectManifest::detect(path),
             config: SmartWalkConfig::default(),
         }
     }
 
     /// Create with custom configuration.
     pub fn with_config(path: &Path, config: SmartWalkConfig) -> Self {
-        let manifest = ProjectManifest::detect(path);
         Self {
-            root: manifest.root.clone(),
-            manifest,
+            root: Self::normalize_root(path),
+            manifest: ProjectManifest::detect(path),
             config,
         }
     }
@@ -1133,6 +1149,72 @@ mod tests {
         // Test root() accessor
         let root = walker.root();
         assert_eq!(root, tmp.path().canonicalize().unwrap());
+    }
+
+    /// Roadmap 2.3 / C3: `SmartWalker`'s search root must be exactly the
+    /// path it's given, never silently widened via project-manifest
+    /// detection. All three real callers (`find_symbol`, `find_all`,
+    /// `find_usages` in search.rs) pass a `root` that already means "search
+    /// boundary" — often an MCP-validated, contained path — so re-deriving
+    /// and overriding it here would (and, before this fix, did) let a
+    /// search widen past the boundary the caller explicitly gave it.
+    #[test]
+    fn test_smart_walker_root_is_not_widened_beyond_given_path() {
+        let tmp = TempDir::new().unwrap();
+        // Outer repo root: has .git (e.g. the monorepo root).
+        fs::create_dir(tmp.path().join(".git")).unwrap();
+        // Inner subcrate: has its own Cargo.toml, nested under the outer root.
+        let inner = tmp.path().join("rust").join("voyager-ast");
+        fs::create_dir_all(&inner).unwrap();
+        fs::write(inner.join("Cargo.toml"), "[package]").unwrap();
+        let src = inner.join("src");
+        fs::create_dir_all(&src).unwrap();
+
+        // Constructed with the deepest, marker-less directory: root must
+        // stay exactly there, not widen to `inner` (nearest marker) or the
+        // outer `.git` root (pre-fix behavior).
+        let walker = SmartWalker::new(&src);
+        assert_eq!(walker.root(), src.canonicalize().unwrap());
+
+        let walker = SmartWalker::with_config(&src, SmartWalkConfig::default());
+        assert_eq!(walker.root(), src.canonicalize().unwrap());
+    }
+
+    /// End-to-end containment proof: a file living outside the given root
+    /// (but inside the wider monorepo a naive project-manifest detection
+    /// would have widened to) must never appear in the walk — this is the
+    /// exact shape of bug that let a Rust symbol lookup resolve into a
+    /// sibling deprecated Python tree.
+    #[test]
+    fn test_smart_walker_does_not_leak_files_outside_given_root() {
+        let tmp = TempDir::new().unwrap();
+        fs::create_dir(tmp.path().join(".git")).unwrap();
+
+        // Sibling directory OUTSIDE the intended search root — reachable
+        // only if root got widened up to the outer .git.
+        let outside = tmp.path().join("classic");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("legacy.py"), "def old_impl(): pass").unwrap();
+
+        // Intended search root: a subcrate with its own marker.
+        let inner = tmp.path().join("rust").join("voyager-ast");
+        fs::create_dir_all(inner.join("src")).unwrap();
+        fs::write(inner.join("Cargo.toml"), "[package]").unwrap();
+        fs::write(inner.join("src/lib.rs"), "pub fn new_impl() {}").unwrap();
+
+        let walker = SmartWalker::new(&inner);
+        let entries = walker.walk_as_file_entries().unwrap();
+
+        assert!(
+            entries.iter().any(|e| e.path.contains("lib.rs")),
+            "should still find files inside the given root"
+        );
+        assert!(
+            !entries.iter().any(|e| e.path.contains("legacy.py")),
+            "must not walk outside the given root even though the wider \
+             tree has a .git that a naive project-manifest detection would \
+             have widened the search root to"
+        );
     }
 
     #[test]
