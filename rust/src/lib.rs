@@ -2349,6 +2349,7 @@ pub fn serialize_entries_claude_xml_with_report(
     config: &EncoderConfig,
     files: &[FileEntry],
     report: &mut crate::budgeting::BudgetReport,
+    lens_manager: &LensManager,
 ) -> Result<String, String> {
     // The `utilized_tokens` header is written before file content (the
     // XmlWriter streams), so the pre-serialization estimate baked into
@@ -2356,19 +2357,20 @@ pub fn serialize_entries_claude_xml_with_report(
     // overhead is accounted for. Render once to find out the real size, then
     // re-render with the corrected value if it drifted, so the number
     // embedded in the output and the one printed to stderr always agree.
-    let draft = render_claude_xml(config, files, report)?;
+    let draft = render_claude_xml(config, files, report, lens_manager)?;
     let real_used = crate::budgeting::TokenEstimator::estimate_tokens(&draft);
     if real_used == report.used {
         return Ok(draft);
     }
     report.used = real_used;
-    render_claude_xml(config, files, report)
+    render_claude_xml(config, files, report, lens_manager)
 }
 
 fn render_claude_xml(
     config: &EncoderConfig,
     files: &[FileEntry],
     report: &crate::budgeting::BudgetReport,
+    lens_manager: &LensManager,
 ) -> Result<String, String> {
     use crate::formats::{AttentionEntry, XmlConfig, XmlWriter};
 
@@ -2393,7 +2395,6 @@ fn render_claude_xml(
     let mut writer = XmlWriter::new(&mut buffer, xml_config);
 
     // Build attention entries from included files
-    // TODO: Integrate with ContextStore for utility scores
     let mut attention_entries: Vec<AttentionEntry> = report
         .included_files
         .iter()
@@ -2424,12 +2425,6 @@ fn render_claude_xml(
     // Sort by priority descending for better attention_map ordering
     attention_entries.sort_by(|a, b| b.priority.cmp(&a.priority));
 
-    // Apply active lens for priority calculation in file loop
-    let mut lens_manager = LensManager::new();
-    if let Some(ref lens_name) = config.active_lens {
-        let _ = lens_manager.apply_lens(lens_name);
-    }
-
     // Write XML structure
     writer.write_context_start().map_err(|e| e.to_string())?;
     writer
@@ -2439,7 +2434,9 @@ fn render_claude_xml(
 
     for entry in files {
         let language = detect_language(&entry.path);
-        let priority = lens_manager.get_static_priority(std::path::Path::new(&entry.path));
+        // Blended (roadmap 3.3): reflects learned utility when the caller
+        // supplied a lens_manager with a loaded ContextStore.
+        let priority = lens_manager.get_file_priority(std::path::Path::new(&entry.path));
 
         // Check if this file was truncated by the budget strategy
         let was_truncated = report
@@ -5336,8 +5333,9 @@ class MyClass:
             .collect();
 
         let config = EncoderConfig::default();
-        let xml = serialize_entries_claude_xml_with_report(&config, &entries, &mut report)
-            .expect("serialization should succeed");
+        let xml =
+            serialize_entries_claude_xml_with_report(&config, &entries, &mut report, &lens_manager)
+                .expect("serialization should succeed");
 
         let rendered_estimate = TokenEstimator::estimate_tokens(&xml);
         let drift = (rendered_estimate as i64 - report.used as i64).unsigned_abs() as f64;

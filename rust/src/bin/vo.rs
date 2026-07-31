@@ -113,6 +113,10 @@ struct Cli {
     #[arg(long = "frozen", help_heading = "🔍 LENS FILTERS")]
     frozen: bool,
 
+    /// Don't blend priorities with learned utility scores from .pm_encoder/context_store.json
+    #[arg(long = "no-learning", help_heading = "🔍 LENS FILTERS")]
+    no_learning: bool,
+
     /// Include sensitive files in output
     #[arg(long = "allow-sensitive", help_heading = "🔍 LENS FILTERS")]
     allow_sensitive: bool,
@@ -3504,8 +3508,17 @@ pub fn run() {
             eprintln!("Warning: --token-budget requires batch mode, ignoring --stream");
         }
 
-        // Get lens manager for priority resolution
-        let mut lens_manager = LensManager::new();
+        // Get lens manager for priority resolution. Load the learned
+        // utility store (roadmap 3.3) unless the user opted out — an empty
+        // store is safe (every file reads back as unseen => pure static
+        // priority), so there's no need to special-case a missing file.
+        let mut lens_manager = if cli.no_learning {
+            LensManager::new()
+        } else {
+            let store_path = ContextStore::default_path(&project_root);
+            LensManager::with_store(ContextStore::load_from_file(&store_path))
+        };
+        lens_manager.set_frozen(config.frozen);
 
         // Apply CLI lens if present (for priority groups)
         if let Some(lens_arg) = &cli.lens {
@@ -3579,11 +3592,16 @@ pub fn run() {
             // Use streaming XmlWriter for ClaudeXml format with budget report (Fractal Protocol v2.0)
             // This includes hotspots/coldspots in attention_map from BudgetReport.
             // Recalibrates report.used against the real rendered size internally.
-            pm_encoder::serialize_entries_claude_xml_with_report(&config, &entries, &mut report)
-                .unwrap_or_else(|e| {
-                    eprintln!("Error serializing XML: {}", e);
-                    std::process::exit(1);
-                })
+            pm_encoder::serialize_entries_claude_xml_with_report(
+                &config,
+                &entries,
+                &mut report,
+                &lens_manager,
+            )
+            .unwrap_or_else(|e| {
+                eprintln!("Error serializing XML: {}", e);
+                std::process::exit(1);
+            })
         } else {
             // Use standard serialization for other formats
             let mut output = String::new();
