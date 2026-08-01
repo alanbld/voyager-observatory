@@ -265,6 +265,55 @@ fn test_zoom_class() {
         .stdout(predicate::str::contains("class Calculator"));
 }
 
+/// Roadmap 2.3 / C3, end-to-end through the real binary: zooming from a
+/// subcrate CWD must resolve within that subcrate, never leak into a
+/// sibling directory outside it — even though the wider tree has a `.git`
+/// that a naive project-root auto-detection would have widened the search
+/// to. This is the exact shape of bug ("a Rust lookup resolved into a
+/// deprecated Python tree") the roadmap's C3 finding described.
+#[test]
+fn test_zoom_from_subdirectory_does_not_leak_into_sibling_directory() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Outer monorepo root: has .git.
+    fs::create_dir(temp_dir.path().join(".git")).unwrap();
+
+    // Sibling directory OUTSIDE the intended search scope, with a
+    // same-named symbol — reachable only if the root got silently widened.
+    let outside = temp_dir.path().join("classic");
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(
+        outside.join("legacy.py"),
+        "def helper():\n    print('deprecated python helper')\n",
+    )
+    .unwrap();
+
+    // Intended root: a subcrate with its own Cargo.toml, nested under the
+    // outer root.
+    let inner = temp_dir.path().join("rust").join("mycrate");
+    fs::create_dir_all(inner.join("src")).unwrap();
+    fs::write(inner.join("Cargo.toml"), "[package]\nname = \"mycrate\"\n").unwrap();
+    fs::write(
+        inner.join("src/lib.rs"),
+        "pub fn helper() {\n    println!(\"real rust helper\");\n}\n",
+    )
+    .unwrap();
+
+    // Simulate `cd rust/mycrate && vo . --zoom fn=helper` — the CWD is the
+    // subcrate, PROJECT_ROOT is the relative "." this implies.
+    let mut cmd = Command::cargo_bin("vo").unwrap();
+    cmd.current_dir(&inner)
+        .arg(".")
+        .arg("--zoom")
+        .arg("fn=helper");
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("real rust helper"))
+        .stdout(predicate::str::contains("lib.rs"))
+        .stdout(predicate::str::contains("legacy.py").not());
+}
+
 // ============================================================================
 // Zoom Error Handling Tests
 // ============================================================================
