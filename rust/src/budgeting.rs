@@ -20,6 +20,11 @@ use std::path::Path;
 /// Threshold for hybrid strategy: files > 10% of budget get auto-truncated
 const HYBRID_THRESHOLD: f64 = 0.10;
 
+/// Maximum re-render passes when closing the loop on budget conformance.
+/// Each pass shrinks the overage geometrically, so this is a runaway guard,
+/// not an expected iteration count (2-4 passes is typical).
+const MAX_BUDGET_PASSES: usize = 16;
+
 /// Token estimation using heuristic (4 chars per token)
 ///
 /// Note: Rust implementation uses heuristic only. For precise counting,
@@ -455,6 +460,99 @@ pub fn apply_token_budget(
     };
 
     (selected, report)
+}
+
+/// Render the selection and guarantee the result actually fits the budget.
+///
+/// `apply_token_budget` selects files by summing *per-file* estimates, which
+/// systematically undercounts the real rendered size for two reasons:
+/// the wrapper (context header, metadata, and especially the attention_map,
+/// which alone measured ~2.8k tokens on a 50k run) is never attributed to
+/// any file, and per-file estimates carry their own drift. Measured
+/// 2026-08-01 before this fix: 20k->123.3%, 50k->115.2%, 100k->110.9%.
+///
+/// Rather than chase a perfect open-loop estimate — which would re-drift the
+/// next time a serializer changes — this closes the loop: render, measure the
+/// real output, and if it overshoots, drop the lowest-ranked files and
+/// re-render. `report.included_files` preserves selection order (tier ASC,
+/// priority DESC, path ASC), so its tail is the least important content.
+///
+/// Dropping is accounted grossly: a dropped file also *adds* a `<coldspot/>`
+/// entry to the attention map, so each pass recovers slightly less than the
+/// tokens it drops. Under-dropping and re-measuring converges geometrically
+/// and never over-trims, which is the safer direction to err.
+///
+/// Returns the rendered output; `selected` and `report` are left consistent
+/// with it.
+pub fn render_within_budget<F>(
+    selected: &mut Vec<(String, String)>,
+    report: &mut BudgetReport,
+    mut render: F,
+) -> String
+where
+    F: FnMut(&[(String, String)], &mut BudgetReport) -> String,
+{
+    let budget = report.budget;
+    let mut output = render(selected, report);
+    report.recalibrate(&output);
+
+    // No budget means no ceiling to enforce.
+    if budget == 0 {
+        return output;
+    }
+
+    let mut passes = 0;
+    let mut extra_dropped = 0;
+
+    while report.used > budget && selected.len() > 1 && passes < MAX_BUDGET_PASSES {
+        let overage = report.used - budget;
+        let mut reclaimed = 0;
+
+        while reclaimed < overage && selected.len() > 1 {
+            let Some((path, priority, tokens, method)) = report.included_files.pop() else {
+                break;
+            };
+
+            if let Some(pos) = selected.iter().position(|(p, _)| p == &path) {
+                selected.remove(pos);
+            }
+            if method == "truncated" {
+                report.truncated_count = report.truncated_count.saturating_sub(1);
+            }
+
+            report.dropped_files.push((path, priority, tokens));
+            reclaimed += tokens;
+            extra_dropped += 1;
+        }
+
+        report.selected_count = selected.len();
+        report.dropped_count = report.dropped_files.len();
+
+        output = render(selected, report);
+        report.recalibrate(&output);
+        passes += 1;
+    }
+
+    if extra_dropped > 0 {
+        eprintln!(
+            "note: dropped {} additional file(s) so the rendered output fits the {}-token budget \
+             (per-file estimates exclude wrapper/attention-map overhead)",
+            extra_dropped,
+            format_number(budget)
+        );
+    }
+
+    // A single file larger than the whole budget can't be honored by dropping.
+    if report.used > budget {
+        eprintln!(
+            "warning: rendered output is {} tokens, over the {}-token budget — \
+             the highest-priority file alone exceeds it (try --budget-strategy truncate)",
+            format_number(report.used),
+            format_number(budget)
+        );
+    }
+
+    output
 }
 
 #[cfg(test)]
@@ -1268,5 +1366,146 @@ mod tests {
                 path_str, estimated, real_overhead_tokens
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod budget_enforcement_tests {
+    use super::*;
+
+    fn report_with(budget: usize, included: &[(&str, usize)]) -> BudgetReport {
+        BudgetReport {
+            budget,
+            used: included.iter().map(|(_, t)| t).sum(),
+            selected_count: included.len(),
+            dropped_count: 0,
+            dropped_files: Vec::new(),
+            estimation_method: "test".to_string(),
+            strategy: "drop".to_string(),
+            included_files: included
+                .iter()
+                .map(|(p, t)| (p.to_string(), 50, *t, "full".to_string()))
+                .collect(),
+            truncated_count: 0,
+        }
+    }
+
+    fn files(names: &[&str]) -> Vec<(String, String)> {
+        names
+            .iter()
+            .map(|n| (n.to_string(), "x".repeat(400)))
+            .collect()
+    }
+
+    /// Output already fits: nothing dropped, single render.
+    #[test]
+    fn test_no_op_when_output_already_fits() {
+        let mut selected = files(&["a.rs", "b.rs"]);
+        let mut report = report_with(10_000, &[("a.rs", 100), ("b.rs", 100)]);
+        let mut renders = 0;
+
+        let out = render_within_budget(&mut selected, &mut report, |sel, _r| {
+            renders += 1;
+            "y".repeat(sel.len() * 400)
+        });
+
+        assert_eq!(
+            renders, 1,
+            "should not re-render when already within budget"
+        );
+        assert_eq!(selected.len(), 2);
+        assert_eq!(report.dropped_count, 0);
+        assert!(report.used <= report.budget);
+        assert_eq!(out.len(), 800);
+    }
+
+    /// The core P0 fix: an initial render that overshoots must be trimmed
+    /// until the real output fits.
+    #[test]
+    fn test_drops_until_rendered_output_fits() {
+        let names: Vec<String> = (0..20).map(|i| format!("f{i:02}.rs")).collect();
+        let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+        let mut selected = files(&refs);
+        let included: Vec<(&str, usize)> = refs.iter().map(|n| (*n, 100)).collect();
+
+        // Budget 1000 tokens; each rendered file costs 400 bytes = 100 tokens.
+        // 20 files renders 2000 tokens - double the budget.
+        let mut report = report_with(1000, &included);
+
+        render_within_budget(&mut selected, &mut report, |sel, _r| {
+            "y".repeat(sel.len() * 400)
+        });
+
+        assert!(
+            report.used <= report.budget,
+            "rendered {} tokens exceeds budget {}",
+            report.used,
+            report.budget
+        );
+        assert!(selected.len() < 20, "should have dropped files");
+        assert_eq!(
+            report.selected_count,
+            selected.len(),
+            "report must stay consistent with the selection"
+        );
+        assert_eq!(report.dropped_count, report.dropped_files.len());
+        assert_eq!(
+            selected.len() + report.dropped_files.len(),
+            20,
+            "no file may be lost or duplicated"
+        );
+    }
+
+    /// Lowest-ranked files (tail of included_files) are dropped first, so the
+    /// highest-priority content survives.
+    #[test]
+    fn test_drops_lowest_ranked_first() {
+        let mut selected = files(&["keep.rs", "mid.rs", "drop.rs"]);
+        let mut report = report_with(100, &[("keep.rs", 100), ("mid.rs", 100), ("drop.rs", 100)]);
+
+        render_within_budget(&mut selected, &mut report, |sel, _r| {
+            "y".repeat(sel.len() * 400)
+        });
+
+        assert!(
+            selected.iter().any(|(p, _)| p == "keep.rs"),
+            "highest-ranked file must survive, got {:?}",
+            selected.iter().map(|(p, _)| p).collect::<Vec<_>>()
+        );
+        assert!(
+            !selected.iter().any(|(p, _)| p == "drop.rs"),
+            "lowest-ranked file should be dropped first"
+        );
+    }
+
+    /// budget == 0 means "no ceiling" - render once, don't trim.
+    #[test]
+    fn test_zero_budget_is_unbounded() {
+        let mut selected = files(&["a.rs", "b.rs"]);
+        let mut report = report_with(0, &[("a.rs", 100), ("b.rs", 100)]);
+        let mut renders = 0;
+
+        render_within_budget(&mut selected, &mut report, |sel, _r| {
+            renders += 1;
+            "y".repeat(sel.len() * 400)
+        });
+
+        assert_eq!(renders, 1);
+        assert_eq!(selected.len(), 2, "zero budget must not drop anything");
+    }
+
+    /// A single file bigger than the entire budget can't be fixed by dropping;
+    /// keep one file rather than emitting an empty context, and don't spin.
+    #[test]
+    fn test_single_oversized_file_terminates_without_emptying() {
+        let mut selected = files(&["huge.rs"]);
+        let mut report = report_with(10, &[("huge.rs", 100)]);
+
+        render_within_budget(&mut selected, &mut report, |sel, _r| {
+            "y".repeat(sel.len() * 400)
+        });
+
+        assert_eq!(selected.len(), 1, "must not produce an empty context");
+        assert!(report.used > report.budget, "honestly reports the overage");
     }
 }

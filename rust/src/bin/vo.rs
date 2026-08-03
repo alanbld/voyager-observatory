@@ -3566,7 +3566,7 @@ pub fn run() {
             BudgetStrategy::Truncate => "truncate",
             BudgetStrategy::Hybrid => "hybrid",
         };
-        let (selected, mut report) = apply_token_budget(
+        let (mut selected, mut report) = apply_token_budget(
             files,
             budget,
             &lens_manager,
@@ -3574,53 +3574,50 @@ pub fn run() {
             config.output_format,
         );
 
-        // Build file entries for serialization
-        let entries: Vec<pm_encoder::FileEntry> = selected
-            .iter()
-            .map(|(path, content)| pm_encoder::FileEntry {
-                path: path.clone(),
-                size: content.len() as u64,
-                content: content.clone(),
-                md5: pm_encoder::calculate_md5(content),
-                mtime: 0,
-                ctime: 0,
-            })
-            .collect();
+        // Render through the budget-enforcement loop: per-file estimates
+        // exclude the wrapper/attention-map overhead, so the first render can
+        // overshoot. render_within_budget re-renders (dropping the
+        // lowest-ranked files) until the real output fits, leaving `report`
+        // consistent with what was actually produced.
+        let output = pm_encoder::render_within_budget(&mut selected, &mut report, |sel, rep| {
+            let entries: Vec<pm_encoder::FileEntry> = sel
+                .iter()
+                .map(|(path, content)| pm_encoder::FileEntry {
+                    path: path.clone(),
+                    size: content.len() as u64,
+                    content: content.clone(),
+                    md5: pm_encoder::calculate_md5(content),
+                    mtime: 0,
+                    ctime: 0,
+                })
+                .collect();
 
-        // Serialize selected files with configured format and truncation
-        let output = if config.output_format == OutputFormat::ClaudeXml {
-            // Use streaming XmlWriter for ClaudeXml format with budget report (Fractal Protocol v2.0)
-            // This includes hotspots/coldspots in attention_map from BudgetReport.
-            // Recalibrates report.used against the real rendered size internally.
-            pm_encoder::serialize_entries_claude_xml_with_report(
-                &config,
-                &entries,
-                &mut report,
-                &lens_manager,
-            )
-            .unwrap_or_else(|e| {
-                eprintln!("Error serializing XML: {}", e);
-                std::process::exit(1);
-            })
-        } else {
-            // Use standard serialization for other formats
-            let mut output = String::new();
-            for entry in &entries {
-                output.push_str(&pm_encoder::serialize_file_with_format(
-                    entry,
-                    config.truncate_lines,
-                    &config.truncate_mode,
-                    config.output_format,
-                ));
+            if config.output_format == OutputFormat::ClaudeXml {
+                // Streaming XmlWriter with budget report (Fractal Protocol v2.0):
+                // includes hotspots/coldspots in attention_map from BudgetReport.
+                pm_encoder::serialize_entries_claude_xml_with_report(
+                    &config,
+                    &entries,
+                    rep,
+                    &lens_manager,
+                )
+                .unwrap_or_else(|e| {
+                    eprintln!("Error serializing XML: {}", e);
+                    std::process::exit(1);
+                })
+            } else {
+                let mut output = String::new();
+                for entry in &entries {
+                    output.push_str(&pm_encoder::serialize_file_with_format(
+                        entry,
+                        config.truncate_lines,
+                        &config.truncate_mode,
+                        config.output_format,
+                    ));
+                }
+                output
             }
-            output
-        };
-
-        // Recalibrate the report against the real rendered output (no-op for
-        // ClaudeXml, which already recalibrated itself above) so the budget
-        // report, context health, and mission log all agree with each other
-        // and with what was actually produced.
-        report.recalibrate(&output);
+        });
 
         // Print budget report to stderr, now reflecting the real token count
         report.print_report();
@@ -3640,7 +3637,7 @@ pub fn run() {
 
         // Print Context Health if requested
         if cli.health {
-            print_context_health(&output, entries.len(), report.used);
+            print_context_health(&output, selected.len(), report.used);
         }
 
         // Print Voyager Mission Log (to stderr)
@@ -3656,7 +3653,7 @@ pub fn run() {
             &output,
             cli.lens.as_ref().map(|l| l.as_str()),
             token_budget_parsed,
-            entries.len(),
+            selected.len(),
             report.used,
         );
         return;

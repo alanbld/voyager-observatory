@@ -75,7 +75,8 @@ pub mod plugins;
 pub mod server;
 
 pub use budgeting::{
-    apply_token_budget, parse_token_budget, BudgetReport, FileData, TokenEstimator,
+    apply_token_budget, parse_token_budget, render_within_budget, BudgetReport, FileData,
+    TokenEstimator,
 };
 pub use formats::{escape_cdata, AttentionEntry, XmlConfig, XmlError, XmlWriter};
 pub use lenses::{AppliedLens, LensConfig, LensManager};
