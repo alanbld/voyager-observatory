@@ -2447,9 +2447,13 @@ fn render_claude_xml(
 
         // Apply truncation if configured or if budget strategy truncated it
         let (content, truncated) = if was_truncated {
-            // Already truncated by budget strategy - use structure mode
-            let (trunc, _) = truncate_structure(&entry.content, &entry.path);
-            (trunc, true)
+            // The budget strategy already skeletonized this content (via
+            // try_truncate_to_structure, which now prefers the AST path).
+            // Re-running the regex skeletonizer over an existing skeleton is
+            // pure loss: it re-flattened struct bodies the AST pass had
+            // deliberately preserved, which is why field-less structs kept
+            // appearing in budgeted output even after roadmap 2.2 step 4.
+            (entry.content.clone(), true)
         } else if config.truncate_lines > 0 {
             truncate_for_xml(&entry.content, config.truncate_lines, &config.truncate_mode)
         } else {

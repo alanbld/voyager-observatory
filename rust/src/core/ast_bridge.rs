@@ -92,6 +92,43 @@ impl AstBridge {
     }
 
     /// Get a summary of the file structure for context generation
+    /// Render a structural skeleton: signatures and type shapes, bodies elided.
+    ///
+    /// Returns `None` for languages without an adapter, so callers can fall
+    /// back to the regex skeletonizer for the long tail (roadmap 2.2 step 4).
+    ///
+    /// This exists because the regex skeletonizer measurably loses the most
+    /// valuable parts of a skeleton. On a real 50k-token run (2026-08-01) it
+    /// emitted 201 structs with no fields at all, cut 68 signatures at the
+    /// opening paren (losing every parameter and return type), and emitted
+    /// Python found inside Rust string literals as if it were code. Those are
+    /// all trivial once you have a parse tree and near-impossible with line
+    /// regexes.
+    ///
+    /// Type declarations (struct/enum/etc.) keep their full body: for a
+    /// consumer trying to understand architecture, the field types *are* the
+    /// architecture. Callables keep their signature and lose their body.
+    pub fn skeletonize(&self, source: &str, language: LanguageId) -> Option<String> {
+        let file = self.analyze_file(source, language)?;
+        let mut out = String::new();
+
+        for import in &file.imports {
+            if let Some(text) = slice_span(source, import.span.start, import.span.end) {
+                out.push_str(text.trim_end());
+                out.push('\n');
+            }
+        }
+        if !file.imports.is_empty() {
+            out.push('\n');
+        }
+
+        for decl in &file.declarations {
+            render_declaration(source, decl, 0, &mut out);
+        }
+
+        Some(out)
+    }
+
     pub fn get_file_summary(&self, file: &AstFile) -> FileSummary {
         let mut summary = FileSummary {
             path: file.path.clone(),
@@ -289,6 +326,105 @@ pub struct StarSummary {
     pub visibility: String,
     pub line: usize,
     pub has_doc: bool,
+}
+
+/// Byte-slice `source`, guarding against spans that don't land on UTF-8
+/// character boundaries (tree-sitter reports byte offsets; a multi-byte
+/// character straddling an edge would otherwise panic).
+fn slice_span(source: &str, start: usize, end: usize) -> Option<&str> {
+    if start > end || end > source.len() {
+        return None;
+    }
+    source.get(start..end)
+}
+
+/// True for declarations whose body *is* the information (field types,
+/// enum variants) rather than an implementation to be elided.
+fn body_is_structural(kind: DeclarationKind) -> bool {
+    matches!(
+        kind,
+        DeclarationKind::Struct
+            | DeclarationKind::Enum
+            | DeclarationKind::Interface
+            | DeclarationKind::Type
+            | DeclarationKind::Constant
+    )
+}
+
+/// Render one declaration (and its children) into a skeleton.
+fn render_declaration(source: &str, decl: &Declaration, depth: usize, out: &mut String) {
+    let pad = "    ".repeat(depth);
+
+    if let Some(doc) = &decl.doc_comment {
+        // Slice the original source rather than using `doc.text`: adapters
+        // strip the comment markers, and emitting bare prose where `///` was
+        // makes documentation indistinguishable from code and the skeleton
+        // syntactically invalid.
+        let raw = slice_span(source, doc.span.start, doc.span.end);
+        for line in raw.unwrap_or(&doc.text).lines() {
+            out.push_str(&pad);
+            out.push_str(line.trim_end());
+            out.push('\n');
+        }
+    }
+
+    // Type declarations keep their full text: for architecture, the field
+    // types are the architecture. Callables keep only their signature.
+    if body_is_structural(decl.kind) {
+        if let Some(text) = slice_span(source, decl.span.start, decl.span.end) {
+            for line in text.lines() {
+                out.push_str(&pad);
+                out.push_str(line.trim_end());
+                out.push('\n');
+            }
+            out.push('\n');
+            return;
+        }
+    }
+
+    // Prefer the adapter's signature span — that's what keeps multi-line
+    // signatures (and their return types) intact, which the regex
+    // skeletonizer truncated at the opening paren.
+    let signature = decl
+        .signature_span
+        .as_ref()
+        .and_then(|s| slice_span(source, s.start, s.end))
+        .or_else(|| {
+            // Fall back to everything before the body starts.
+            decl.body_span
+                .as_ref()
+                .and_then(|b| slice_span(source, decl.span.start, b.start))
+        })
+        .or_else(|| slice_span(source, decl.span.start, decl.span.end));
+
+    if let Some(sig) = signature {
+        let sig = sig.trim_end().trim_end_matches('{').trim_end();
+        for line in sig.lines() {
+            out.push_str(&pad);
+            out.push_str(line.trim_end());
+            out.push('\n');
+        }
+    }
+
+    if decl.children.is_empty() {
+        // Leaf callable: mark the elided body.
+        if !body_is_structural(decl.kind) && decl.body_span.is_some() {
+            let last = out.trim_end_matches('\n').len();
+            out.truncate(last);
+            out.push_str(" { ... }\n");
+        }
+    } else {
+        let last = out.trim_end_matches('\n').len();
+        out.truncate(last);
+        out.push_str(" {\n");
+        for child in &decl.children {
+            render_declaration(source, child, depth + 1, out);
+        }
+        out.push_str(&pad);
+        out.push_str("}\n");
+    }
+
+    out.push('\n');
 }
 
 /// Helper to convert declaration kind to string
@@ -875,5 +1011,89 @@ pub fn undocumented() {}
         let undoc_star = summary.stars.iter().find(|s| s.name == "undocumented");
         assert!(undoc_star.is_some());
         assert!(!undoc_star.unwrap().has_doc);
+    }
+}
+
+#[cfg(test)]
+mod skeleton_tests {
+    use super::*;
+
+    const RUST_SAMPLE: &str = r#"
+/// A budget report.
+pub struct BudgetReport {
+    pub budget: usize,
+    pub used: usize,
+}
+
+pub fn estimate_file_tokens_for_format(
+    path: &Path,
+    content: &str,
+    format: OutputFormat,
+) -> usize {
+    let x = 1;
+    x + 2
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_something() {
+        let python = "def method_one(self, arg1):\n    pass";
+        assert!(true);
+    }
+}
+"#;
+
+    /// Roadmap 2.2 step 4 / P1. Measured against the regex skeletonizer on a
+    /// real 50k run (2026-08-01): 201 structs rendered with no fields, 68
+    /// signatures cut at the opening paren, 19.5% of content lines spent on
+    /// `fn test_*` names, and Python leaking out of Rust string literals.
+    /// An AST-based skeleton must fix all four.
+    #[test]
+    fn test_ast_skeleton_fixes_regex_defects() {
+        let bridge = AstBridge::new();
+        let skel = bridge
+            .skeletonize(RUST_SAMPLE, LanguageId::Rust)
+            .expect("rust is a supported language");
+
+        // 1. Struct fields ARE the architecture — they must survive.
+        assert!(
+            skel.contains("pub budget: usize"),
+            "struct fields must be preserved, got:\n{skel}"
+        );
+
+        // 2. Multi-line signatures must be complete, not cut at the paren.
+        assert!(
+            skel.contains("format: OutputFormat") && skel.contains("-> usize"),
+            "multi-line signature must survive intact, got:\n{skel}"
+        );
+
+        // 3. Function bodies must still be stripped (that's the point).
+        assert!(
+            !skel.contains("x + 2"),
+            "function bodies must be stripped, got:\n{skel}"
+        );
+
+        // 4. Content inside string literals must never be emitted as code.
+        assert!(
+            !skel.contains("def method_one"),
+            "string-literal contents must not leak into the skeleton, got:\n{skel}"
+        );
+    }
+
+    #[test]
+    fn test_skeleton_returns_none_for_unsupported_language() {
+        let bridge = AstBridge::new();
+        assert!(bridge.skeletonize("package main", LanguageId::Go).is_none());
+    }
+
+    #[test]
+    fn test_skeleton_preserves_doc_comments() {
+        let bridge = AstBridge::new();
+        let skel = bridge.skeletonize(RUST_SAMPLE, LanguageId::Rust).unwrap();
+        assert!(
+            skel.contains("A budget report"),
+            "doc comments carry architectural intent, got:\n{skel}"
+        );
     }
 }

@@ -11,6 +11,7 @@
 //! 3. Tests (tests/, examples/) - If budget remains
 //! 4. Other (docs, scripts) - Lowest priority
 
+use crate::core::ast_bridge::AstBridge;
 use crate::core::engine::FileTier;
 use crate::lenses::LensManager;
 use crate::truncate_structure;
@@ -286,6 +287,26 @@ fn format_number(n: usize) -> String {
 ///
 /// Returns (truncated_content, was_truncated)
 fn try_truncate_to_structure(path: &str, content: &str) -> (String, bool) {
+    // Roadmap 2.2 step 4: prefer a real parse tree for the languages that
+    // have an adapter, and keep the regex skeletonizer for the long tail.
+    //
+    // The regex version measurably loses what matters most in a skeleton —
+    // on a real 50k run it emitted 201 structs with no fields, cut 68
+    // signatures at the opening paren, and treated Python inside Rust string
+    // literals as code. All are free once you have an AST.
+    let language = AstBridge::detect_language(Path::new(path));
+    let bridge = AstBridge::new();
+    if bridge.supports(language) {
+        if let Some(skeleton) = bridge.skeletonize(content, language) {
+            // Only take the AST result if it actually saved something; a
+            // parse that degrades to near-original size means the adapter
+            // recovered little, so the regex path is no worse.
+            if !skeleton.trim().is_empty() && skeleton.len() < content.len() {
+                return (skeleton, true);
+            }
+        }
+    }
+
     truncate_structure(content, path)
 }
 
