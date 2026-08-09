@@ -20,12 +20,13 @@
 
 use clap::{Parser, ValueEnum};
 use pm_encoder::core::{
-    ContextEngine, ContextStore, DetailLevel, IntelligentPresenter, ObserversJournal,
-    SemanticDepth, SkeletonMode, ZoomConfig, ZoomTarget, DEFAULT_ALPHA,
+    ContextEngine, ContextStore, IntelligentPresenter, ObserversJournal, SkeletonMode, ZoomConfig,
+    ZoomTarget, DEFAULT_ALPHA,
 };
 use pm_encoder::server::McpServer;
 use pm_encoder::{
     self, apply_token_budget, parse_token_budget, EncoderConfig, LensManager, OutputFormat,
+    TokenEstimator,
 };
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -39,7 +40,7 @@ use std::path::{Path, PathBuf};
 #[command(version = pm_encoder::VERSION)]
 #[command(about = "🌌 Voyager Observatory: Navigate the code galaxy")]
 #[command(after_help = "EXAMPLES:
-  # Start exploring (auto-focus applies smart defaults)
+  # Start exploring
   vo .
 
   # Explore business logic constellations
@@ -70,13 +71,14 @@ struct Cli {
     #[arg(value_name = "PATH", help_heading = "🔭 VIEWFINDER (Essential)")]
     project_root: Option<PathBuf>,
 
-    /// What to look for [architecture, debug, security, onboarding, minimal]
+    /// What to look for
     #[arg(
         long = "lens",
+        value_enum,
         value_name = "LENS",
         help_heading = "🔭 VIEWFINDER (Essential)"
     )]
-    lens: Option<String>,
+    lens: Option<LensArg>,
 
     /// Output file path (default: stdout)
     #[arg(
@@ -107,18 +109,13 @@ struct Cli {
     #[arg(long = "exclude", value_name = "PATTERN", num_args = 0.., help_heading = "🔍 LENS FILTERS")]
     exclude: Vec<String>,
 
-    /// Analysis depth [quick, balanced, deep]
-    #[arg(
-        long = "semantic-depth",
-        value_enum,
-        default_value = "balanced",
-        help_heading = "🔍 LENS FILTERS"
-    )]
-    semantic_depth: SemanticDepthArg,
-
     /// Use cached analysis (deterministic output)
     #[arg(long = "frozen", help_heading = "🔍 LENS FILTERS")]
     frozen: bool,
+
+    /// Don't blend priorities with learned utility scores from .pm_encoder/context_store.json
+    #[arg(long = "no-learning", help_heading = "🔍 LENS FILTERS")]
+    no_learning: bool,
 
     /// Include sensitive files in output
     #[arg(long = "allow-sensitive", help_heading = "🔍 LENS FILTERS")]
@@ -205,19 +202,6 @@ struct Cli {
         help_heading = "💡 EXPLORATION"
     )]
     explore: Option<String>,
-
-    /// Output detail level [summary, smart, detailed]
-    #[arg(
-        long = "detail",
-        value_enum,
-        default_value = "smart",
-        help_heading = "💡 EXPLORATION"
-    )]
-    detail: DetailLevelArg,
-
-    /// Show technical reasoning behind decisions
-    #[arg(long = "explain-reasoning", help_heading = "💡 EXPLORATION")]
-    explain_reasoning: bool,
 
     /// Show system health summary
     #[arg(long = "health", help_heading = "💡 EXPLORATION")]
@@ -345,7 +329,7 @@ struct Cli {
     // ═══════════════════════════════════════════════════════════════════════════
     // 📊 CELESTIAL CENSUS (Code Health Survey)
     // ═══════════════════════════════════════════════════════════════════════════
-    /// Survey the codebase [composition, health]
+    /// Survey the codebase [composition, health, evolution]
     #[arg(long = "survey", value_name = "MODE", help_heading = "📊 CENSUS")]
     survey: Option<SurveyMode>,
 
@@ -367,7 +351,7 @@ struct Cli {
     )]
     chronos_depth: ChronosDepth,
 
-    /// Disable Chronos Warp cache (force fresh git analysis)
+    /// Disable survey caches (Chronos Warp git analysis + AST parse cache)
     #[arg(long = "no-cache", help_heading = "📊 CENSUS")]
     no_cache: bool,
 
@@ -409,46 +393,38 @@ struct Cli {
 // New Enums for Telescope UX
 // =============================================================================
 
-/// Semantic analysis depth.
-#[derive(Debug, Clone, Copy, ValueEnum, Default)]
-enum SemanticDepthArg {
-    /// Fast pattern matching (10ms)
-    Quick,
-    /// Balanced analysis with timeout (500ms)
-    #[default]
-    Balanced,
-    /// Full semantic analysis (no timeout)
-    Deep,
+/// Which lens to view the codebase through.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum LensArg {
+    /// High-level code structure
+    Architecture,
+    /// Recent changes for debugging
+    Debug,
+    /// Security-relevant files
+    Security,
+    /// Essential files for new contributors
+    Onboarding,
 }
 
-impl From<SemanticDepthArg> for SemanticDepth {
-    fn from(arg: SemanticDepthArg) -> Self {
-        match arg {
-            SemanticDepthArg::Quick => SemanticDepth::Quick,
-            SemanticDepthArg::Balanced => SemanticDepth::Balanced,
-            SemanticDepthArg::Deep => SemanticDepth::Deep,
+impl LensArg {
+    fn as_str(&self) -> &'static str {
+        match self {
+            LensArg::Architecture => "architecture",
+            LensArg::Debug => "debug",
+            LensArg::Security => "security",
+            LensArg::Onboarding => "onboarding",
         }
     }
-}
 
-/// Output detail level.
-#[derive(Debug, Clone, Copy, ValueEnum, Default)]
-enum DetailLevelArg {
-    /// Minimal output with key insights
-    Summary,
-    /// Progressive disclosure (default)
-    #[default]
-    Smart,
-    /// Full technical details
-    Detailed,
-}
-
-impl From<DetailLevelArg> for DetailLevel {
-    fn from(arg: DetailLevelArg) -> Self {
-        match arg {
-            DetailLevelArg::Summary => DetailLevel::Summary,
-            DetailLevelArg::Smart => DetailLevel::Smart,
-            DetailLevelArg::Detailed => DetailLevel::Detailed,
+    /// Default token budget applied when this lens is used without an
+    /// explicit --token-budget, so `--lens X` alone never dumps the whole
+    /// repo (previously ~2.4M tokens for --lens onboarding on this repo).
+    fn default_budget(&self) -> &'static str {
+        match self {
+            LensArg::Architecture => "100k",
+            LensArg::Debug => "80k",
+            LensArg::Security => "80k",
+            LensArg::Onboarding => "50k",
         }
     }
 }
@@ -510,7 +486,7 @@ enum SurveyMode {
 }
 
 /// Grouping level for survey output
-#[derive(Debug, Clone, Copy, ValueEnum, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
 enum SurveyGrouping {
     /// Group by directory (default)
     #[default]
@@ -674,7 +650,7 @@ fn parse_zoom_target(s: &str) -> Result<ZoomConfig, String> {
 
 /// Run the Celestial Census survey
 fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &Cli) {
-    use pm_encoder::core::{AstBridge, CelestialCensus, GalaxyCensus};
+    use pm_encoder::core::{AstBridge, CelestialCensus, GalaxyCensus, ParseCacheManager};
     #[cfg(feature = "temporal")]
     use pm_encoder::core::{
         ChronosEngine, StellarDriftAnalyzer, StellarDriftReport, TemporalCensus,
@@ -683,6 +659,15 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
     use std::time::Instant;
 
     let start = Instant::now();
+
+    if grouping != SurveyGrouping::Constellation
+        && matches!(mode, SurveyMode::Health | SurveyMode::Evolution)
+    {
+        eprintln!(
+            "note: --by is ignored in --survey {:?} mode (only composition respects grouping)",
+            mode
+        );
+    }
 
     // Walk directory and collect files
     let ignore_patterns: Vec<String> = cli.exclude.clone();
@@ -707,18 +692,43 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
     let mut galaxy = GalaxyCensus::new(root.to_string_lossy().to_string());
     let mut star_counts: HashMap<String, usize> = HashMap::new();
 
+    // Parse cache: avoids re-parsing unchanged files across repeated `--survey`
+    // invocations. Keyed by content hash (md5), not mtime, so it survives
+    // touches/checkouts that don't actually change file content.
+    let parse_cache_manager = ParseCacheManager::new(root);
+    let mut parse_cache = if cli.no_cache {
+        pm_encoder::core::ParseCache::new()
+    } else {
+        parse_cache_manager.load()
+    };
+    let mut parse_cache_hits: usize = 0;
+
     // Analyze each file
     for entry in &entries {
         // Detect language from path
         let language = AstBridge::detect_language(std::path::Path::new(&entry.path));
 
-        // Parse file with AST bridge
-        if let Some(file) = bridge.analyze_file(&entry.content, language) {
+        let file = if let Some(cached) = parse_cache.get(&entry.path, &entry.md5) {
+            parse_cache_hits += 1;
+            Some(cached.clone())
+        } else {
+            let parsed = bridge.analyze_file(&entry.content, language);
+            if let Some(ref file) = parsed {
+                parse_cache.insert(entry.path.clone(), entry.md5.clone(), file.clone());
+            }
+            parsed
+        };
+
+        if let Some(file) = file {
             let metrics = census.analyze(&file);
             // Track star counts for drift analysis
             star_counts.insert(entry.path.clone(), metrics.stars.count);
             galaxy.add_file(&entry.path, metrics);
         }
+    }
+
+    if !cli.no_cache {
+        let _ = parse_cache_manager.save(&parse_cache);
     }
 
     galaxy.finalize();
@@ -859,6 +869,11 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
     }
 
     // Print timing with Warp status
+    let parse_cache_indicator = if entries.is_empty() {
+        String::new()
+    } else {
+        format!(" [AST cache: {}/{} hits]", parse_cache_hits, entries.len())
+    };
     eprintln!();
     #[cfg(feature = "temporal")]
     if let Some(ref tc) = temporal_census {
@@ -868,24 +883,27 @@ fn run_survey(root: &PathBuf, mode: SurveyMode, grouping: SurveyGrouping, cli: &
             _ => "",
         };
         eprintln!(
-            "Survey completed in {:.1}ms ({} files, {} chronos events){}",
+            "Survey completed in {:.1}ms ({} files, {} chronos events){}{}",
             elapsed.as_secs_f64() * 1000.0,
             galaxy.total_files,
             tc.total_observations,
-            warp_indicator
+            warp_indicator,
+            parse_cache_indicator
         );
     } else {
         eprintln!(
-            "Survey completed in {:.1}ms ({} files analyzed)",
+            "Survey completed in {:.1}ms ({} files analyzed){}",
             elapsed.as_secs_f64() * 1000.0,
-            galaxy.total_files
+            galaxy.total_files,
+            parse_cache_indicator
         );
     }
     #[cfg(not(feature = "temporal"))]
     eprintln!(
-        "Survey completed in {:.1}ms ({} files analyzed)",
+        "Survey completed in {:.1}ms ({} files analyzed){}",
         elapsed.as_secs_f64() * 1000.0,
-        galaxy.total_files
+        galaxy.total_files,
+        parse_cache_indicator
     );
 }
 
@@ -2411,10 +2429,12 @@ fn format_mass(lines: usize) -> String {
 }
 
 /// Print Context Health summary to stderr
-fn print_context_health(output: &str, file_count: usize) {
-    // Calculate total tokens (rough estimate: 4 chars per token)
-    let total_tokens = output.len() / 4;
-
+///
+/// `total_tokens` is supplied by the caller (the recalibrated `BudgetReport.used`
+/// when a budget was applied, or `TokenEstimator::estimate_tokens(output)`
+/// otherwise) rather than re-derived here, so this always agrees with the
+/// budget report and mission log for the same run.
+fn print_context_health(output: &str, file_count: usize, total_tokens: usize) {
     // Count zoom affordances
     let zoom_count = output.matches("ZOOM_AFFORDANCE").count();
 
@@ -2464,7 +2484,8 @@ fn find_project_root(start: &PathBuf) -> Option<PathBuf> {
         "go.mod",                  // Go
         "pom.xml",                 // Java Maven
         "build.gradle",            // Java Gradle
-        ".pm_encoder_config.json", // pm_encoder config
+        ".vo_config.json",         // vo config
+        ".pm_encoder_config.json", // vo config (deprecated pre-rename name)
     ];
 
     let mut current = start.clone();
@@ -2498,12 +2519,18 @@ fn find_project_root(start: &PathBuf) -> Option<PathBuf> {
 /// - Fuel gauge (token usage)
 /// - Points of interest
 /// - Transmission status
+///
+/// `tokens_used` is supplied by the caller (the recalibrated `BudgetReport.used`
+/// when a budget was applied, or `TokenEstimator::estimate_tokens(output)`
+/// otherwise) rather than re-derived here, so the fuel gauge always agrees
+/// with the budget report and context health for the same run.
 fn print_mission_log(
     project_name: &str,
     output: &str,
     lens: Option<&str>,
     token_budget: Option<usize>,
     file_count: usize,
+    tokens_used: usize,
 ) {
     let presenter = IntelligentPresenter::new();
 
@@ -2545,8 +2572,8 @@ fn print_mission_log(
     // Detect hemispheres
     let hemispheres = IntelligentPresenter::detect_hemispheres(&languages);
 
-    // Calculate token usage
-    let tokens_used = output.len() / 4; // Rough estimate
+    // Token usage is supplied by the caller (see fn doc) so it agrees with
+    // the budget report and context health for the same run.
     let budget = token_budget.unwrap_or(tokens_used);
 
     // Determine lens confidence (default high if lens was applied)
@@ -2703,6 +2730,10 @@ pub fn run() {
             std::process::exit(1);
         }
 
+        if cli.lens.is_some() {
+            eprintln!("note: --lens is ignored in --survey mode");
+        }
+
         // Run the survey
         run_survey(&survey_root, survey_mode, cli.by, &cli);
         return;
@@ -2732,8 +2763,8 @@ pub fn run() {
         Some(path) => path,
         None => {
             eprintln!("Error: PROJECT_ROOT argument is required");
-            eprintln!("Usage: pm_encoder <PROJECT_ROOT>");
-            eprintln!("\nTry 'pm_encoder --help' for more information.");
+            eprintln!("Usage: vo <PROJECT_ROOT>");
+            eprintln!("\nTry 'vo --help' for more information.");
             std::process::exit(1);
         }
     };
@@ -2830,25 +2861,30 @@ pub fn run() {
     if let Some(intent_str) = &cli.explore {
         use pm_encoder::core::{ExplorationIntent, ExplorerConfig, IntentExplorer};
 
+        if cli.lens.is_some() {
+            eprintln!("note: --lens is ignored in --explore mode");
+        }
+
         // Parse intent
         let intent: ExplorationIntent = match intent_str.parse() {
             Ok(i) => i,
             Err(e) => {
+                // e already includes the valid-intents list (composition.rs's FromStr impl)
                 eprintln!("Error: {}", e);
-                eprintln!(
-                    "Valid intents: business-logic, debugging, onboarding, security, migration"
-                );
                 std::process::exit(1);
             }
         };
 
-        // Build explorer config
-        let config = ExplorerConfig {
+        // Build explorer config. Extend (not replace) the default
+        // ignore_patterns — a bare struct-literal override here would
+        // silently drop node_modules/target/.git/etc. whenever --exclude
+        // isn't passed, which is the common case.
+        let mut config = ExplorerConfig {
             max_files: cli.explore_max_files,
             include_tests: cli.explore_tests,
-            ignore_patterns: cli.exclude.clone(),
             ..Default::default()
         };
+        config.ignore_patterns.extend(cli.exclude.clone());
 
         // Create explorer and run
         let explorer = IntentExplorer::with_config(&project_root, config);
@@ -2893,14 +2929,10 @@ pub fn run() {
                 EncoderConfig::default()
             }
         }
+    } else if let Some(default_config) = pm_encoder::resolve_config_path(&project_root) {
+        EncoderConfig::from_file(&default_config).unwrap_or_default()
     } else {
-        // Try default config path
-        let default_config = project_root.join(".pm_encoder_config.json");
-        if default_config.exists() {
-            EncoderConfig::from_file(&default_config).unwrap_or_default()
-        } else {
-            EncoderConfig::default()
-        }
+        EncoderConfig::default()
     };
 
     // Apply CLI overrides
@@ -2948,7 +2980,7 @@ pub fn run() {
     // Apply determinism and privacy settings (v2.0.0)
     config.frozen = cli.frozen;
     config.allow_sensitive = cli.allow_sensitive;
-    config.active_lens = cli.lens.clone();
+    config.active_lens = cli.lens.map(|l| l.as_str().to_string());
 
     // Apply skeleton mode (v2.2.0)
     config.skeleton_mode = SkeletonMode::parse(&cli.skeleton).unwrap_or(SkeletonMode::Auto);
@@ -3218,6 +3250,10 @@ pub fn run() {
     // Includes Microscope Auto-Focus (v1.2.0) - auto-zoom when path is a file
     let effective_zoom = cli.zoom.as_ref().or(auto_zoom_target.as_ref());
     if let Some(zoom_str) = effective_zoom {
+        if cli.lens.is_some() {
+            eprintln!("note: --lens is ignored in zoom mode");
+        }
+
         let mut zoom_config = match parse_zoom_target(zoom_str) {
             Ok(config) => config,
             Err(e) => {
@@ -3438,7 +3474,23 @@ pub fn run() {
     }
 
     // Token budgeting mode (v0.7.0)
-    if let Some(budget_str) = &cli.token_budget {
+    // If a lens is active but no explicit budget was given, fall back to a
+    // sane per-lens default rather than serializing the whole project.
+    let default_lens_budget = match (&cli.token_budget, &cli.lens) {
+        (None, Some(lens)) => {
+            let budget = lens.default_budget();
+            eprintln!(
+                "note: using default budget {} for --lens {} (override with --token-budget)",
+                budget,
+                lens.as_str()
+            );
+            Some(budget.to_string())
+        }
+        _ => None,
+    };
+    let effective_token_budget = cli.token_budget.clone().or(default_lens_budget);
+
+    if let Some(budget_str) = &effective_token_budget {
         // Parse budget
         let budget = match parse_token_budget(budget_str) {
             Ok(b) => b,
@@ -3456,13 +3508,23 @@ pub fn run() {
             eprintln!("Warning: --token-budget requires batch mode, ignoring --stream");
         }
 
-        // Get lens manager for priority resolution
-        let mut lens_manager = LensManager::new();
+        // Get lens manager for priority resolution. Load the learned
+        // utility store (roadmap 3.3) unless the user opted out — an empty
+        // store is safe (every file reads back as unseen => pure static
+        // priority), so there's no need to special-case a missing file.
+        let mut lens_manager = if cli.no_learning {
+            LensManager::new()
+        } else {
+            let store_path = ContextStore::default_path(&project_root);
+            LensManager::with_store(ContextStore::load_from_file(&store_path))
+        };
+        lens_manager.set_frozen(config.frozen);
 
         // Apply CLI lens if present (for priority groups)
-        if let Some(lens_name) = &cli.lens {
+        if let Some(lens_arg) = &cli.lens {
+            let lens_name = lens_arg.as_str();
             // Store active lens for metadata injection (v2.0.0)
-            config.active_lens = Some(lens_name.clone());
+            config.active_lens = Some(lens_name.to_string());
 
             match lens_manager.apply_lens(lens_name) {
                 Ok(applied) => {
@@ -3504,46 +3566,61 @@ pub fn run() {
             BudgetStrategy::Truncate => "truncate",
             BudgetStrategy::Hybrid => "hybrid",
         };
-        let (selected, report) = apply_token_budget(files, budget, &lens_manager, strategy_str);
+        let (mut selected, mut report) = apply_token_budget(
+            files,
+            budget,
+            &lens_manager,
+            strategy_str,
+            config.output_format,
+        );
 
-        // Print budget report to stderr
-        report.print_report();
+        // Render through the budget-enforcement loop: per-file estimates
+        // exclude the wrapper/attention-map overhead, so the first render can
+        // overshoot. render_within_budget re-renders (dropping the
+        // lowest-ranked files) until the real output fits, leaving `report`
+        // consistent with what was actually produced.
+        let output = pm_encoder::render_within_budget(&mut selected, &mut report, |sel, rep| {
+            let entries: Vec<pm_encoder::FileEntry> = sel
+                .iter()
+                .map(|(path, content)| pm_encoder::FileEntry {
+                    path: path.clone(),
+                    size: content.len() as u64,
+                    content: content.clone(),
+                    md5: pm_encoder::calculate_md5(content),
+                    mtime: 0,
+                    ctime: 0,
+                })
+                .collect();
 
-        // Build file entries for serialization
-        let entries: Vec<pm_encoder::FileEntry> = selected
-            .iter()
-            .map(|(path, content)| pm_encoder::FileEntry {
-                path: path.clone(),
-                size: content.len() as u64,
-                content: content.clone(),
-                md5: pm_encoder::calculate_md5(content),
-                mtime: 0,
-                ctime: 0,
-            })
-            .collect();
-
-        // Serialize selected files with configured format and truncation
-        let output = if config.output_format == OutputFormat::ClaudeXml {
-            // Use streaming XmlWriter for ClaudeXml format with budget report (Fractal Protocol v2.0)
-            // This includes hotspots/coldspots in attention_map from BudgetReport
-            pm_encoder::serialize_entries_claude_xml_with_report(&config, &entries, &report)
+            if config.output_format == OutputFormat::ClaudeXml {
+                // Streaming XmlWriter with budget report (Fractal Protocol v2.0):
+                // includes hotspots/coldspots in attention_map from BudgetReport.
+                pm_encoder::serialize_entries_claude_xml_with_report(
+                    &config,
+                    &entries,
+                    rep,
+                    &lens_manager,
+                )
                 .unwrap_or_else(|e| {
                     eprintln!("Error serializing XML: {}", e);
                     std::process::exit(1);
                 })
-        } else {
-            // Use standard serialization for other formats
-            let mut output = String::new();
-            for entry in &entries {
-                output.push_str(&pm_encoder::serialize_file_with_format(
-                    entry,
-                    config.truncate_lines,
-                    &config.truncate_mode,
-                    config.output_format,
-                ));
+            } else {
+                let mut output = String::new();
+                for entry in &entries {
+                    output.push_str(&pm_encoder::serialize_file_with_format(
+                        entry,
+                        config.truncate_lines,
+                        &config.truncate_mode,
+                        config.output_format,
+                    ));
+                }
+                output
             }
-            output
-        };
+        });
+
+        // Print budget report to stderr, now reflecting the real token count
+        report.print_report();
 
         // Write output
         if let Some(output_path) = cli.output.clone() {
@@ -3560,7 +3637,7 @@ pub fn run() {
 
         // Print Context Health if requested
         if cli.health {
-            print_context_health(&output, entries.len());
+            print_context_health(&output, selected.len(), report.used);
         }
 
         // Print Voyager Mission Log (to stderr)
@@ -3568,16 +3645,16 @@ pub fn run() {
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("project");
-        let token_budget_parsed = cli
-            .token_budget
+        let token_budget_parsed = effective_token_budget
             .as_ref()
             .and_then(|b| parse_token_budget(b).ok());
         print_mission_log(
             project_name,
             &output,
-            cli.lens.as_deref(),
+            cli.lens.as_ref().map(|l| l.as_str()),
             token_budget_parsed,
-            entries.len(),
+            selected.len(),
+            report.used,
         );
         return;
     }
@@ -3606,11 +3683,16 @@ pub fn run() {
                 print!("{}", output);
             }
 
+            // No BudgetReport exists in this (unbudgeted) path, but we still
+            // funnel through the one shared estimator rather than each
+            // caller re-deriving output.len() / 4 independently.
+            let total_tokens = TokenEstimator::estimate_tokens(&output);
+
             // Print Context Health if requested
             if cli.health {
                 // Count files in output (each file starts with "++++++++++ ")
                 let file_count = output.matches("++++++++++ ").count();
-                print_context_health(&output, file_count);
+                print_context_health(&output, file_count, total_tokens);
             }
 
             // Print Voyager Mission Log (to stderr)
@@ -3626,9 +3708,10 @@ pub fn run() {
             print_mission_log(
                 project_name,
                 &output,
-                cli.lens.as_deref(),
+                cli.lens.as_ref().map(|l| l.as_str()),
                 token_budget_parsed,
                 file_count,
+                total_tokens,
             );
         }
         Err(e) => {

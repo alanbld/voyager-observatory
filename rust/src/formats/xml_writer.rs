@@ -65,7 +65,7 @@ pub struct XmlConfig {
 impl Default for XmlConfig {
     fn default() -> Self {
         Self {
-            package: "pm_encoder".to_string(),
+            package: "vo".to_string(),
             version: crate::VERSION.to_string(),
             lens: None,
             token_budget: None,
@@ -315,13 +315,16 @@ impl<W: Write> XmlWriter<W> {
             }
 
             // Structure-only view (always available for truncated files)
-            writeln!(self.writer, "        <action type=\"structure\" cmd=\"pm_encoder --zoom file={} --depth signature\" />",
-                escape_xml_attr(path))?;
+            writeln!(
+                self.writer,
+                "        <action type=\"structure\" cmd=\"vo --zoom file={} --depth signature\" />",
+                escape_xml_attr(path)
+            )?;
 
             // Full file (no truncation) - use single quotes for shell arg
             writeln!(
                 self.writer,
-                "        <action type=\"full\" cmd=\"pm_encoder --truncate 0 --include '{}'\" />",
+                "        <action type=\"full\" cmd=\"vo --truncate 0 --include '{}'\" />",
                 escape_xml_attr(path)
             )?;
 
@@ -633,7 +636,7 @@ mod tests {
     #[test]
     fn test_xml_config_default() {
         let config = XmlConfig::default();
-        assert_eq!(config.package, "pm_encoder");
+        assert_eq!(config.package, "vo");
         assert!(!config.frozen);
         assert!(!config.allow_sensitive);
         assert!(config.lens.is_none());

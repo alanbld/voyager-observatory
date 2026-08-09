@@ -58,9 +58,6 @@ vo . --lens security
 # Debug Lens - tests, error handlers, logging
 vo . --lens debug
 
-# Minimal Lens - just the essentials
-vo . --lens minimal
-
 # Onboarding Lens - best for newcomers
 vo . --lens onboarding
 ```

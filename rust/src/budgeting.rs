@@ -11,13 +11,20 @@
 //! 3. Tests (tests/, examples/) - If budget remains
 //! 4. Other (docs, scripts) - Lowest priority
 
+use crate::core::ast_bridge::AstBridge;
 use crate::core::engine::FileTier;
 use crate::lenses::LensManager;
 use crate::truncate_structure;
+use crate::OutputFormat;
 use std::path::Path;
 
 /// Threshold for hybrid strategy: files > 10% of budget get auto-truncated
 const HYBRID_THRESHOLD: f64 = 0.10;
+
+/// Maximum re-render passes when closing the loop on budget conformance.
+/// Each pass shrinks the overage geometrically, so this is a runaway guard,
+/// not an expected iteration count (2-4 passes is typical).
+const MAX_BUDGET_PASSES: usize = 16;
 
 /// Token estimation using heuristic (4 chars per token)
 ///
@@ -34,14 +41,41 @@ impl TokenEstimator {
         content.len() / 4
     }
 
-    /// Estimate tokens for a file including PM format overhead
+    /// Estimate tokens for a file as it will actually be rendered in `format`.
     ///
-    /// Accounts for the ++++/---- markers and path repetition
-    pub fn estimate_file_tokens(path: &Path, content: &str) -> usize {
-        let path_str = path.to_string_lossy();
-        // PM format: "++++++++++ path ++++++++++\n" + content + "\n---------- path checksum path ----------\n"
-        let overhead = 20 + path_str.len() * 2 + 50; // Approximate overhead
+    /// Each format wraps content in a fixed template plus the path repeated
+    /// a format-specific number of times; these constants are the real
+    /// measured overhead of each serializer (untruncated, no metadata),
+    /// not a guess — see `test_format_overhead_matches_real_serializers`,
+    /// which fails loudly if a serializer's template ever drifts from these
+    /// numbers instead of silently reintroducing the drift this closes.
+    ///
+    /// This is DECISIONS.md Q10's actual fix for the I1 finding: a single
+    /// PM-shaped flat constant badly undercounts real Claude-XML overhead,
+    /// which meant budget *selection* (not just reporting, see roadmap 2.1)
+    /// could let a file in that wouldn't really fit once rendered.
+    pub fn estimate_file_tokens_for_format(
+        path: &Path,
+        content: &str,
+        format: OutputFormat,
+    ) -> usize {
+        let path_len = path.to_string_lossy().len();
+        let (base, per_path_char) = match format {
+            OutputFormat::PlusMinus => (81, 3),
+            OutputFormat::Xml => (63, 1),
+            OutputFormat::Markdown => (61, 1),
+            OutputFormat::ClaudeXml => (164, 1),
+        };
+        let overhead = base + per_path_char * path_len;
         Self::estimate_tokens(content) + (overhead / 4)
+    }
+
+    /// Estimate tokens for a file including PM format overhead.
+    ///
+    /// Kept for callers that don't know (or care about) the eventual output
+    /// format; prefer `estimate_file_tokens_for_format` when it's known.
+    pub fn estimate_file_tokens(path: &Path, content: &str) -> usize {
+        Self::estimate_file_tokens_for_format(path, content, OutputFormat::PlusMinus)
     }
 
     /// Get the estimation method name
@@ -150,6 +184,19 @@ impl BudgetReport {
         self.budget.saturating_sub(self.used)
     }
 
+    /// Recalibrate `used` against the actually rendered output.
+    ///
+    /// `used` starts out as the sum of per-file estimates made *before*
+    /// serialization (needed to decide what fits). Different output formats
+    /// (plain PM markers vs. Claude XML wrapping) add different overhead, so
+    /// that estimate can drift from the real thing. Callers that have the
+    /// final rendered string should call this so every downstream report
+    /// (budget report, context health, mission log) agrees with what was
+    /// actually produced, instead of each re-deriving its own number.
+    pub fn recalibrate(&mut self, rendered_output: &str) {
+        self.used = TokenEstimator::estimate_tokens(rendered_output);
+    }
+
     /// Print a formatted budget report to stderr
     pub fn print_report(&self) {
         eprintln!("{}", "=".repeat(70));
@@ -240,6 +287,26 @@ fn format_number(n: usize) -> String {
 ///
 /// Returns (truncated_content, was_truncated)
 fn try_truncate_to_structure(path: &str, content: &str) -> (String, bool) {
+    // Roadmap 2.2 step 4: prefer a real parse tree for the languages that
+    // have an adapter, and keep the regex skeletonizer for the long tail.
+    //
+    // The regex version measurably loses what matters most in a skeleton —
+    // on a real 50k run it emitted 201 structs with no fields, cut 68
+    // signatures at the opening paren, and treated Python inside Rust string
+    // literals as code. All are free once you have an AST.
+    let language = AstBridge::detect_language(Path::new(path));
+    let bridge = AstBridge::new();
+    if bridge.supports(language) {
+        if let Some(skeleton) = bridge.skeletonize(content, language) {
+            // Only take the AST result if it actually saved something; a
+            // parse that degrades to near-original size means the adapter
+            // recovered little, so the regex path is no worse.
+            if !skeleton.trim().is_empty() && skeleton.len() < content.len() {
+                return (skeleton, true);
+            }
+        }
+    }
+
     truncate_structure(content, path)
 }
 
@@ -251,6 +318,8 @@ fn try_truncate_to_structure(path: &str, content: &str) -> (String, bool) {
 /// * `budget` - Maximum tokens allowed
 /// * `lens_manager` - LensManager for priority resolution
 /// * `strategy` - Budget strategy: "drop", "truncate", or "hybrid"
+/// * `format` - Output format the selection estimate should be calibrated
+///   against, so selection matches what will actually be rendered
 ///
 /// # Strategies
 ///
@@ -266,6 +335,7 @@ pub fn apply_token_budget(
     budget: usize,
     lens_manager: &LensManager,
     strategy: &str,
+    format: OutputFormat,
 ) -> (Vec<(String, String)>, BudgetReport) {
     // Step 1: Calculate tokens and get priorities, applying group-based truncation
     let mut file_data: Vec<FileData> = files
@@ -275,7 +345,8 @@ pub fn apply_token_budget(
             let group_config = lens_manager.get_file_group_config(path_obj);
 
             // Calculate original tokens before any truncation
-            let original_tokens = TokenEstimator::estimate_file_tokens(path_obj, &content);
+            let original_tokens =
+                TokenEstimator::estimate_file_tokens_for_format(path_obj, &content, format);
 
             // Apply group-level truncation if specified (e.g., structure mode for *.py)
             let (final_content, method) = if let Some(ref mode) = group_config.truncate_mode {
@@ -293,7 +364,8 @@ pub fn apply_token_budget(
                 (content, "full".to_string())
             };
 
-            let tokens = TokenEstimator::estimate_file_tokens(path_obj, &final_content);
+            let tokens =
+                TokenEstimator::estimate_file_tokens_for_format(path_obj, &final_content, format);
 
             FileData {
                 path,
@@ -333,8 +405,11 @@ pub fn apply_token_budget(
                     try_truncate_to_structure(&fd.path, &fd.content);
                 if was_truncated {
                     let path_obj = Path::new(&fd.path);
-                    let new_tokens =
-                        TokenEstimator::estimate_file_tokens(path_obj, &truncated_content);
+                    let new_tokens = TokenEstimator::estimate_file_tokens_for_format(
+                        path_obj,
+                        &truncated_content,
+                        format,
+                    );
                     fd.content = truncated_content;
                     fd.tokens = new_tokens;
                     fd.method = "truncated".to_string();
@@ -367,8 +442,11 @@ pub fn apply_token_budget(
                     try_truncate_to_structure(&fd.path, &fd.content);
                 if was_truncated {
                     let path_obj = Path::new(&fd.path);
-                    let new_tokens =
-                        TokenEstimator::estimate_file_tokens(path_obj, &truncated_content);
+                    let new_tokens = TokenEstimator::estimate_file_tokens_for_format(
+                        path_obj,
+                        &truncated_content,
+                        format,
+                    );
                     if total_tokens + new_tokens <= budget {
                         // Truncated version fits!
                         truncated_count += 1;
@@ -403,6 +481,99 @@ pub fn apply_token_budget(
     };
 
     (selected, report)
+}
+
+/// Render the selection and guarantee the result actually fits the budget.
+///
+/// `apply_token_budget` selects files by summing *per-file* estimates, which
+/// systematically undercounts the real rendered size for two reasons:
+/// the wrapper (context header, metadata, and especially the attention_map,
+/// which alone measured ~2.8k tokens on a 50k run) is never attributed to
+/// any file, and per-file estimates carry their own drift. Measured
+/// 2026-08-01 before this fix: 20k->123.3%, 50k->115.2%, 100k->110.9%.
+///
+/// Rather than chase a perfect open-loop estimate — which would re-drift the
+/// next time a serializer changes — this closes the loop: render, measure the
+/// real output, and if it overshoots, drop the lowest-ranked files and
+/// re-render. `report.included_files` preserves selection order (tier ASC,
+/// priority DESC, path ASC), so its tail is the least important content.
+///
+/// Dropping is accounted grossly: a dropped file also *adds* a `<coldspot/>`
+/// entry to the attention map, so each pass recovers slightly less than the
+/// tokens it drops. Under-dropping and re-measuring converges geometrically
+/// and never over-trims, which is the safer direction to err.
+///
+/// Returns the rendered output; `selected` and `report` are left consistent
+/// with it.
+pub fn render_within_budget<F>(
+    selected: &mut Vec<(String, String)>,
+    report: &mut BudgetReport,
+    mut render: F,
+) -> String
+where
+    F: FnMut(&[(String, String)], &mut BudgetReport) -> String,
+{
+    let budget = report.budget;
+    let mut output = render(selected, report);
+    report.recalibrate(&output);
+
+    // No budget means no ceiling to enforce.
+    if budget == 0 {
+        return output;
+    }
+
+    let mut passes = 0;
+    let mut extra_dropped = 0;
+
+    while report.used > budget && selected.len() > 1 && passes < MAX_BUDGET_PASSES {
+        let overage = report.used - budget;
+        let mut reclaimed = 0;
+
+        while reclaimed < overage && selected.len() > 1 {
+            let Some((path, priority, tokens, method)) = report.included_files.pop() else {
+                break;
+            };
+
+            if let Some(pos) = selected.iter().position(|(p, _)| p == &path) {
+                selected.remove(pos);
+            }
+            if method == "truncated" {
+                report.truncated_count = report.truncated_count.saturating_sub(1);
+            }
+
+            report.dropped_files.push((path, priority, tokens));
+            reclaimed += tokens;
+            extra_dropped += 1;
+        }
+
+        report.selected_count = selected.len();
+        report.dropped_count = report.dropped_files.len();
+
+        output = render(selected, report);
+        report.recalibrate(&output);
+        passes += 1;
+    }
+
+    if extra_dropped > 0 {
+        eprintln!(
+            "note: dropped {} additional file(s) so the rendered output fits the {}-token budget \
+             (per-file estimates exclude wrapper/attention-map overhead)",
+            extra_dropped,
+            format_number(budget)
+        );
+    }
+
+    // A single file larger than the whole budget can't be honored by dropping.
+    if report.used > budget {
+        eprintln!(
+            "warning: rendered output is {} tokens, over the {}-token budget — \
+             the highest-priority file alone exceeds it (try --budget-strategy truncate)",
+            format_number(report.used),
+            format_number(budget)
+        );
+    }
+
+    output
 }
 
 #[cfg(test)]
@@ -479,7 +650,8 @@ mod tests {
             ("small.py".to_string(), "x".repeat(100)),   // ~25 tokens
             ("large.py".to_string(), "y".repeat(10000)), // ~2500 tokens
         ];
-        let (selected, report) = apply_token_budget(files, 500, &lens_manager, "drop");
+        let (selected, report) =
+            apply_token_budget(files, 500, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // Small file should be included, large should be dropped
         assert_eq!(selected.len(), 1);
@@ -513,7 +685,13 @@ mod tests {
         let files = vec![("test.py".to_string(), python_content)];
 
         // Budget small enough that full file doesn't fit
-        let (selected, report) = apply_token_budget(files, 50, &lens_manager, "truncate");
+        let (selected, report) = apply_token_budget(
+            files,
+            50,
+            &lens_manager,
+            "truncate",
+            OutputFormat::PlusMinus,
+        );
 
         // File should be included (truncated) or dropped depending on truncated size
         assert_eq!(report.strategy, "truncate");
@@ -556,7 +734,13 @@ mod tests {
         ];
 
         // Budget where large file > 10%
-        let (selected, report) = apply_token_budget(files, 1000, &lens_manager, "hybrid");
+        let (selected, report) = apply_token_budget(
+            files,
+            1000,
+            &lens_manager,
+            "hybrid",
+            OutputFormat::PlusMinus,
+        );
 
         // Both files should potentially be included
         assert_eq!(report.strategy, "hybrid");
@@ -569,14 +753,31 @@ mod tests {
         let lens_manager = LensManager::new();
         let files = vec![("test.py".to_string(), "x = 1".to_string())];
 
-        let (_, report_drop) = apply_token_budget(files.clone(), 1000, &lens_manager, "drop");
+        let (_, report_drop) = apply_token_budget(
+            files.clone(),
+            1000,
+            &lens_manager,
+            "drop",
+            OutputFormat::PlusMinus,
+        );
         assert_eq!(report_drop.strategy, "drop");
 
-        let (_, report_truncate) =
-            apply_token_budget(files.clone(), 1000, &lens_manager, "truncate");
+        let (_, report_truncate) = apply_token_budget(
+            files.clone(),
+            1000,
+            &lens_manager,
+            "truncate",
+            OutputFormat::PlusMinus,
+        );
         assert_eq!(report_truncate.strategy, "truncate");
 
-        let (_, report_hybrid) = apply_token_budget(files, 1000, &lens_manager, "hybrid");
+        let (_, report_hybrid) = apply_token_budget(
+            files,
+            1000,
+            &lens_manager,
+            "hybrid",
+            OutputFormat::PlusMinus,
+        );
         assert_eq!(report_hybrid.strategy, "hybrid");
     }
 
@@ -701,7 +902,8 @@ mod tests {
             ("a.py".to_string(), "x".repeat(100)), // ~25 tokens + overhead
             ("b.py".to_string(), "y".repeat(100)),
         ];
-        let (selected, report) = apply_token_budget(files, 100, &lens_manager, "drop");
+        let (selected, report) =
+            apply_token_budget(files, 100, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // At least one file should fit
         assert!(selected.len() >= 1);
@@ -712,7 +914,8 @@ mod tests {
     fn test_empty_file_list() {
         let lens_manager = LensManager::new();
         let files: Vec<(String, String)> = vec![];
-        let (selected, report) = apply_token_budget(files, 1000, &lens_manager, "drop");
+        let (selected, report) =
+            apply_token_budget(files, 1000, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         assert_eq!(selected.len(), 0);
         assert_eq!(report.selected_count, 0);
@@ -733,7 +936,8 @@ mod tests {
         ];
 
         // With limited budget, high priority files should be kept
-        let (selected, _report) = apply_token_budget(files, 200, &lens_manager, "drop");
+        let (selected, _report) =
+            apply_token_budget(files, 200, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // Should have selected at least some files
         assert!(!selected.is_empty());
@@ -760,7 +964,13 @@ mod tests {
         ];
 
         // Very small budget
-        let (_selected, report) = apply_token_budget(files, 10, &lens_manager, "truncate");
+        let (_selected, report) = apply_token_budget(
+            files,
+            10,
+            &lens_manager,
+            "truncate",
+            OutputFormat::PlusMinus,
+        );
 
         // Strategy should still be recorded
         assert_eq!(report.strategy, "truncate");
@@ -780,7 +990,8 @@ mod tests {
             ("medium.py".to_string(), python_content.repeat(5)),
         ];
 
-        let (_selected, report) = apply_token_budget(files, 500, &lens_manager, "hybrid");
+        let (_selected, report) =
+            apply_token_budget(files, 500, &lens_manager, "hybrid", OutputFormat::PlusMinus);
         assert_eq!(report.strategy, "hybrid");
     }
 
@@ -796,7 +1007,8 @@ mod tests {
         ];
 
         // Budget for only 2 files
-        let (selected, _report) = apply_token_budget(files, 80, &lens_manager, "drop");
+        let (selected, _report) =
+            apply_token_budget(files, 80, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // Core file (src/main.rs) should be selected first
         assert!(!selected.is_empty());
@@ -825,7 +1037,8 @@ mod tests {
         ];
 
         // Budget for 3 files (drops 1)
-        let (selected, _report) = apply_token_budget(files, 100, &lens_manager, "drop");
+        let (selected, _report) =
+            apply_token_budget(files, 100, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         let selected_paths: Vec<&str> = selected.iter().map(|(p, _)| p.as_str()).collect();
 
@@ -995,7 +1208,8 @@ mod tests {
             "def main():\n    pass".to_string(),
         )];
 
-        let (selected, report) = apply_token_budget(files, 1000, &lens_manager, "drop");
+        let (selected, report) =
+            apply_token_budget(files, 1000, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // File should be selected
         assert!(!selected.is_empty());
@@ -1012,7 +1226,13 @@ mod tests {
             ("c.py".to_string(), "z = 3".to_string()),
         ];
 
-        let (selected, report) = apply_token_budget(files, 1000, &lens_manager, "hybrid");
+        let (selected, report) = apply_token_budget(
+            files,
+            1000,
+            &lens_manager,
+            "hybrid",
+            OutputFormat::PlusMinus,
+        );
 
         // All small files should be included without truncation
         assert_eq!(selected.len(), 3);
@@ -1071,13 +1291,242 @@ mod tests {
             ("src/b.py".to_string(), "b".to_string()),
         ];
 
-        let (selected1, _) = apply_token_budget(files.clone(), 1000, &lens_manager, "drop");
-        let (selected2, _) = apply_token_budget(files, 1000, &lens_manager, "drop");
+        let (selected1, _) = apply_token_budget(
+            files.clone(),
+            1000,
+            &lens_manager,
+            "drop",
+            OutputFormat::PlusMinus,
+        );
+        let (selected2, _) =
+            apply_token_budget(files, 1000, &lens_manager, "drop", OutputFormat::PlusMinus);
 
         // Order should be deterministic (sorted by path)
         assert_eq!(selected1.len(), selected2.len());
         for (f1, f2) in selected1.iter().zip(selected2.iter()) {
             assert_eq!(f1.0, f2.0);
         }
+    }
+
+    /// DECISIONS.md Q10's calibration constants in `estimate_file_tokens_for_format`
+    /// are real measurements of the actual serializers, not guesses. If a
+    /// serializer's template ever changes, this fails loudly instead of
+    /// silently reintroducing the "flat constant undercounts real overhead"
+    /// drift that caused Claude-XML files to be selected as if they fit
+    /// when they wouldn't once rendered.
+    #[test]
+    fn test_format_overhead_matches_real_serializers() {
+        use crate::formats::{XmlConfig, XmlWriter};
+        use crate::{calculate_md5, serialize_file_with_format, FileEntry};
+
+        for path_str in ["a.rs", "src/some/nested/path/file.rs"] {
+            let path = Path::new(path_str);
+
+            for format in [
+                OutputFormat::PlusMinus,
+                OutputFormat::Xml,
+                OutputFormat::Markdown,
+            ] {
+                let entry = FileEntry {
+                    path: path_str.to_string(),
+                    content: String::new(),
+                    md5: calculate_md5(""),
+                    size: 0,
+                    mtime: 0,
+                    ctime: 0,
+                };
+                let real_overhead_tokens =
+                    serialize_file_with_format(&entry, 0, "none", format).len() / 4;
+                let estimated = TokenEstimator::estimate_file_tokens_for_format(path, "", format);
+                assert_eq!(
+                    estimated, real_overhead_tokens,
+                    "{:?} overhead drifted from the real serializer for {}: \
+                     estimated {} tokens, real output is {} tokens. \
+                     Recalibrate the (base, per_path_char) constants.",
+                    format, path_str, estimated, real_overhead_tokens
+                );
+            }
+
+            // ClaudeXml goes through the streaming XmlWriter, not
+            // serialize_file_with_format — measure it the same way 2.1's
+            // two-pass render does.
+            let mut buf = Vec::new();
+            let xml_config = XmlConfig {
+                package: "vo".to_string(),
+                version: "0".to_string(),
+                lens: None,
+                token_budget: None,
+                utilized_tokens: None,
+                frozen: false,
+                allow_sensitive: true,
+                snapshot_id: None,
+            };
+            let mut writer = XmlWriter::new(&mut buf, xml_config);
+            writer.write_files_start().unwrap();
+            writer
+                .write_file(
+                    path_str,
+                    "rust",
+                    &calculate_md5(""),
+                    50,
+                    "",
+                    false,
+                    None,
+                    None,
+                )
+                .unwrap();
+            writer.write_files_end().unwrap();
+            let real_overhead_tokens = buf.len() / 4;
+            let estimated =
+                TokenEstimator::estimate_file_tokens_for_format(path, "", OutputFormat::ClaudeXml);
+            assert_eq!(
+                estimated, real_overhead_tokens,
+                "ClaudeXml overhead drifted from the real XmlWriter for {}: \
+                 estimated {} tokens, real output is {} tokens. \
+                 Recalibrate the (base, per_path_char) constants.",
+                path_str, estimated, real_overhead_tokens
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod budget_enforcement_tests {
+    use super::*;
+
+    fn report_with(budget: usize, included: &[(&str, usize)]) -> BudgetReport {
+        BudgetReport {
+            budget,
+            used: included.iter().map(|(_, t)| t).sum(),
+            selected_count: included.len(),
+            dropped_count: 0,
+            dropped_files: Vec::new(),
+            estimation_method: "test".to_string(),
+            strategy: "drop".to_string(),
+            included_files: included
+                .iter()
+                .map(|(p, t)| (p.to_string(), 50, *t, "full".to_string()))
+                .collect(),
+            truncated_count: 0,
+        }
+    }
+
+    fn files(names: &[&str]) -> Vec<(String, String)> {
+        names
+            .iter()
+            .map(|n| (n.to_string(), "x".repeat(400)))
+            .collect()
+    }
+
+    /// Output already fits: nothing dropped, single render.
+    #[test]
+    fn test_no_op_when_output_already_fits() {
+        let mut selected = files(&["a.rs", "b.rs"]);
+        let mut report = report_with(10_000, &[("a.rs", 100), ("b.rs", 100)]);
+        let mut renders = 0;
+
+        let out = render_within_budget(&mut selected, &mut report, |sel, _r| {
+            renders += 1;
+            "y".repeat(sel.len() * 400)
+        });
+
+        assert_eq!(
+            renders, 1,
+            "should not re-render when already within budget"
+        );
+        assert_eq!(selected.len(), 2);
+        assert_eq!(report.dropped_count, 0);
+        assert!(report.used <= report.budget);
+        assert_eq!(out.len(), 800);
+    }
+
+    /// The core P0 fix: an initial render that overshoots must be trimmed
+    /// until the real output fits.
+    #[test]
+    fn test_drops_until_rendered_output_fits() {
+        let names: Vec<String> = (0..20).map(|i| format!("f{i:02}.rs")).collect();
+        let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+        let mut selected = files(&refs);
+        let included: Vec<(&str, usize)> = refs.iter().map(|n| (*n, 100)).collect();
+
+        // Budget 1000 tokens; each rendered file costs 400 bytes = 100 tokens.
+        // 20 files renders 2000 tokens - double the budget.
+        let mut report = report_with(1000, &included);
+
+        render_within_budget(&mut selected, &mut report, |sel, _r| {
+            "y".repeat(sel.len() * 400)
+        });
+
+        assert!(
+            report.used <= report.budget,
+            "rendered {} tokens exceeds budget {}",
+            report.used,
+            report.budget
+        );
+        assert!(selected.len() < 20, "should have dropped files");
+        assert_eq!(
+            report.selected_count,
+            selected.len(),
+            "report must stay consistent with the selection"
+        );
+        assert_eq!(report.dropped_count, report.dropped_files.len());
+        assert_eq!(
+            selected.len() + report.dropped_files.len(),
+            20,
+            "no file may be lost or duplicated"
+        );
+    }
+
+    /// Lowest-ranked files (tail of included_files) are dropped first, so the
+    /// highest-priority content survives.
+    #[test]
+    fn test_drops_lowest_ranked_first() {
+        let mut selected = files(&["keep.rs", "mid.rs", "drop.rs"]);
+        let mut report = report_with(100, &[("keep.rs", 100), ("mid.rs", 100), ("drop.rs", 100)]);
+
+        render_within_budget(&mut selected, &mut report, |sel, _r| {
+            "y".repeat(sel.len() * 400)
+        });
+
+        assert!(
+            selected.iter().any(|(p, _)| p == "keep.rs"),
+            "highest-ranked file must survive, got {:?}",
+            selected.iter().map(|(p, _)| p).collect::<Vec<_>>()
+        );
+        assert!(
+            !selected.iter().any(|(p, _)| p == "drop.rs"),
+            "lowest-ranked file should be dropped first"
+        );
+    }
+
+    /// budget == 0 means "no ceiling" - render once, don't trim.
+    #[test]
+    fn test_zero_budget_is_unbounded() {
+        let mut selected = files(&["a.rs", "b.rs"]);
+        let mut report = report_with(0, &[("a.rs", 100), ("b.rs", 100)]);
+        let mut renders = 0;
+
+        render_within_budget(&mut selected, &mut report, |sel, _r| {
+            renders += 1;
+            "y".repeat(sel.len() * 400)
+        });
+
+        assert_eq!(renders, 1);
+        assert_eq!(selected.len(), 2, "zero budget must not drop anything");
+    }
+
+    /// A single file bigger than the entire budget can't be fixed by dropping;
+    /// keep one file rather than emitting an empty context, and don't spin.
+    #[test]
+    fn test_single_oversized_file_terminates_without_emptying() {
+        let mut selected = files(&["huge.rs"]);
+        let mut report = report_with(10, &[("huge.rs", 100)]);
+
+        render_within_budget(&mut selected, &mut report, |sel, _r| {
+            "y".repeat(sel.len() * 400)
+        });
+
+        assert_eq!(selected.len(), 1, "must not produce an empty context");
+        assert!(report.used > report.budget, "honestly reports the overage");
     }
 }

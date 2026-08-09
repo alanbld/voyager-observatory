@@ -192,7 +192,15 @@ impl SymbolResolver {
         results
     }
 
-    /// Find a single symbol (returns first match or error)
+    /// Find a single symbol. Deterministic, not walk-order-dependent: when
+    /// multiple files define the same name (common for short/generic names
+    /// — every struct's own `fn new()`, say), prefers the shallowest match
+    /// relative to `root`, then breaks ties alphabetically by path and
+    /// finally by line number. A blanket "ambiguous, refuse to resolve"
+    /// policy was considered and rejected: this crate alone defines `fn
+    /// new(` 113 times, so erroring on any 2+ matches would make zoom
+    /// unusable for common names. What's fixed here is determinism —
+    /// every run resolves the same way — not disambiguation.
     pub fn find_symbol(
         &self,
         name: &str,
@@ -210,20 +218,32 @@ impl SymbolResolver {
             .walk_as_file_entries()
             .map_err(|e| format!("Failed to walk directory: {}", e))?;
 
+        let mut matches: Vec<SymbolLocation> = Vec::new();
         for entry in entries {
             if let Some(locations) =
                 self.find_in_file(&entry.path, &entry.content, name, symbol_type)
             {
-                if let Some(loc) = locations.into_iter().next() {
-                    return Ok(loc);
-                }
+                matches.extend(locations);
             }
         }
 
-        Err(format!(
-            "{} '{}' not found in scanned files. Try checking the name or file patterns.",
-            symbol_type, name
-        ))
+        if matches.is_empty() {
+            return Err(format!(
+                "{} '{}' not found in scanned files. Try checking the name or file patterns.",
+                symbol_type, name
+            ));
+        }
+
+        matches.sort_by(|a, b| {
+            let depth_a = Path::new(&a.path).components().count();
+            let depth_b = Path::new(&b.path).components().count();
+            depth_a
+                .cmp(&depth_b)
+                .then_with(|| a.path.cmp(&b.path))
+                .then_with(|| a.start_line.cmp(&b.start_line))
+        });
+
+        Ok(matches.into_iter().next().unwrap())
     }
 
     /// Find symbols in a single file
@@ -1511,6 +1531,60 @@ mod tests {
         let results = resolver.find_all("helper", SymbolType::Function, root);
 
         assert_eq!(results.len(), 2);
+    }
+
+    /// Roadmap 2.3: with a name common enough to collide (e.g. every
+    /// struct's own `fn new()` — 113 in this crate alone), `find_symbol`
+    /// must not depend on undefined directory-walk order. It should
+    /// deterministically prefer the shallowest match (closest to the
+    /// search root), then break remaining ties alphabetically by path —
+    /// same result on every run/platform/filesystem, not "whichever the
+    /// walker happened to visit first."
+    #[test]
+    fn test_find_symbol_prefers_shallowest_match_deterministically() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        fs::create_dir_all(root.join("src/deep/nested")).unwrap();
+        fs::write(root.join("src/deep/nested/far.rs"), "pub fn helper() {}\n").unwrap();
+        fs::write(root.join("src/near.rs"), "pub fn helper() {}\n").unwrap();
+
+        let resolver = SymbolResolver::new();
+        let loc = resolver.find_function("helper", root).unwrap();
+
+        assert!(
+            loc.path.ends_with("src/near.rs") || loc.path.ends_with("src\\near.rs"),
+            "expected the shallower match (src/near.rs), got {}",
+            loc.path
+        );
+    }
+
+    /// Same depth, different names — tie-break falls through to
+    /// alphabetical path order, still deterministic rather than
+    /// walk-order-dependent.
+    #[test]
+    fn test_find_symbol_breaks_same_depth_ties_alphabetically() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path();
+
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(root.join("src/z_module.rs"), "pub fn helper() {}\n").unwrap();
+        fs::write(root.join("src/a_module.rs"), "pub fn helper() {}\n").unwrap();
+
+        let resolver = SymbolResolver::new();
+        let loc = resolver.find_function("helper", root).unwrap();
+
+        assert!(
+            loc.path.ends_with("src/a_module.rs") || loc.path.ends_with("src\\a_module.rs"),
+            "expected the alphabetically-first match at equal depth (src/a_module.rs), got {}",
+            loc.path
+        );
     }
 
     #[test]

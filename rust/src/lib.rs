@@ -61,7 +61,7 @@
 use globset::Glob;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
@@ -75,7 +75,8 @@ pub mod plugins;
 pub mod server;
 
 pub use budgeting::{
-    apply_token_budget, parse_token_budget, BudgetReport, FileData, TokenEstimator,
+    apply_token_budget, parse_token_budget, render_within_budget, BudgetReport, FileData,
+    TokenEstimator,
 };
 pub use formats::{escape_cdata, AttentionEntry, XmlConfig, XmlError, XmlWriter};
 pub use lenses::{AppliedLens, LensConfig, LensManager};
@@ -129,7 +130,7 @@ pub struct FileEntry {
     pub size: u64,
 }
 
-/// Configuration loaded from .pm_encoder_config.json
+/// Configuration loaded from the project config file (see `resolve_config_path`)
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct Config {
     /// Patterns to ignore (e.g., ["*.pyc", ".git"])
@@ -582,7 +583,7 @@ impl ContextEngine {
 
         // Context root with attributes
         header.push_str("<context\n");
-        header.push_str("  package=\"pm_encoder\"\n");
+        header.push_str("  package=\"vo\"\n");
 
         if let Some(ref lens) = self.config.active_lens {
             header.push_str(&format!("  lens=\"{}\"\n", lens));
@@ -683,7 +684,31 @@ pub fn version() -> &'static str {
     VERSION
 }
 
-/// Load configuration from .pm_encoder_config.json
+/// Config filenames, in priority order: the current name first, then the
+/// deprecated pre-rename name (kept for one release; using it prints a
+/// warning). Update `resolve_config_path`'s callers, not this list, when
+/// the old name is finally dropped.
+const CONFIG_FILENAMES: [&str; 2] = [".vo_config.json", ".pm_encoder_config.json"];
+
+/// Resolve the project config file path in `root`, preferring the current
+/// filename over the deprecated one. Returns `None` if neither exists.
+pub fn resolve_config_path(root: &Path) -> Option<PathBuf> {
+    for (i, name) in CONFIG_FILENAMES.iter().enumerate() {
+        let path = root.join(name);
+        if path.exists() {
+            if i > 0 {
+                eprintln!(
+                    "Warning: {} is deprecated, please rename it to {}",
+                    CONFIG_FILENAMES[i], CONFIG_FILENAMES[0]
+                );
+            }
+            return Some(path);
+        }
+    }
+    None
+}
+
+/// Load configuration from the project config file (see `resolve_config_path`)
 ///
 /// # Arguments
 ///
@@ -694,12 +719,10 @@ pub fn version() -> &'static str {
 /// * `Ok(Config)` - Loaded configuration, or default if file doesn't exist
 /// * `Err(String)` - Error message if config file exists but is malformed
 pub fn load_config(root: &str) -> Result<Config, String> {
-    let config_path = Path::new(root).join(".pm_encoder_config.json");
-
-    if !config_path.exists() {
+    let Some(config_path) = resolve_config_path(Path::new(root)) else {
         // No config file, return default
         return Ok(Config::default());
-    }
+    };
 
     let content = fs::read_to_string(&config_path)
         .map_err(|e| format!("Failed to read config file: {}", e))?;
@@ -1162,7 +1185,7 @@ pub fn truncate_simple_with_options(
     if include_summary {
         let reduced_pct = (total_lines - max_lines) * 100 / total_lines;
         let marker = format!(
-            "\n\n{}\nTRUNCATED at line {}/{} ({}% reduction)\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: pm_encoder --zoom file={} */\n{}\n",
+            "\n\n{}\nTRUNCATED at line {}/{} ({}% reduction)\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: vo --zoom file={} */\n{}\n",
             "=".repeat(70),
             max_lines,
             total_lines,
@@ -1275,7 +1298,7 @@ fn truncate_with_gap_markers(
         }
 
         marker.push_str(&format!(
-            "\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: pm_encoder --zoom file={} */\n{}\n",
+            "\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: vo --zoom file={} */\n{}\n",
             file_path,
             file_path,
             "=".repeat(70)
@@ -1353,7 +1376,7 @@ fn truncate_markdown(
 
         // Empty line before "To get full content" (matches Python's marker format)
         marker.push_str(&format!(
-            "\n\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: pm_encoder --zoom file={} */\n{}\n",
+            "\n\nTo get full content: --include \"{}\" --truncate 0\n/* ZOOM_AFFORDANCE: vo --zoom file={} */\n{}\n",
             file_path,
             file_path,
             "=".repeat(70)
@@ -2083,8 +2106,8 @@ fn serialize_claude_xml_entry(
 
 /// Serialize a project directory into the Plus/Minus format
 ///
-/// This function automatically loads configuration from `.pm_encoder_config.json`
-/// if it exists in the root directory.
+/// This function automatically loads configuration from the project config
+/// file (see `resolve_config_path`) if it exists in the root directory.
 ///
 /// # Arguments
 ///
@@ -2105,8 +2128,7 @@ fn serialize_claude_xml_entry(
 /// ```
 pub fn serialize_project(root: &str) -> Result<String, String> {
     // Try to load config from the project directory
-    let config_path = Path::new(root).join(".pm_encoder_config.json");
-    let config = if config_path.exists() {
+    let config = if let Some(config_path) = resolve_config_path(Path::new(root)) {
         EncoderConfig::from_file(&config_path).unwrap_or_default()
     } else {
         EncoderConfig::default()
@@ -2216,7 +2238,7 @@ pub fn serialize_entries_claude_xml(
 
     // Build XmlConfig from EncoderConfig
     let xml_config = XmlConfig {
-        package: "pm_encoder".to_string(),
+        package: "vo".to_string(),
         version: VERSION.to_string(),
         lens: config.active_lens.clone(),
         token_budget: config.token_budget,
@@ -2327,7 +2349,29 @@ pub fn serialize_entries_claude_xml(
 pub fn serialize_entries_claude_xml_with_report(
     config: &EncoderConfig,
     files: &[FileEntry],
+    report: &mut crate::budgeting::BudgetReport,
+    lens_manager: &LensManager,
+) -> Result<String, String> {
+    // The `utilized_tokens` header is written before file content (the
+    // XmlWriter streams), so the pre-serialization estimate baked into
+    // `report.used` may not match the real rendered size once XML wrapping
+    // overhead is accounted for. Render once to find out the real size, then
+    // re-render with the corrected value if it drifted, so the number
+    // embedded in the output and the one printed to stderr always agree.
+    let draft = render_claude_xml(config, files, report, lens_manager)?;
+    let real_used = crate::budgeting::TokenEstimator::estimate_tokens(&draft);
+    if real_used == report.used {
+        return Ok(draft);
+    }
+    report.used = real_used;
+    render_claude_xml(config, files, report, lens_manager)
+}
+
+fn render_claude_xml(
+    config: &EncoderConfig,
+    files: &[FileEntry],
     report: &crate::budgeting::BudgetReport,
+    lens_manager: &LensManager,
 ) -> Result<String, String> {
     use crate::formats::{AttentionEntry, XmlConfig, XmlWriter};
 
@@ -2335,7 +2379,7 @@ pub fn serialize_entries_claude_xml_with_report(
 
     // Build XmlConfig from EncoderConfig - use report.used for accurate utilized count
     let xml_config = XmlConfig {
-        package: "pm_encoder".to_string(),
+        package: "vo".to_string(),
         version: VERSION.to_string(),
         lens: config.active_lens.clone(),
         token_budget: Some(report.budget),
@@ -2352,7 +2396,6 @@ pub fn serialize_entries_claude_xml_with_report(
     let mut writer = XmlWriter::new(&mut buffer, xml_config);
 
     // Build attention entries from included files
-    // TODO: Integrate with ContextStore for utility scores
     let mut attention_entries: Vec<AttentionEntry> = report
         .included_files
         .iter()
@@ -2383,12 +2426,6 @@ pub fn serialize_entries_claude_xml_with_report(
     // Sort by priority descending for better attention_map ordering
     attention_entries.sort_by(|a, b| b.priority.cmp(&a.priority));
 
-    // Apply active lens for priority calculation in file loop
-    let mut lens_manager = LensManager::new();
-    if let Some(ref lens_name) = config.active_lens {
-        let _ = lens_manager.apply_lens(lens_name);
-    }
-
     // Write XML structure
     writer.write_context_start().map_err(|e| e.to_string())?;
     writer
@@ -2398,7 +2435,9 @@ pub fn serialize_entries_claude_xml_with_report(
 
     for entry in files {
         let language = detect_language(&entry.path);
-        let priority = lens_manager.get_static_priority(std::path::Path::new(&entry.path));
+        // Blended (roadmap 3.3): reflects learned utility when the caller
+        // supplied a lens_manager with a loaded ContextStore.
+        let priority = lens_manager.get_file_priority(std::path::Path::new(&entry.path));
 
         // Check if this file was truncated by the budget strategy
         let was_truncated = report
@@ -2408,9 +2447,13 @@ pub fn serialize_entries_claude_xml_with_report(
 
         // Apply truncation if configured or if budget strategy truncated it
         let (content, truncated) = if was_truncated {
-            // Already truncated by budget strategy - use structure mode
-            let (trunc, _) = truncate_structure(&entry.content, &entry.path);
-            (trunc, true)
+            // The budget strategy already skeletonized this content (via
+            // try_truncate_to_structure, which now prefers the AST path).
+            // Re-running the regex skeletonizer over an existing skeleton is
+            // pure loss: it re-flattened struct bodies the AST pass had
+            // deliberately preserved, which is why field-less structs kept
+            // appearing in budgeted output even after roadmap 2.2 step 4.
+            (entry.content.clone(), true)
         } else if config.truncate_lines > 0 {
             truncate_for_xml(&entry.content, config.truncate_lines, &config.truncate_mode)
         } else {
@@ -2425,7 +2468,7 @@ pub fn serialize_entries_claude_xml_with_report(
 
         // Build zoom command for truncated files
         let zoom_cmd = if truncated {
-            Some(format!("pm_encoder --zoom file={}", entry.path))
+            Some(format!("vo --zoom file={}", entry.path))
         } else {
             None
         };
@@ -2496,7 +2539,7 @@ fn detect_language_from_content(content: &str) -> String {
 pub fn generate_claude_xml_header(config: &EncoderConfig, files: &[FileEntry]) -> String {
     let mut header = String::new();
     header.push_str("<context\n");
-    header.push_str("  package=\"pm_encoder\"\n");
+    header.push_str("  package=\"vo\"\n");
 
     if let Some(ref lens) = config.active_lens {
         header.push_str(&format!("  lens=\"{}\"\n", lens));
@@ -4852,6 +4895,42 @@ class MyClass:
     }
 
     #[test]
+    fn test_resolve_config_path_prefers_new_name() {
+        use std::fs;
+
+        let temp_dir = std::env::temp_dir().join("vo_test_config_priority");
+        let _ = fs::remove_dir_all(&temp_dir);
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        // Only the deprecated name exists - still found.
+        fs::write(temp_dir.join(".pm_encoder_config.json"), "{}").unwrap();
+        assert_eq!(
+            resolve_config_path(&temp_dir),
+            Some(temp_dir.join(".pm_encoder_config.json"))
+        );
+
+        // Once the new name also exists, it wins.
+        fs::write(temp_dir.join(".vo_config.json"), "{}").unwrap();
+        assert_eq!(
+            resolve_config_path(&temp_dir),
+            Some(temp_dir.join(".vo_config.json"))
+        );
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_resolve_config_path_none_when_absent() {
+        let temp_dir = std::env::temp_dir().join("vo_test_config_absent");
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        assert_eq!(resolve_config_path(&temp_dir), None);
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
     fn test_detect_language_coverage() {
         // Test all language detection cases
         assert_eq!(detect_language("main.py"), "python");
@@ -5225,6 +5304,64 @@ class MyClass:
         assert!(result.is_ok());
         let xml = result.unwrap();
         assert!(xml.contains("truncated=\"true\"") || xml.contains("long.py"));
+    }
+
+    /// Roadmap 2.1 ("one token counter"): the budget report's `used` field,
+    /// the number embedded in the rendered output's `utilized_tokens`
+    /// attribute, and a fresh estimate off the rendered bytes must all agree
+    /// — not three independent numbers for the same run.
+    #[test]
+    fn test_budget_report_used_matches_rendered_claude_xml() {
+        let lens_manager = LensManager::new();
+        let files: Vec<(String, String)> = (0..8)
+            .map(|i| (format!("src/file{}.rs", i), "x".repeat(500).repeat(i + 1)))
+            .collect();
+        let budget = 2000;
+
+        let (selected, mut report) = apply_token_budget(
+            files,
+            budget,
+            &lens_manager,
+            "drop",
+            OutputFormat::ClaudeXml,
+        );
+        let entries: Vec<FileEntry> = selected
+            .into_iter()
+            .map(|(path, content)| FileEntry {
+                md5: calculate_md5(&content),
+                size: content.len() as u64,
+                path,
+                content,
+                mtime: 0,
+                ctime: 0,
+            })
+            .collect();
+
+        let config = EncoderConfig::default();
+        let xml =
+            serialize_entries_claude_xml_with_report(&config, &entries, &mut report, &lens_manager)
+                .expect("serialization should succeed");
+
+        let rendered_estimate = TokenEstimator::estimate_tokens(&xml);
+        let drift = (rendered_estimate as i64 - report.used as i64).unsigned_abs() as f64;
+        assert!(
+            (drift / budget as f64) < 0.01,
+            "report.used ({}) drifted from the rendered output's estimate ({}) by more than 1% of budget ({})",
+            report.used,
+            rendered_estimate,
+            budget
+        );
+
+        // The number baked into the output itself must match too, not just
+        // the in-memory report — otherwise the file we hand to the LLM lies
+        // about its own size even though stderr reports the truth.
+        let embedded = format!("utilized=\"{}\"", report.used);
+        assert!(
+            xml.contains(&embedded),
+            "expected XML to embed utilized_tokens=\"{}\", got:\n{}",
+            report.used,
+            xml
+        );
     }
 }
 

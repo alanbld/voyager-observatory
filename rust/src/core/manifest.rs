@@ -51,7 +51,13 @@ impl ProjectManifest {
     ];
 
     /// Detect project manifest starting from given path.
-    /// Walks up directory tree looking for marker files.
+    ///
+    /// Walks up the directory tree and stops at the FIRST (nearest) directory
+    /// containing any marker — true nearest-marker-wins. `.git` is one marker
+    /// among others (see `MARKERS`), not a special override: a nearer, more
+    /// specific project boundary (e.g. a monorepo subcrate's own Cargo.toml)
+    /// always wins over a farther-up `.git`, so detection never silently
+    /// widens past the project the caller actually started in.
     pub fn detect(start_path: &Path) -> Self {
         let start = if start_path.is_file() {
             start_path.parent().unwrap_or(start_path)
@@ -70,12 +76,10 @@ impl ProjectManifest {
                 let marker_path = dir.join(marker);
                 if marker_path.exists() {
                     found_markers.push((marker_path, project_type.clone()));
-                    root = dir.to_path_buf();
                 }
             }
 
-            // Stop at .git (definitive project root)
-            if dir.join(".git").exists() {
+            if !found_markers.is_empty() {
                 root = dir.to_path_buf();
                 break;
             }
@@ -277,6 +281,33 @@ mod tests {
 
         // Should stop at .git
         assert_eq!(manifest.root, tmp.path().canonicalize().unwrap());
+    }
+
+    /// Roadmap 2.3 / C3: a nearer marker (e.g. a subcrate's own Cargo.toml)
+    /// must win over a farther-up .git — NOT the other way around. This is
+    /// the exact monorepo shape that let a Rust lookup resolve into a
+    /// sibling deprecated Python tree: detect() used to keep walking past
+    /// the nearest marker to whichever directory has .git, silently
+    /// widening the "project root" far beyond where the caller started.
+    #[test]
+    fn test_nearer_marker_wins_over_farther_dot_git() {
+        let tmp = TempDir::new().unwrap();
+        // Outer repo root: has .git (e.g. the monorepo root).
+        fs::create_dir(tmp.path().join(".git")).unwrap();
+        // Inner subcrate: has its own Cargo.toml, nested under the outer root.
+        let inner = tmp.path().join("rust").join("voyager-ast");
+        fs::create_dir_all(&inner).unwrap();
+        fs::write(inner.join("Cargo.toml"), "[package]").unwrap();
+        fs::create_dir_all(inner.join("src")).unwrap();
+
+        let manifest = ProjectManifest::detect(&inner.join("src"));
+
+        assert_eq!(
+            manifest.root,
+            inner.canonicalize().unwrap(),
+            "nearest marker (subcrate Cargo.toml) must win over the farther-up .git"
+        );
+        assert_eq!(manifest.project_type, ProjectType::Rust);
     }
 
     #[test]

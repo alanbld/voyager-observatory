@@ -265,6 +265,55 @@ fn test_zoom_class() {
         .stdout(predicate::str::contains("class Calculator"));
 }
 
+/// Roadmap 2.3 / C3, end-to-end through the real binary: zooming from a
+/// subcrate CWD must resolve within that subcrate, never leak into a
+/// sibling directory outside it — even though the wider tree has a `.git`
+/// that a naive project-root auto-detection would have widened the search
+/// to. This is the exact shape of bug ("a Rust lookup resolved into a
+/// deprecated Python tree") the roadmap's C3 finding described.
+#[test]
+fn test_zoom_from_subdirectory_does_not_leak_into_sibling_directory() {
+    let temp_dir = TempDir::new().unwrap();
+
+    // Outer monorepo root: has .git.
+    fs::create_dir(temp_dir.path().join(".git")).unwrap();
+
+    // Sibling directory OUTSIDE the intended search scope, with a
+    // same-named symbol — reachable only if the root got silently widened.
+    let outside = temp_dir.path().join("classic");
+    fs::create_dir_all(&outside).unwrap();
+    fs::write(
+        outside.join("legacy.py"),
+        "def helper():\n    print('deprecated python helper')\n",
+    )
+    .unwrap();
+
+    // Intended root: a subcrate with its own Cargo.toml, nested under the
+    // outer root.
+    let inner = temp_dir.path().join("rust").join("mycrate");
+    fs::create_dir_all(inner.join("src")).unwrap();
+    fs::write(inner.join("Cargo.toml"), "[package]\nname = \"mycrate\"\n").unwrap();
+    fs::write(
+        inner.join("src/lib.rs"),
+        "pub fn helper() {\n    println!(\"real rust helper\");\n}\n",
+    )
+    .unwrap();
+
+    // Simulate `cd rust/mycrate && vo . --zoom fn=helper` — the CWD is the
+    // subcrate, PROJECT_ROOT is the relative "." this implies.
+    let mut cmd = Command::cargo_bin("vo").unwrap();
+    cmd.current_dir(&inner)
+        .arg(".")
+        .arg("--zoom")
+        .arg("fn=helper");
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("real rust helper"))
+        .stdout(predicate::str::contains("lib.rs"))
+        .stdout(predicate::str::contains("legacy.py").not());
+}
+
 // ============================================================================
 // Zoom Error Handling Tests
 // ============================================================================
@@ -480,6 +529,34 @@ fn test_lens_architecture() {
         .stderr(predicate::str::contains("LENS: architecture"));
 }
 
+#[test]
+fn test_lens_without_budget_uses_default() {
+    let temp_dir = create_test_project();
+
+    let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
+    cmd.arg(temp_dir.path()).arg("--lens").arg("onboarding");
+
+    cmd.assert().success().stderr(predicate::str::contains(
+        "note: using default budget 50k for --lens onboarding",
+    ));
+}
+
+#[test]
+fn test_lens_with_explicit_budget_skips_default_note() {
+    let temp_dir = create_test_project();
+
+    let mut cmd = Command::cargo_bin("pm_encoder").unwrap();
+    cmd.arg(temp_dir.path())
+        .arg("--lens")
+        .arg("onboarding")
+        .arg("--token-budget")
+        .arg("5000");
+
+    cmd.assert()
+        .success()
+        .stderr(predicate::str::contains("using default budget").not());
+}
+
 // ============================================================================
 // Include/Exclude Pattern Tests
 // ============================================================================
@@ -667,4 +744,78 @@ fn test_vo_and_pm_encoder_produce_same_output() {
         vo_stdout, pm_stdout,
         "vo and pm_encoder should produce identical output"
     );
+}
+
+// ============================================================================
+// Token Budget Conformance (roadmap 2.1 — P0)
+// ============================================================================
+
+/// Build a project large enough that any realistic budget forces dropping.
+fn create_oversized_project() -> TempDir {
+    let temp_dir = TempDir::new().unwrap();
+    fs::create_dir_all(temp_dir.path().join("src")).unwrap();
+
+    // 60 files x ~2KB each ≈ 120KB ≈ 30k tokens of raw content, plus
+    // per-file and attention-map overhead.
+    for i in 0..60 {
+        let body: String = (0..40)
+            .map(|j| {
+                format!(
+                    "/// Documented item {j} in module {i}\npub fn item_{i}_{j}(input: i32) -> i32 {{\n    input * {j} + {i}\n}}\n"
+                )
+            })
+            .collect();
+        fs::write(
+            temp_dir.path().join(format!("src/module_{i:03}.rs")),
+            format!("//! Module {i}\n\n{body}"),
+        )
+        .unwrap();
+    }
+
+    temp_dir
+}
+
+/// Roadmap 2.1 / P0: `--token-budget N` must produce output that actually
+/// fits in N tokens.
+///
+/// The prior invariant test asserted only that the *reported* number agreed
+/// with the rendered output — an honesty check, not a conformance check —
+/// which is precisely why a systematic 11-23% overshoot shipped green
+/// (measured 2026-08-01: 20k→123.3%, 50k→115.2%, 100k→110.9%). Selection
+/// summed per-file estimates and never accounted for the context header,
+/// metadata, or the attention_map, which alone ran ~2.8k tokens.
+///
+/// Token counting here mirrors TokenEstimator::estimate_tokens (len/4)
+/// so the assertion measures the same quantity the tool reports.
+#[test]
+fn test_token_budget_is_enforced_not_just_reported() {
+    let temp_dir = create_oversized_project();
+
+    for budget in ["5k", "10k", "20k"] {
+        let mut cmd = Command::cargo_bin("vo").unwrap();
+        let output = cmd
+            .arg(temp_dir.path())
+            .arg("--token-budget")
+            .arg(budget)
+            .arg("--lens")
+            .arg("architecture")
+            .arg("--format")
+            .arg("claude-xml")
+            .arg("--frozen")
+            .output()
+            .unwrap();
+
+        assert!(output.status.success(), "vo failed for budget {budget}");
+
+        let rendered = String::from_utf8_lossy(&output.stdout);
+        let actual_tokens = rendered.len() / 4;
+        let limit: usize = budget.trim_end_matches('k').parse::<usize>().unwrap() * 1000;
+
+        assert!(
+            actual_tokens <= limit,
+            "budget {budget}: rendered {actual_tokens} tokens, exceeds limit {limit} \
+             ({:.1}% of budget). --token-budget must be a ceiling, not a suggestion.",
+            (actual_tokens as f64 / limit as f64) * 100.0
+        );
+    }
 }

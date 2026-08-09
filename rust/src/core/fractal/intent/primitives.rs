@@ -10,6 +10,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
+use crate::core::scoring::{self, Signal};
+
 use crate::core::fractal::{
     clustering::ShellPatternType, ContextLayer, FeatureVector, LayerContent, SymbolKind,
 };
@@ -335,11 +337,6 @@ impl ConceptType {
         // =================================================================
         // Symbol kind fallback (for unclassified symbols)
         // =================================================================
-        // Check visibility from the layer content
-        let is_public = matches!(&layer.content,
-            LayerContent::Symbol { visibility, .. } if *visibility == crate::core::fractal::Visibility::Public
-        ) || signature.contains("pub ");
-
         if let Some(ref k) = kind {
             match k {
                 SymbolKind::Struct | SymbolKind::Class => {
@@ -358,16 +355,11 @@ impl ConceptType {
                     // Enums are usually for decision/state
                     return ConceptType::Decision;
                 }
-                SymbolKind::Function | SymbolKind::Method => {
-                    // Functions/methods that don't match other patterns
-                    // Check if public (likely API) vs private (helper)
-                    if is_public {
-                        // Public functions without clear category - likely core logic
-                        return ConceptType::Calculation;
-                    }
-                    // Private helpers - infrastructure/utility
-                    return ConceptType::Infrastructure;
-                }
+                // Functions/methods matching no heuristic above are genuinely
+                // unclassified — fall through to Unknown rather than guess.
+                // This used to guess Calculation (public) / Infrastructure
+                // (private), which silently scored unknown code as the
+                // single highest-weighted bucket in business_logic().
                 _ => {}
             }
         }
@@ -700,7 +692,13 @@ impl RelevanceScorer {
         concept_type: ConceptType,
         params: &RelevanceScorerParams,
     ) -> RelevanceScore {
-        let mut score = 0.0f32;
+        // Independent, stacking bonuses/penalties (some negative) — summed
+        // via the shared scoring layer's `additive_sum`, not the averaging
+        // `weighted_sum` (roadmap 2.4 Step C). `factors` mirrors each
+        // signal's on-screen contribution, except `concept_type`, which
+        // (pre-existing behavior) reports its raw unscaled weight rather
+        // than the 60%-scaled amount actually added to the score.
+        let mut signals: Vec<Signal> = Vec::new();
         let mut factors = Vec::new();
 
         // Factor 1: Concept type weight (0.0 - 1.0, primary factor)
@@ -712,7 +710,7 @@ impl RelevanceScorer {
             .unwrap_or(0.3); // Lower default for unconfigured types
 
         factors.push(("concept_type".to_string(), concept_weight));
-        score += concept_weight * 0.6; // 60% of score from concept type
+        signals.push(Signal::new("concept_type", concept_weight, 0.6)); // 60% of score from concept type
 
         // Factor 2: Documentation boost
         if let LayerContent::Symbol {
@@ -725,22 +723,26 @@ impl RelevanceScorer {
             } else {
                 params.documentation_boost * 0.5 // Half boost for brief docs
             };
-            score += doc_boost;
             factors.push(("has_documentation".to_string(), doc_boost));
+            signals.push(Signal::new("has_documentation", doc_boost, 1.0));
         }
 
         // Factor 3: Visibility boost (public APIs are more important for understanding)
         if let LayerContent::Symbol { visibility, .. } = &layer.content {
             if *visibility == crate::core::fractal::Visibility::Public {
-                score += params.public_visibility_boost;
                 factors.push((
                     "public_visibility".to_string(),
                     params.public_visibility_boost,
                 ));
+                signals.push(Signal::new(
+                    "public_visibility",
+                    params.public_visibility_boost,
+                    1.0,
+                ));
             } else {
                 // Small penalty for private/internal
-                score -= 0.05;
                 factors.push(("private_visibility".to_string(), -0.05));
+                signals.push(Signal::new("private_visibility", -0.05, 1.0));
             }
         }
 
@@ -756,8 +758,8 @@ impl RelevanceScorer {
             } else {
                 -0.1 // Too complex, hard to understand quickly
             };
-            score += complexity_factor;
             factors.push(("complexity".to_string(), complexity_factor));
+            signals.push(Signal::new("complexity", complexity_factor, 1.0));
         }
 
         // Factor 5: Name clarity bonus - descriptive names are more understandable
@@ -776,11 +778,11 @@ impl RelevanceScorer {
             0.0 // Long names - neutral
         };
         if name_clarity != 0.0 {
-            score += name_clarity;
             factors.push(("name_clarity".to_string(), name_clarity));
+            signals.push(Signal::new("name_clarity", name_clarity, 1.0));
         }
 
-        score = score.clamp(0.0, 1.0);
+        let score = scoring::additive_sum(&signals).clamp(0.0, 1.0);
 
         RelevanceScore {
             score,
@@ -1524,7 +1526,9 @@ mod tests {
         );
         assert_eq!(ConceptType::infer(&const_layer), ConceptType::Configuration);
 
-        // Private function without clear pattern - Infrastructure
+        // Private function without clear pattern - Unknown (no guessing;
+        // Unknown carries a neutral weight in every RelevanceScorerParams
+        // preset instead of a bucket's max weight).
         let helper_layer = make_symbol_layer(
             "h1",
             "do_work",
@@ -1533,12 +1537,10 @@ mod tests {
             None,
             false,
         );
-        assert_eq!(
-            ConceptType::infer(&helper_layer),
-            ConceptType::Infrastructure
-        );
+        assert_eq!(ConceptType::infer(&helper_layer), ConceptType::Unknown);
 
-        // Public function without clear pattern - Calculation (core logic fallback)
+        // Public function without clear pattern - also Unknown (public vs
+        // private visibility is no longer used to guess a concept type here)
         // Note: "process_item" doesn't match the exact "process" entry point pattern
         let pub_layer = make_symbol_layer(
             "p1",
@@ -1548,7 +1550,7 @@ mod tests {
             None,
             true,
         );
-        assert_eq!(ConceptType::infer(&pub_layer), ConceptType::Calculation);
+        assert_eq!(ConceptType::infer(&pub_layer), ConceptType::Unknown);
     }
 
     #[test]

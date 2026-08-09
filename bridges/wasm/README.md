@@ -33,7 +33,7 @@ console.log(context);
 #### Properties
 
 - `version` - Library version string
-- `lenses` - Available spectral filters: `['architecture', 'debug', 'security', 'minimal', 'onboarding']`
+- `lenses` - Available spectral filters: `['architecture', 'debug', 'security', 'onboarding']`
 
 #### Methods
 

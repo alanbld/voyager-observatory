@@ -300,6 +300,12 @@ pub struct Declaration {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body_span: Option<Span>,
 
+    /// Parsed body (control flow, calls, nested declarations) — populated
+    /// during normal parsing so census can compute real complexity, not
+    /// just on the Zoom-mode `extract_body` path.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<Block>,
+
     /// Attached documentation comment
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc_comment: Option<Comment>,
@@ -331,6 +337,7 @@ impl Declaration {
             span,
             signature_span: None,
             body_span: None,
+            body: None,
             doc_comment: None,
             children: Vec::new(),
             parameters: Vec::new(),

@@ -141,9 +141,14 @@ impl FileAllocation {
     }
 
     /// Calculate upgrade cost (skeleton -> full)
+    ///
+    /// Saturates at 0 rather than underflowing: for very small files the
+    /// skeleton token estimate can meet or exceed the full-content estimate
+    /// (structural markers add more than the tiny body they replace), in
+    /// which case there's nothing left to "cost" by upgrading.
     pub fn upgrade_cost(&self) -> usize {
         if self.level == CompressionLevel::Skeleton {
-            self.full_tokens - self.skeleton_tokens
+            self.full_tokens.saturating_sub(self.skeleton_tokens)
         } else {
             0
         }
@@ -255,6 +260,18 @@ mod tests {
 
         // Drop level also has 0 upgrade cost
         alloc.level = CompressionLevel::Drop;
+        assert_eq!(alloc.upgrade_cost(), 0);
+    }
+
+    #[test]
+    fn test_file_allocation_upgrade_cost_saturates_on_tiny_files() {
+        // Regression: for very small files the skeleton estimate (structural
+        // markers) can meet or exceed the full-content estimate. Before the
+        // fix, `full_tokens - skeleton_tokens` panicked with "attempt to
+        // subtract with overflow" in debug builds (and silently wrapped to
+        // a huge usize in release) whenever skeleton_tokens > full_tokens.
+        let alloc = FileAllocation::new("tiny.rs", FileTier::Core, 5, 8);
+        assert_eq!(alloc.level, CompressionLevel::Skeleton);
         assert_eq!(alloc.upgrade_cost(), 0);
     }
 

@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::core::scoring::{self, Scorer, ScoringContext, Signal};
 use crate::core::store::ContextStore;
 
 /// Priority group for file ranking (v1.7.0)
@@ -984,27 +985,20 @@ impl LensManager {
     /// Returns the highest matching priority from groups, or fallback priority.
     /// Default priority is 50 if no groups defined (backward compatible).
     ///
-    /// # Learning Integration (v2.2.0)
+    /// # Learning Integration (v2.2.0, blend upgraded in roadmap 3.3)
     ///
-    /// When a ContextStore is available and frozen mode is disabled, the priority
-    /// is blended with learned utility scores:
-    /// `final = (static * 0.7) + (learned * 100 * 0.3)`
+    /// When a ContextStore is available and frozen mode is disabled, the
+    /// priority is blended with learned utility scores via
+    /// `DecayBlend`/`ContextStore::blend_priority_v2`: confidence-weighted
+    /// (few observations stay close to static) and time-decayed (a stale
+    /// learned score drifts back toward neutral) — see store.rs.
     pub fn get_file_priority(&self, file_path: &Path) -> i32 {
-        let static_priority = self.get_static_priority(file_path);
-
-        // If frozen or no store, return static priority only
-        if self.frozen {
-            return static_priority;
-        }
-
-        // Blend with learned priorities if store available
-        match &self.context_store {
-            Some(store) => {
-                let path_str = file_path.to_string_lossy();
-                store.blend_priority(&path_str, static_priority)
-            }
-            None => static_priority,
-        }
+        let ctx = ScoringContext {
+            store: self.context_store.as_ref(),
+            frozen: self.frozen,
+            blend: &scoring::DecayBlend::now(),
+        };
+        scoring::score(self, file_path, &ctx).as_priority()
     }
 
     /// Get static priority from lens configuration only (no learning)
@@ -1156,6 +1150,27 @@ impl LensManager {
 impl Default for LensManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Scoring-layer integration (roadmap 2.4): `get_static_priority`'s glob
+/// matching stays the single source of the priority-scale signal (unchanged
+/// so out-of-range custom priorities are preserved exactly); `score()`
+/// handles the learned-utility blend that `get_file_priority` used to do
+/// by hand.
+impl Scorer for LensManager {
+    type Subject<'s> = Path;
+
+    fn utility_key(&self, path: &Path) -> Option<String> {
+        Some(path.to_string_lossy().to_string())
+    }
+
+    fn signals(&self, path: &Path) -> Vec<Signal> {
+        vec![Signal::new(
+            "lens_static_priority",
+            self.get_static_priority(path) as f32,
+            1.0,
+        )]
     }
 }
 

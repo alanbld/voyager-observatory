@@ -13,12 +13,12 @@
 //! - `engine`: Main ContextEngine orchestration
 //! - `zoom`: Fractal Protocol zoom actions
 //! - `fractal`: Fractal Context Engine for hierarchical, zoomable context
-//! - `syntax`: Tree-sitter based AST parsing (Phase 1A)
 //! - `plugin`: Plugin ecosystem reservation (Phase 2)
 //! - `ast_bridge`: Bridge to voyager-ast structural optics
 //! - `metrics`: AST-based code metrics collection (Phase 3 foundation)
 
 pub mod ast_bridge;
+pub mod ast_cache;
 pub mod celestial;
 pub mod census;
 pub mod engine;
@@ -32,12 +32,12 @@ pub mod plugin;
 pub mod plugins;
 pub mod presenter;
 pub mod regex_engine;
+pub mod scoring;
 pub mod search;
 pub mod serialization;
 pub mod skeleton;
 pub mod spectrograph;
 pub mod store;
-pub mod syntax;
 pub mod temporal;
 pub mod walker;
 pub mod zoom;
@@ -114,20 +114,20 @@ pub use celestial::{
     SuggestionAction,
 };
 
-// Phase 1A: Core Syntax Infrastructure (Tree-sitter)
-pub use syntax::{
-    Import, ImportKind, Language as SyntaxLanguage, Location, NormalizedAst, ProviderStats, Span,
-    Symbol, SymbolKind, SymbolVisibility, SyntaxError, SyntaxProvider, SyntaxRegistry,
-    TreeSitterAdapter,
-};
-
 // voyager-ast integration (Structural Optics)
 pub use ast_bridge::{AstBridge, FileSummary, Star as AstStar, StarKind, StarSummary};
+pub use ast_cache::{ParseCache, ParseCacheManager};
 
 // Phase 0 Hardening: Centralized Regex Engine
 pub use regex_engine::{
     compile, find_all, global_engine, is_match, replace_all, CompiledRegex, MatchRange,
     MatchResult, PatternSet, RegexEngine, RegexError,
+};
+
+// Roadmap 2.4: Unified scoring layer (aggregation/blend shared by lenses/intents)
+pub use scoring::{
+    additive_sum, score, weighted_sum, BlendPolicy, DecayBlend, LinearBlend, Score, Scorer,
+    ScoringContext, Signal,
 };
 
 // Phase 1C: Celestial Census (Code Health Metrics)
